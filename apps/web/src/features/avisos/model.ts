@@ -11,7 +11,7 @@ import {
 // Contratos de avisos reaproveitados do shared entre Worker e frontend
 // (mesmo padrão do import-model). O zod continua sendo a fonte da verdade.
 export { avisoSchema, avisosResponseSchema, publicarAvisoSchema };
-export type { Aviso, AvisosResponse, PublicarAvisoInput };
+export type { Aviso, AvisoCursor, AvisosResponse, PublicarAvisoInput };
 
 export const avisoPublicadoSchema = avisoSchema;
 export type AvisoPublicado = Aviso;
