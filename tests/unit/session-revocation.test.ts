@@ -9,14 +9,16 @@ import { pruneRevokedSessions } from "../../worker/repositories/users.ts";
 
 const SECRET = "segredo-somente-teste-local-revogacao-2026";
 
-function fixture() {
+function fixture(withAdmin = true) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys = ON");
   for (const name of readdirSync("migrations").filter(n => /^\d+_.*\.sql$/.test(n)).sort()) {
     sqlite.exec(readFileSync(join("migrations", name), "utf8"));
   }
-  sqlite.prepare("INSERT INTO usuarios (id,nome,login,senha_hash,papel,ativo,criado_em,atualizado_em) VALUES ('adm','Admin sintético','adm','hash-teste','admin',1,?,?)")
-    .run("2026-11-23T12:00:00.000Z", "2026-11-23T12:00:00.000Z");
+  if (withAdmin) {
+    sqlite.prepare("INSERT INTO usuarios (id,nome,login,senha_hash,papel,ativo,criado_em,atualizado_em) VALUES ('adm','Admin sintético','adm','hash-teste','admin',1,?,?)")
+      .run("2026-11-23T12:00:00.000Z", "2026-11-23T12:00:00.000Z");
+  }
   const db = {
     prepare(sql) {
       const stmt = sqlite.prepare(sql);
@@ -102,9 +104,8 @@ describe("Revogação individual de sessões com D1 sintético", () => {
   });
 
   it("bootstrap público é limitado pelo rate limiter existente e falha fechado", async () => {
-    const f = fixture();
+    const f = fixture(false);
     try {
-      f.sqlite.prepare("DELETE FROM usuarios WHERE id = 'adm'").run();
       const data = JSON.stringify({ nome: "Usuário sintético", login: "admin", senha: "SenhaSintetica2026!" });
       const request = (limiter) => app.request("http://localhost/api/auth/bootstrap-register", {
         method: "POST",
