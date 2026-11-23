@@ -11,8 +11,11 @@ import {
 
 // GET /api/avisos — lista (histórico permanente, mais recentes primeiro) +
 // contagem de não lidos do usuário logado.
-export async function getAvisos(): Promise<AvisosResponse> {
-  return avisosResponseSchema.parse(await apiFetch<unknown>("/api/avisos"));
+export async function getAvisos(cursor?: AvisoCursor | null): Promise<AvisosResponse> {
+  const query = cursor
+    ? "?" + new URLSearchParams({ before: cursor.criadoEm, beforeId: cursor.id }).toString()
+    : "";
+  return avisosResponseSchema.parse(await apiFetch<unknown>("/api/avisos" + query));
 }
 
 // POST /api/avisos/:id/lido — idempotente; o servidor responde { jaLido }.
