@@ -3,6 +3,7 @@ import {
   avisosResponseSchema,
   publicarAvisoSchema,
   type Aviso,
+  type AvisoCursor,
   type AvisosResponse,
   type PublicarAvisoInput,
 } from "../../../../../shared/avisos.ts";
