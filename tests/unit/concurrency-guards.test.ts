@@ -21,7 +21,7 @@ import {
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys=ON");
-  for (const name of readdirSync("migrations").filter(n => /^\\d{4}_.*\\.sql$/.test(n)).sort()) {
+  for (const name of readdirSync("migrations").filter(n => /^\d{4}_.*\.sql$/.test(n)).sort()) {
     sqlite.exec(readFileSync(join("migrations", name), "utf8"));
   }
   const now = "2026-11-23T12:00:00.000Z";
