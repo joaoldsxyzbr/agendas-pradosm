@@ -4,6 +4,7 @@ import {
   avisoPublicadoSchema,
   publicarAvisoSchema,
   type AvisoPublicado,
+  type AvisoCursor,
   type AvisosResponse,
   type PublicarAvisoInput,
 } from "./model";
