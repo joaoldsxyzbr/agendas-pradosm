@@ -12,7 +12,7 @@ const AGENDA_DOCUMENT_TYPES = [
   "CNPJ",
   "Agenda fixa"
 ];
-function isValidIsoDate(value) {
+function isValidIsoDate(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return false;
   const year = Number(match[1]);
@@ -21,7 +21,7 @@ function isValidIsoDate(value) {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-function timeToMinutes(value) {
+function timeToMinutes(value: string) {
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
 }
