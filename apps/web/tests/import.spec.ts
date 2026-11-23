@@ -94,6 +94,25 @@ test("CSV React: erro bloqueante impede envio", async ({ page }) => {
   expect(submissions).toHaveLength(0);
 });
 
+test("CSV React: contagem acima do limite seguro é bloqueada na prévia com protocolo e loja", async ({ page }) => {
+  const submissions = await setup(page);
+  // Padrão do incidente de 23/11/2026: o parser aceita, mas o schema do
+  // Worker rejeitaria com 400. A prévia agora aponta o registro exato.
+  const buffer = Buffer.from(
+    "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;\n" +
+    "99990001;23/11/2026 07:00 às 07:30;FORNECEDOR ALFA LTDA;CD;DOCA 01;26;100;0;-;Pedido;-;48354;\n" +
+    "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;260000000;26;1;-;Nota fiscal;-;-;\n",
+    "utf8",
+  );
+  await upload(page, { name: "contagem-acima.csv", buffer });
+  const errors = page.getByRole("alert", { name: "Erros da importação" });
+  await expect(errors).toContainText("99990002");
+  await expect(errors).toContainText("CD DOCA 02");
+  await expect(errors).toContainText("limite seguro");
+  await expect(page.getByRole("button", { name: "Confirmar importação" })).toBeDisabled();
+  expect(submissions).toHaveLength(0);
+});
+
 test("CSV React: interpreta Windows-1252 e UTF-16LE", async ({ page }) => {
   await setup(page);
   await upload(page, { name: "agenda-ansi.csv", buffer: Buffer.from(fixture.toString("utf8"), "latin1") });

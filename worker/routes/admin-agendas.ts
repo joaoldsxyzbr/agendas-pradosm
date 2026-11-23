@@ -3,6 +3,7 @@ import { validateStatusObservation } from "../../shared/observations.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import { ImportAgendaBatchInput, ImportAgendaInput } from "../../shared/agenda.ts";
+import { formatImportBatchIssues } from "../../shared/import/validateImportBatch.ts";
 import { businessTime } from "../lib/time.ts";
 import { recordDiagnosticSafe } from "../repositories/diagnostics.ts";
 import { publishAgendaChanged } from "../services/realtime.ts";
@@ -214,7 +215,8 @@ adminAgendaRoutes.post("/import/bulk", async (c) => {
     return c.json(
       {
         error: "REQUISICAO_INVALIDA",
-        message: "Dados do lote de agendas inv\xE1lidos."
+        message: "Dados do lote de agendas inv\xE1lidos.",
+        issues: formatImportBatchIssues(parsed.error.issues, body, 10)
       },
       400
     );
