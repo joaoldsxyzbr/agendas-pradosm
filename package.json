@@ -21,12 +21,12 @@
   },
   "dependencies": {
     "@llamaindex/liteparse-wasm": "^2.18.0",
-    "hono": "^4.13.17",
+    "hono": "^4.13.18",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "wrangler": "4.151.2"
+    "wrangler": "4.161.0"
   },
   "overrides": {
     "undici": "7.30.1"
