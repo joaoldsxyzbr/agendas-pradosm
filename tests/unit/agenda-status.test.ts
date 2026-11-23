@@ -48,7 +48,7 @@ describe("Regras de status com observação e histórico", () => {
     assert.equal(db.batches.length, 1);
     assert.equal(db.batches[0].length, 3);
     const statusUpdate = db.statements.find(s => s.sql.startsWith("UPDATE agendamentos"));
-    assert.equal(statusUpdate.sql, "UPDATE agendamentos SET status = ?, observacao = ?, atualizado_em = ? WHERE id = ? AND status = ? AND observacao IS ?");
+    assert.equal(statusUpdate.sql, "UPDATE agendamentos SET status = ?, observacao = ?, atualizado_em = ? WHERE id = ? AND status = ? AND observacao IS ? AND ativo = 1");
     assert.deepEqual(statusUpdate.params.slice(-2), ["aguardando", null]);
     assert.equal(statusUpdate.params[1], null);
     assert.equal(statusUpdate.params[0], "recebido");

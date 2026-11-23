@@ -106,8 +106,10 @@ async function details(db, agendaId) {
   };
 }
 function isAgendaConflict(error) {
-  return error instanceof Error && error.message.includes(
-    "UNIQUE constraint failed: agendas.loja_id, agendas.data_agenda"
+  if (error?.code === "CONFLITO_ESTADO") return true;
+  return error instanceof Error && (
+    error.message.includes("UNIQUE constraint failed: agendas.loja_id, agendas.data_agenda") ||
+    error.message.includes("ck_agenda_versao_importacao")
   );
 }
 adminAgendaRoutes.post("/import", async (c) => {
