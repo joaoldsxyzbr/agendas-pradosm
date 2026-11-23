@@ -11,6 +11,7 @@ import {
 function fixture() {
   const sql = new DatabaseSync(":memory:");
   sql.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT, nome TEXT)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, nome TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT, arquivo_original TEXT, criado_por TEXT, status_dia TEXT, concluido_em TEXT, concluido_por TEXT, digitado_em TEXT, digitado_por TEXT, criado_em TEXT, atualizado_em TEXT)",
