@@ -22,7 +22,7 @@ describe("Contratos preservados na migração JS puro", () => {
           startTime: "14:50",
           endTime: "15:00",
           supplier: "FORNECEDOR EXEMPLO",
-          items: 1000000,
+          items: 260000000,
           volumes: null,
           pallets: null,
           cargaBatida: null,
@@ -32,13 +32,18 @@ describe("Contratos preservados na migração JS puro", () => {
         }
       ]
     };
-    const noLimite = ImportAgendaInput.safeParse(baseInput);
-    assert.ok(noLimite.success, "contagem no limite de 1.000.000 deve ser aceita");
+    const padraoFornecedor = ImportAgendaInput.safeParse(baseInput);
+    assert.ok(padraoFornecedor.success, "contagem no padrão do fornecedor do incidente de 23/11/2026 (260000000) deve ser aceita");
+    const noLimite = ImportAgendaInput.safeParse({
+      ...baseInput,
+      appointments: [{ ...baseInput.appointments[0], items: 1000000000 }]
+    });
+    assert.ok(noLimite.success, "contagem no limite de 1.000.000.000 deve ser aceita");
     const alemDoLimite = ImportAgendaInput.safeParse({
       ...baseInput,
-      appointments: [{ ...baseInput.appointments[0], items: 1000001 }]
+      appointments: [{ ...baseInput.appointments[0], items: 1000000001 }]
     });
-    assert.ok(!alemDoLimite.success, "contagem acima de 1.000.000 deve ser rejeitada");
+    assert.ok(!alemDoLimite.success, "contagem acima de 1.000.000.000 deve ser rejeitada");
     const issues = JSON.stringify(alemDoLimite.error.issues);
     assert.match(issues, /limite seguro/);
   });

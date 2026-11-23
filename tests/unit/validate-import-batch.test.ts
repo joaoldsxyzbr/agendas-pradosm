@@ -19,19 +19,19 @@ function payloadFromPreview(preview: ReturnType<typeof parseAgendaCsv>, original
   };
 }
 
-// CSV sintético com o padrão do incidente de 23/11/2026: o parser aceita
+// CSV sintético acima do limite seguro (1.000.000.000): o parser aceita
 // qualquer sequência de dígitos em Itens, mas o schema do Worker rejeita
-// contagens acima de 1.000.000 com um 400 genérico.
+// contagens fora do limite com um 400 genérico.
 const incidentCsv = [
   "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;",
   "99990001;23/11/2026 07:00 às 07:30;FORNECEDOR ALFA LTDA;CD;DOCA 01;26;100;0;-;Pedido;-;48354;",
-  "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;260000000;26;1;-;Nota fiscal;-;-;"
+  "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;1000000001;26;1;-;Nota fiscal;-;-;"
 ].join("\n");
 
 const validCsv = [
   "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;",
   "99990001;23/11/2026 07:00 às 07:30;FORNECEDOR ALFA LTDA;CD;DOCA 01;26;100;0;-;Pedido;-;48354;",
-  "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;26;26;1;-;Nota fiscal;-;-;"
+  "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;260000000;26;1;-;Nota fiscal;-;-;"
 ].join("\n");
 
 const validAppointment = (protocol: string, startTime: string, endTime: string) => ({
@@ -61,7 +61,7 @@ describe("Prévia e Worker compartilham a validação do lote de importação", 
     );
   });
 
-  it("lote dentro dos limites não gera erros", () => {
+  it("lote dentro dos limites não gera erros, incluindo o padrão do fornecedor (260000000)", () => {
     const preview = parseAgendaCsv(validCsv);
     const issues = validateImportBatchPayload(payloadFromPreview(preview, "agendas.csv"));
     assert.deepEqual(issues, []);

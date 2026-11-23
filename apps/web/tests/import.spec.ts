@@ -96,12 +96,12 @@ test("CSV React: erro bloqueante impede envio", async ({ page }) => {
 
 test("CSV React: contagem acima do limite seguro é bloqueada na prévia com protocolo e loja", async ({ page }) => {
   const submissions = await setup(page);
-  // Padrão do incidente de 23/11/2026: o parser aceita, mas o schema do
-  // Worker rejeitaria com 400. A prévia agora aponta o registro exato.
+  // Acima do limite seguro (1.000.000.000): o parser aceita, mas o schema
+  // do Worker rejeitaria com 400. A prévia agora aponta o registro exato.
   const buffer = Buffer.from(
     "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;\n" +
     "99990001;23/11/2026 07:00 às 07:30;FORNECEDOR ALFA LTDA;CD;DOCA 01;26;100;0;-;Pedido;-;48354;\n" +
-    "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;260000000;26;1;-;Nota fiscal;-;-;\n",
+    "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;1000000001;26;1;-;Nota fiscal;-;-;\n",
     "utf8",
   );
   await upload(page, { name: "contagem-acima.csv", buffer });
@@ -111,6 +111,25 @@ test("CSV React: contagem acima do limite seguro é bloqueada na prévia com pro
   await expect(errors).toContainText("limite seguro");
   await expect(page.getByRole("button", { name: "Confirmar importação" })).toBeDisabled();
   expect(submissions).toHaveLength(0);
+});
+
+test("CSV React: contagem no padrão do fornecedor (260000000) é aceita de ponta a ponta", async ({ page }) => {
+  const submissions = await setup(page);
+  // O fornecedor agenda com Itens = 260000000 (incidente de 23/11/2026): o
+  // limite seguro atual (1.000.000.000) aceita o valor na prévia e na importação.
+  const buffer = Buffer.from(
+    "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;\n" +
+    "99990001;23/11/2026 07:00 às 07:30;FORNECEDOR ALFA LTDA;CD;DOCA 01;26;100;0;-;Pedido;-;48354;\n" +
+    "99990002;23/11/2026 13:10 às 13:40;FORNECEDOR BETA LTDA;CD;DOCA 02;260000000;26;1;-;Nota fiscal;-;-;\n",
+    "utf8",
+  );
+  await upload(page, { name: "padrao-fornecedor.csv", buffer });
+  await expect(page.getByRole("alert", { name: "Erros da importação" })).toHaveCount(0);
+  await expect(page.getByLabel("Resumo da prévia")).toContainText("2 agendamentos");
+  await expect(page.getByRole("button", { name: "Confirmar importação" })).toBeEnabled();
+  await page.getByRole("button", { name: "Confirmar importação" }).click();
+  await expect(page.getByRole("status", { name: "Importação concluída" })).toContainText("2 agendamentos");
+  expect(submissions).toHaveLength(1);
 });
 
 test("CSV React: interpreta Windows-1252 e UTF-16LE", async ({ page }) => {
