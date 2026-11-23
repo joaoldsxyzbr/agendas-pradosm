@@ -141,7 +141,7 @@ adminUserRoutes.patch("/", async (c) => {
         409
       );
     }
-    if (error?.code === "CONFLITO_ESTADO") {
+    if (error instanceof Error && "code" in error && error.code === "CONFLITO_ESTADO") {
       return c.json({ error: "CONFLITO_ESTADO", message: "Este usuário foi alterado. Atualize a lista e tente novamente." }, 409);
     }
     if (isLastAdmin(error)) {
