@@ -23,7 +23,7 @@ export function AvisosBell({ papel }: { papel: Role }) {
   const isAdmin = papel === "admin";
   const avisos = useQuery({
     queryKey: ["avisos"],
-    queryFn: getAvisos,
+    queryFn: () => getAvisos(),
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
