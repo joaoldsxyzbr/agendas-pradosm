@@ -219,6 +219,8 @@ Os planos e especificações técnicas ficam em `docs/superpowers/`.
 - Cookies de sessão são `HttpOnly`, `SameSite=Strict` e seguros em HTTPS.
 - Sessões usam janela de 30 dias e são renovadas automaticamente durante o uso, no máximo uma vez por dia, evitando login diário sem criar uma credencial eterna.
 - Sessões são versionadas e são revogadas após troca de senha ou mudança do status ativo/inativo do usuário.
+- O logout registra no D1 a revogação **da sessão atual** (inclusive após a renovação do cookie); outras sessões do mesmo usuário permanecem válidas. Tokens antigos sem identificador de sessão são revogados individualmente pelo hash, sem armazenar o cookie. O cron remove registros expirados.
+- A preparação pública do primeiro administrador usa o mesmo limitador de tentativas do login e ainda exige ativação operacional. Isso reduz abusos automatizados, mas não substitui um processo controlado de provisionamento.
 - Conferentes precisam estar ativos e ligados a uma loja ativa/não removida.
 - O login usa rate limiter com comportamento fail-closed.
 - Códigos de loja são canonicalizados e possuem unicidade case-insensitive.
