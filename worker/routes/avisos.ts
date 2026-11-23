@@ -37,8 +37,18 @@ function verEventosDoUsuario(user) {
 avisoRoutes.get("/", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
-  const { avisos, naoLidos } = await listAvisos(c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user));
-  return c.json({ avisos: avisos.map(avisoJson), naoLidos });
+  const before = c.req.query("before");
+  const beforeId = c.req.query("beforeId");
+  if ((before && !beforeId) || (!before && beforeId) ||
+      (before && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before) || Number.isNaN(Date.parse(before)))) ||
+      (beforeId && (beforeId.length > 128 || beforeId.length === 0))) {
+    return c.json({ error: "REQUISICAO_INVALIDA", message: "Cursor de avisos inválido." }, 400);
+  }
+  const cursor = before && beforeId ? { criadoEm: before, id: beforeId } : null;
+  const { avisos, naoLidos, hasMore, nextCursor } = await listAvisos(
+    c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor
+  );
+  return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
 });
 
 avisoRoutes.post("/:id/lido", async (c) => {

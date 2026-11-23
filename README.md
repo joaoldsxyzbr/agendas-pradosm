@@ -140,7 +140,7 @@ Os arquivos reais exportados não devem ser versionados. Testes usam dados sint�
 
 ## Avisos e notificações
 
-O sino no cabeçalho mostra avisos e eventos para todos os perfis autenticados, com badge de não lidos, polling de 60 segundos e marcação de lido por usuário. A lista é única, do mais recente para o mais antigo, e o aviso é registro permanente: nunca é excluído nem expira, apenas marcado como lido. O administrador publica avisos com urgência (badge do sino pulsa em vermelho) e direcionamento opcional por loja — sem lojas escolhidas, todas veem; com lojas, só os conferentes dessas lojas (e os demais perfis) enxergam. O card mostra quem publicou. O sistema também gera eventos automáticos — agenda importada, importação em lote, dia concluído e agenda reaberta — gravados na mesma transação da operação.
+O sino no cabeçalho mostra avisos e eventos para todos os perfis autenticados, com badge de não lidos, polling de 60 segundos e marcação de lido por usuário. A lista é única, do mais recente para o mais antigo, com carregamento de avisos antigos por páginas de 50. O aviso é registro permanente: nunca é excluído nem expira, apenas marcado como lido. O administrador publica avisos com urgência (badge do sino pulsa em vermelho) e direcionamento opcional por loja — sem lojas escolhidas, todas veem; com lojas, só os conferentes dessas lojas (e os demais perfis) enxergam. O card mostra quem publicou. O sistema também gera eventos automáticos — agenda importada, importação em lote, dia concluído e agenda reaberta — gravados na mesma transação da operação.
 
 ## Dashboard
 
@@ -219,6 +219,8 @@ Os planos e especificações técnicas ficam em `docs/superpowers/`.
 - Cookies de sessão são `HttpOnly`, `SameSite=Strict` e seguros em HTTPS.
 - Sessões usam janela de 30 dias e são renovadas automaticamente durante o uso, no máximo uma vez por dia, evitando login diário sem criar uma credencial eterna.
 - Sessões são versionadas e são revogadas após troca de senha ou mudança do status ativo/inativo do usuário.
+- O logout registra no D1 a revogação **da sessão atual** (inclusive após a renovação do cookie); outras sessões do mesmo usuário permanecem válidas. Tokens antigos sem identificador de sessão são revogados individualmente pelo hash, sem armazenar o cookie. O cron remove registros expirados.
+- A preparação pública do primeiro administrador usa o mesmo limitador de tentativas do login e ainda exige ativação operacional. Isso reduz abusos automatizados, mas não substitui um processo controlado de provisionamento.
 - Conferentes precisam estar ativos e ligados a uma loja ativa/não removida.
 - O login usa rate limiter com comportamento fail-closed.
 - Códigos de loja são canonicalizados e possuem unicidade case-insensitive.

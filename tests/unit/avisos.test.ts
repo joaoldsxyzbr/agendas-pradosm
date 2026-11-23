@@ -231,6 +231,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT, nome TEXT, ativo INTEGER, excluido_em TEXT, criado_em TEXT, atualizado_em TEXT)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, loja_id TEXT, nome TEXT, login TEXT, senha_hash TEXT, papel TEXT, ativo INTEGER, session_version INTEGER, excluido_em TEXT, criado_em TEXT, atualizado_em TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT, arquivo_original TEXT, criado_por TEXT, status_dia TEXT, concluido_em TEXT, concluido_por TEXT, digitado_em TEXT, digitado_por TEXT, criado_em TEXT, atualizado_em TEXT)",
@@ -594,4 +595,49 @@ describe("Rotas de avisos integradas", () => {
       f.sqlite.close();
     }
   });
+  it("pagina avisos antigos por cursor estável, respeitando a loja e o total de não lidos", async () => {
+    const f = fixture();
+    try {
+      const insert = f.sqlite.prepare(
+        "INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES (?,'aviso',?,'Sintético','2026-11-20T10:00:00.000Z')"
+      );
+      for (let i = 0; i < 62; i++) {
+        const id = "global-" + String(i).padStart(3, "0");
+        insert.run(id, "Aviso " + i);
+      }
+      f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('evento','evento','Evento','Sintético','2026-11-20T10:00:00.000Z')").run();
+      f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('so-loja-02','aviso','Direcionado','Sintético','2026-11-20T10:00:00.000Z')").run();
+      f.sqlite.prepare("INSERT INTO avisos_lojas VALUES ('so-loja-02','02')").run();
+      const primeira = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(primeira.avisos.length, 50);
+      assert.equal(primeira.naoLidos, 62);
+      assert.equal(primeira.hasMore, true);
+      assert.ok(primeira.nextCursor);
+      assert.equal(primeira.avisos.every(a => a.tipo === "aviso"), true);
+      f.sqlite.prepare(
+        "INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('novo','aviso','Publicado depois','Sintético','2026-11-21T10:00:00.000Z')"
+      ).run();
+      const query = new URLSearchParams({
+        before: primeira.nextCursor.criadoEm, beforeId: primeira.nextCursor.id
+      });
+      const segunda = await (await f.call("conf1", "/api/avisos?" + query)).json();
+      assert.equal(segunda.avisos.length, 12);
+      assert.equal(segunda.hasMore, false);
+      assert.equal(segunda.nextCursor, null);
+      assert.equal(segunda.naoLidos, 63, "a contagem independe da página");
+      const ids = [...primeira.avisos, ...segunda.avisos].map(a => a.id);
+      assert.equal(new Set(ids).size, 62, "sem duplicação com novos avisos");
+      assert.ok(ids.every(id => id.startsWith("global-")));
+      assert.equal((await f.call("conf1", "/api/avisos?before=2026-11-20")).status, 400);
+      assert.equal((await f.call("conf1", "/api/avisos?beforeId=qualquer")).status, 400);
+      assert.equal((await f.call("conf1", "/api/avisos?before=invalido&beforeId=id")).status, 400);
+      const adm = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(adm.naoLidos, 65, "administrador também vê evento e direcionado");
+      await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      assert.equal((await (await f.call("conf1", "/api/avisos")).json()).naoLidos, 0);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
 });

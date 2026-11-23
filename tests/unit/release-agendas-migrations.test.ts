@@ -6,13 +6,13 @@ import { DatabaseSync } from "node:sqlite";
 
 // Somente SQLite em memória: nunca consulta ou escreve no D1 de produção.
 describe("Release candidata: migrations sobre schema de produção", () => {
-  it("aplica a sequência 0001–0024 sem remover campos operacionais", () => {
+  it("aplica a sequência 0001–0025 sem remover campos operacionais", () => {
     const files = readdirSync("migrations")
       .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
       .sort();
     assert.deepEqual(files.map(name => name.slice(0, 4)),
-      Array.from({ length: 24 }, (_, i) => String(i + 1).padStart(4, "0")),
-      "A candidata deve conter exatamente migrations 0001–0024");
+      Array.from({ length: 25 }, (_, i) => String(i + 1).padStart(4, "0")),
+      "A candidata deve conter exatamente migrations 0001–0025");
 
     const db = new DatabaseSync(":memory:");
     try {
@@ -30,6 +30,7 @@ describe("Release candidata: migrations sobre schema de produção", () => {
       assert.ok(appointments.includes("pedidos") && appointments.includes("nfe"));
       assert.ok(agenda.includes("digitado_em") && agenda.includes("digitado_por"));
       assert.ok(agenda.includes("versao_importacao"), "Versão de importação ausente");
+      assert.deepEqual(names("sessoes_revogadas"), ["session_key", "expira_em"]);
       assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'agendas'").get().sql, /ck_agenda_versao_importacao/);
       assert.ok(appointments.includes("csv_campos"));
       for (const field of ["agenda_id", "fornecedor_chave", "fornecedor_nome", "dados_hash", "digitado_em", "digitado_por"])

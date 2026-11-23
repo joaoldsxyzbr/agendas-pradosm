@@ -16,11 +16,14 @@ export function AvisosBell({ papel }: { papel: Role }) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [olderError, setOlderError] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const isAdmin = papel === "admin";
   const avisos = useQuery({
     queryKey: ["avisos"],
-    queryFn: getAvisos,
+    queryFn: () => getAvisos(),
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
@@ -42,6 +45,30 @@ export function AvisosBell({ papel }: { papel: Role }) {
     };
   }, [open]);
 
+  // Carregar páginas antigas é opt-in: o polling continua consultando apenas
+  // os 50 avisos mais recentes, sem multiplicar leituras no D1.
+  useEffect(() => {
+    if (!open) {
+      setOlderPages([]);
+      setOlderError(false);
+    }
+  }, [open]);
+
+  const loadMore = async () => {
+    const nextCursor = (olderPages.at(-1) ?? avisos.data)?.nextCursor;
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setOlderError(false);
+    try {
+      const page = await getAvisos(nextCursor);
+      setOlderPages(current => [...current, page]);
+    } catch {
+      setOlderError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const patchQuery = (patch: (current: AvisosResponse) => AvisosResponse) => {
     client.setQueryData<AvisosResponse>(["avisos"], current => (current ? patch(current) : current));
   };
@@ -51,14 +78,23 @@ export function AvisosBell({ papel }: { papel: Role }) {
     onMutate: async id => {
       await client.cancelQueries({ queryKey: ["avisos"] });
       const previous = client.getQueryData<AvisosResponse>(["avisos"]) ?? null;
+      const previousOlder = olderPages;
+      const found = [ ...(previous?.avisos ?? []), ...olderPages.flatMap(page => page.avisos) ]
+        .find(aviso => aviso.id === id);
+      const decrement = found && !found.lido ? 1 : 0;
+      setOlderPages(pages => pages.map(page => ({
+        ...page, avisos: page.avisos.map(aviso => aviso.id === id ? { ...aviso, lido: true } : aviso),
+      })));
       patchQuery(current => ({
-        naoLidos: Math.max(0, current.naoLidos - (current.avisos.find(a => a.id === id)?.lido ? 0 : 1)),
+        ...current,
+        naoLidos: Math.max(0, current.naoLidos - decrement),
         avisos: current.avisos.map(a => (a.id === id ? { ...a, lido: true } : a)),
       }));
-      return { previous };
+      return { previous, previousOlder };
     },
     onError: (_error, _id, context) => {
       if (context?.previous) client.setQueryData(["avisos"], context.previous);
+      if (context?.previousOlder) setOlderPages(context.previousOlder);
     },
     onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
   });
@@ -68,21 +104,30 @@ export function AvisosBell({ papel }: { papel: Role }) {
     onMutate: async () => {
       await client.cancelQueries({ queryKey: ["avisos"] });
       const previous = client.getQueryData<AvisosResponse>(["avisos"]) ?? null;
+      const previousOlder = olderPages;
+      setOlderPages(pages => pages.map(page => ({
+        ...page, avisos: page.avisos.map(aviso => ({ ...aviso, lido: true })),
+      })));
       patchQuery(current => ({
+        ...current,
         naoLidos: 0,
         avisos: current.avisos.map(a => ({ ...a, lido: true })),
       }));
-      return { previous };
+      return { previous, previousOlder };
     },
     onError: (_error, _void, context) => {
       if (context?.previous) client.setQueryData(["avisos"], context.previous);
+      if (context?.previousOlder) setOlderPages(context.previousOlder);
     },
     onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
   });
 
   const data = avisos.data;
   const naoLidos = data?.naoLidos ?? 0;
-  const lista = data?.avisos ?? [];
+  const lista = [...new Map([...(data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)]
+    .map(aviso => [aviso.id, aviso] as const)).values()];
+  const lastPage = olderPages.at(-1) ?? data;
+  const hasMore = Boolean(lastPage?.hasMore && lastPage.nextCursor);
   const urgenteNaoLido = lista.some(a => a.urgente && !a.lido);
   const ariaLabel = naoLidos > 0 ? `Avisos, ${naoLidos} não lidos` : "Avisos";
 
@@ -147,6 +192,12 @@ export function AvisosBell({ papel }: { papel: Role }) {
             </div>
           </div>
         </article>)}
+        {olderError && <p role="alert" className="p-3 text-xs text-rose-300">Não foi possível carregar avisos antigos.</p>}
+        {hasMore && <div className="p-3 text-center">
+          <Button size="sm" variant="secondary" disabled={loadingMore} onClick={() => { void loadMore(); }}>
+            {loadingMore ? "Carregando..." : "Carregar avisos anteriores"}
+          </Button>
+        </div>}
       </div>
     </div>}
     {publishing && <PublishAvisoDialog onClose={() => setPublishing(false)} />}

@@ -19,7 +19,7 @@ function buildAvisos() {
   };
 }
 
-async function setup(page, { role = "admin" } = {}) {
+async function setup(page, { role = "admin", paginated = false } = {}) {
   const user = role === "admin" ? admin : conf;
   const state = { data: buildAvisos(), nextId: 0 };
   const requests = [];
@@ -28,10 +28,22 @@ async function setup(page, { role = "admin" } = {}) {
     const method = route.request().method();
     const path = url.pathname;
     const body = method === "GET" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body });
+    requests.push({ path, method, body, search: url.search });
     if (path === "/api/auth/me") return route.fulfill({ json: user });
     if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
-    if (path === "/api/avisos" && method === "GET") return route.fulfill({ json: state.data });
+    if (path === "/api/avisos" && method === "GET") {
+      if (paginated && url.searchParams.has("before")) {
+        return route.fulfill({ json: {
+          avisos: [{ ...state.data.avisos[1], id: "av-antigo", titulo: "Aviso histórico" }],
+          naoLidos: state.data.naoLidos, hasMore: false, nextCursor: null
+        } });
+      }
+      if (paginated) return route.fulfill({ json: {
+        ...state.data, hasMore: true,
+        nextCursor: { criadoEm: "2026-11-11T09:00:00.000Z", id: "av2" }
+      } });
+      return route.fulfill({ json: state.data });
+    }
     if (/^\/api\/avisos\/([^/]+)\/lido$/.test(path) && method === "POST") {
       const id = path.split("/")[3]!;
       state.data = {
@@ -140,4 +152,15 @@ test("Admin publica aviso urgente direcionado e ele aparece no painel", async ({
   expect(publish?.body).toEqual({ titulo: "Inventário loja Central", mensagem: "Inventário geral amanhã às 7h; recebimentos a partir das 9h.", urgente: true, lojas: ["F03"] });
   // Registro permanente: ninguém inativa aviso.
   await expect(page.getByRole("button", { name: /Inativar aviso/ })).toHaveCount(0);
+});
+
+test("Sino carrega avisos anteriores sem substituir os recentes", async ({ page }) => {
+  const requests = await setup(page, { role: "admin", paginated: true });
+  await page.getByRole("button", { name: "Avisos, 1 não lidos" }).click();
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await page.getByRole("button", { name: "Carregar avisos anteriores" }).click();
+  await expect(page.getByRole("article", { name: "Aviso histórico" })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Carregar avisos anteriores" })).toHaveCount(0);
+  expect(requests.some(request => request.path === "/api/avisos" && request.search.includes("before="))).toBe(true);
 });

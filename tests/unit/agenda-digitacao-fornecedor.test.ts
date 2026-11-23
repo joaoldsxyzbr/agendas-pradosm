@@ -6,6 +6,7 @@ import { listAgendaSuppliers, listDigitacaoProgressByDate, changeSupplierCheck, 
 function setup() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, nome TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT)",
     "CREATE TABLE agendamentos (id TEXT PRIMARY KEY, agenda_id TEXT, protocolo TEXT, horario_inicio TEXT, horario_fim TEXT, fornecedor TEXT, itens INTEGER, volumes INTEGER, paletes INTEGER, carga_batida TEXT, tipo TEXT, nfe TEXT, pedidos TEXT, status TEXT, trocas INTEGER, observacao TEXT, origem TEXT, ativo INTEGER, criado_em TEXT, atualizado_em TEXT, csv_campos TEXT)",

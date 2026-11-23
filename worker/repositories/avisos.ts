@@ -23,15 +23,23 @@ function filtroTipo(verEventos) {
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
 // Limitado aos últimos `limit`. Admin/visualizador (loja null) veem tudo.
-export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50) {
+export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null) {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
-  const where = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
+  const filtroBase = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
+  // Cursor por (criado_em, id) evita pular/duplicar registros quando novos
+  // avisos são publicados entre duas páginas.
+  const filtroCursor = cursor
+    ? "(a.criado_em < ? OR (a.criado_em = ? AND a.id < ?))"
+    : "";
+  const where = [filtroBase, filtroCursor].filter(Boolean).join(" AND ");
   // Separador char(31) (unit separator): código de loja com vírgula não pode
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
     "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
-  const rows = await db.prepare(
+  const values = [userId, ...(loja ? [loja] : []),
+    ...(cursor ? [cursor.criadoEm, cursor.criadoEm, cursor.id] : []), limit + 1];
+  const result = await db.prepare(
     `SELECT a.id, a.tipo, a.titulo, a.mensagem, a.criado_em, a.urgente, a.autor,
             ${lojasSelect},
             CASE WHEN l.usuario_id IS NULL THEN 0 ELSE 1 END AS lido
@@ -40,16 +48,25 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
       ${where ? "WHERE " + where : ""}
       ORDER BY a.criado_em DESC, a.id DESC
       LIMIT ?`
-  ).bind(...(loja ? [userId, loja, limit] : [userId, limit])).all();
+  ).bind(...values).all();
   const unread = await db.prepare(
     `SELECT COUNT(*) AS total
        FROM avisos a
-      WHERE ${where ? where + " AND " : ""}NOT EXISTS (
+      WHERE ${filtroBase ? filtroBase + " AND " : ""}NOT EXISTS (
           SELECT 1 FROM avisos_lidos l
            WHERE l.aviso_id = a.id AND l.usuario_id = ?
         )`
   ).bind(...(loja ? [loja, userId] : [userId])).first();
-  return { avisos: rows.results, naoLidos: unread?.total ?? 0 };
+  const rows = result.results ?? [];
+  const avisos = rows.slice(0, limit);
+  const hasMore = rows.length > limit;
+  const ultimo = avisos.at(-1);
+  return {
+    avisos,
+    naoLidos: unread?.total ?? 0,
+    hasMore,
+    nextCursor: hasMore && ultimo ? { criadoEm: ultimo.criado_em, id: ultimo.id } : null
+  };
 }
 
 // Marca um aviso como lido para o usuário — apenas o que ele enxerga (mesmo
