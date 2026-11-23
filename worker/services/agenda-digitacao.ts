@@ -162,7 +162,7 @@ function stateConflict() {
   return Object.assign(new Error("A marcação foi alterada; atualize a tela."), { code: "CONFLITO_ESTADO" });
 }
 
-async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id: string }, userId: string, input: {
+async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id: string }, userId: string, actorName: string | null, input: {
   supplier: string; hash: string; digitado: boolean; expectedDigitadoEm?: string | null;
 }) {
   const rows = await listAppointmentsByAgenda(db, agenda.id);
@@ -172,14 +172,19 @@ async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id
   if (hash !== input.hash) throw stateConflict();
 
   const current = await db.prepare(
-    "SELECT dados_hash, digitado_em, digitado_por FROM agenda_digitacao_fornecedor " +
-    "WHERE agenda_id = ? AND fornecedor_chave = ? LIMIT 1"
-  ).bind(agenda.id, group.key).first<Pick<SupplierCheck, "dados_hash" | "digitado_em" | "digitado_por">>();
+    "SELECT d.dados_hash, d.digitado_em, d.digitado_por, u.nome AS digitador_nome " +
+    "FROM agenda_digitacao_fornecedor d LEFT JOIN usuarios u ON u.id = d.digitado_por " +
+    "WHERE d.agenda_id = ? AND d.fornecedor_chave = ? LIMIT 1"
+  ).bind(agenda.id, group.key).first<Pick<SupplierCheck, "dados_hash" | "digitado_em" | "digitado_por" | "digitador_nome">>();
   const visibleDate = current?.dados_hash === hash ? current.digitado_em ?? null : null;
   if (visibleDate !== input.expectedDigitadoEm) throw stateConflict();
   if (Boolean(visibleDate) === input.digitado) {
+    // No-op concorrente: responde com o nome real do digitador salvo (ou do
+    // usuario da requisicao), nunca com string vazia.
     return { supplier: group.supplier, hash, digitadoEm: visibleDate,
-      digitadoPor: visibleDate && current?.digitado_por ? { id: current.digitado_por, name: "" } : null };
+      digitadoPor: visibleDate && current?.digitado_por
+        ? { id: current.digitado_por, name: current.digitador_nome ?? actorName ?? "Administrador" }
+        : null };
   }
 
   const now = new Date().toISOString();
@@ -211,7 +216,7 @@ async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id
   if (Number(results?.[0]?.meta?.changes ?? 0) !== 1) throw stateConflict();
   return {
     supplier: group.supplier, hash, digitadoEm: changedAt,
-    digitadoPor: changedBy ? { id: userId, name: "Administrador" } : null
+    digitadoPor: changedBy ? { id: userId, name: actorName ?? "Administrador" } : null
   };
 }
 

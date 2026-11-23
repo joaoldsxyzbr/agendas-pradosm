@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const source = path => readFileSync(new URL(path, import.meta.url), "utf8");
+const source = path =>
+  // Checkout no Windows usa CRLF; normaliza para comparar com os contratos em JSON (LF).
+  readFileSync(new URL(path, import.meta.url), "utf8").replaceAll("\r\n", "\n");
 describe("Worker em JavaScript preserva a main", () => {
   it("conserva as rotas e a ordem dos middlewares", () => {
     const expected = JSON.parse(source("./legacy-route-contracts.json")).app;

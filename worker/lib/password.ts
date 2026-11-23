@@ -62,6 +62,12 @@ function parsePasswordHash(encoded) {
     return null;
   }
 }
+// Hash sintetico valido (mesmo formato/iteracoes de um hash real, senha
+// interna inalcancavel) usado pelo POST /api/auth/login quando o usuario nao
+// existe: o PBKDF2 roda do mesmo jeito e o tempo de resposta nao denuncia
+// quais logins existem (anti-enumeracao por timing). Respostas nao mudam.
+const DUMMY_HASH = "pbkdf2_sha256$100000$ny1ipR7Zngf83PRoODBDYA==$mphEmCCsGTu07+x0EGf4PnM+5tgqCDtXXpBQD9ABm1E=";
+
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const hash = await derive(password, salt, CURRENT_ITERATIONS);
@@ -83,6 +89,7 @@ function passwordNeedsUpgrade(encoded) {
 }
 const PASSWORD_HASH_ITERATIONS = CURRENT_ITERATIONS;
 export {
+  DUMMY_HASH,
   PASSWORD_HASH_ITERATIONS,
   hashPassword,
   passwordNeedsUpgrade,
