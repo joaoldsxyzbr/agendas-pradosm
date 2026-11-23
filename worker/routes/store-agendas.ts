@@ -169,7 +169,8 @@ async function createManualForDate(c, user, date) {
       user.id,
       parsed.data.supplier,
       businessTime(/* @__PURE__ */ new Date()),
-      null
+      null,
+      true
     );
     await publishAgendaChanged(c.env, {
       agendaId: agenda.id,
@@ -179,6 +180,8 @@ async function createManualForDate(c, user, date) {
     });
     return c.json(appointmentJson(appointment), 201);
   } catch (error) {
+    const conflict = conflictResponse(c, error);
+    if (conflict) return conflict;
     console.error("Manual supplier creation failed", error);
     return c.json(
       {
@@ -368,7 +371,8 @@ storeAppointmentRoutes.patch("/:id/manual", async (c) => {
       appointment,
       user.id,
       parsed.data.supplier,
-      null
+      null,
+      true
     );
     await publishAgendaChanged(c.env, {
       agendaId: agenda.id,
@@ -378,6 +382,8 @@ storeAppointmentRoutes.patch("/:id/manual", async (c) => {
     });
     return c.json(appointmentJson(updated));
   } catch (error) {
+    const conflict = conflictResponse(c, error);
+    if (conflict) return conflict;
     console.error("Manual supplier update failed", error);
     return c.json(
       { error: "FORNECEDOR_MANUAL_NAO_ATUALIZADO", message: "N\xE3o foi poss\xEDvel editar o fornecedor." },
@@ -408,7 +414,7 @@ storeAppointmentRoutes.delete("/:id/manual", async (c) => {
   }
   if (agenda.status_dia === "concluido") return concludedDay(c);
   try {
-    await softDeleteManualAppointment(c.env.DB, agenda, appointment, user.id, null);
+    await softDeleteManualAppointment(c.env.DB, agenda, appointment, user.id, null, true);
     await publishAgendaChanged(c.env, {
       agendaId: agenda.id,
       storeId: agenda.loja_id,
@@ -417,6 +423,8 @@ storeAppointmentRoutes.delete("/:id/manual", async (c) => {
     });
     return c.body(null, 204);
   } catch (error) {
+    const conflict = conflictResponse(c, error);
+    if (conflict) return conflict;
     console.error("Manual supplier delete failed", error);
     return c.json(
       { error: "FORNECEDOR_MANUAL_NAO_REMOVIDO", message: "N\xE3o foi poss\xEDvel remover o fornecedor." },
@@ -460,7 +468,8 @@ storeAppointmentRoutes.patch("/:id/exchanges", async (c) => {
       appointment,
       user.id,
       parsed.data.hasExchanges,
-      null
+      null,
+      true
     );
     await publishAgendaChanged(c.env, {
       agendaId: agenda.id,
@@ -498,7 +507,7 @@ storeAppointmentRoutes.patch("/:id/observation", async (c) => {
     return c.json({ error: "MOTIVO_INVALIDO", message: error instanceof Error ? error.message : "Motivo inválido." }, 400);
   }
   try {
-    const updated = await changeAppointmentStatus(c.env.DB, appointment, user.id, appointment.status, undefined, observation);
+    const updated = await changeAppointmentStatus(c.env.DB, appointment, user.id, appointment.status, undefined, observation, true);
     await publishAgendaChanged(c.env, { agendaId: agenda.id, storeId: agenda.loja_id, date: agenda.data_agenda, reason: "observation" });
     return c.json(appointmentJson(updated));
   } catch (error) {
@@ -553,7 +562,8 @@ storeAppointmentRoutes.patch("/:id/status", async (c) => {
       user.id,
       parsed.data.status,
       undefined,
-      observation
+      observation,
+      true
     );
     await publishAgendaChanged(c.env, {
       agendaId: agenda.id,
