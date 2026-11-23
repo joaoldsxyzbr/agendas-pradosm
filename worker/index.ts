@@ -3,6 +3,7 @@ import { app } from "./app.ts";
 import { closePastOpenAgendas } from "./services/agenda-maintenance.ts";
 import { pruneDiagnostics } from "./repositories/diagnostics.ts";
 import { runRetention } from "./services/retention.ts";
+import { pruneRevokedSessions } from "./repositories/users.ts";
 
 export default {
   fetch: app.fetch,
@@ -14,6 +15,8 @@ export default {
     await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }
     catch { console.warn("Scheduled diagnostics retention unavailable"); }
+    try { await pruneRevokedSessions(env.DB, Math.floor(controller.scheduledTime / 1000)); }
+    catch { console.warn("Scheduled session cleanup unavailable"); }
     try {
       const limiteConfigurado = Number(env.RETENTION_ROW_LIMIT_WARNING);
       const rowWarningThreshold = Number.isFinite(limiteConfigurado) && limiteConfigurado > 0
