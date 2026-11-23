@@ -218,7 +218,15 @@ async function createAgendaImport(db, storeId, createdBy, input, storeName = nul
 // agendamento vivem aqui — única e lote não podem divergir (classe do
 // incidente 500 de 06/11). Retorna os agendamentos importados existentes
 // para o log de auditoria do chamador.
-function appendAgendaReplaceStatements(db, statements, agendaId, existingAppointments, input, now) {
+// A versão de importação é lida antes dos agendamentos. Se uma substituição
+// concorrente gravar primeiro, a constraint da migration 0024 aborta TODO
+// o db.batch, incluindo inserções, inativações, auditoria e avisos.
+async function readAgendaImportVersion(db, agendaId) {
+  const row = await db.prepare("SELECT versao_importacao FROM agendas WHERE id = ?").bind(agendaId).first();
+  if (!row) throw Object.assign(new Error("Agenda alterada durante a importação."), { code: "CONFLITO_ESTADO" });
+  return Number(row.versao_importacao);
+}
+function appendAgendaReplaceStatements(db, statements, agendaId, expectedVersion, existingAppointments, input, now) {
   const importedExisting = existingAppointments.filter(
     (appointment) => appointment.origem !== "manual"
   );
@@ -230,8 +238,9 @@ function appendAgendaReplaceStatements(db, statements, agendaId, existingAppoint
   );
   statements.push(
     db.prepare(
-      "UPDATE agendas SET arquivo_original = ?, atualizado_em = ? WHERE id = ?"
-    ).bind(input.originalFileName, now, agendaId)
+      "UPDATE agendas SET arquivo_original = ?, atualizado_em = ?, versao_importacao = " +
+      "CASE WHEN versao_importacao = ? THEN versao_importacao + 1 ELSE -1 END WHERE id = ?"
+    ).bind(input.originalFileName, now, expectedVersion, agendaId)
   );
   for (const appointment of input.appointments) {
     const current = byProtocol.get(appointment.protocol);
@@ -271,10 +280,11 @@ function appendAgendaReplaceStatements(db, statements, agendaId, existingAppoint
   return importedExisting;
 }
 async function replaceAgendaImport(db, agenda, userId, input) {
+  const expectedVersion = await readAgendaImportVersion(db, agenda.id);
   const existing = await listAppointmentsByAgenda(db, agenda.id, false);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [];
-  const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, existing, input, now);
+  const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, expectedVersion, existing, input, now);
   // Evento de aviso na mesma transação da substituição (spec de avisos, decisão 5).
   statements.push(avisoEventoStatement(db, {
     titulo: "Agenda substituída",
@@ -363,12 +373,13 @@ async function importAgendaBatchAtomic(db, userId, entries) {
       });
       continue;
     }
+    const expectedVersion = await readAgendaImportVersion(db, existing.id);
     const existingAppointments = await listAppointmentsByAgenda(
       db,
       existing.id,
       false
     );
-    const importedExisting = appendAgendaReplaceStatements(db, statements, existing.id, existingAppointments, input, now);
+    const importedExisting = appendAgendaReplaceStatements(db, statements, existing.id, expectedVersion, existingAppointments, input, now);
     statements.push(
       auditStatement(db, {
         userId,
