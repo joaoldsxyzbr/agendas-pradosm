@@ -11,6 +11,23 @@ async function findUserById(db, id) {
     `SELECT ${USER_COLUMNS} FROM usuarios WHERE id = ? AND excluido_em IS NULL LIMIT 1`
   ).bind(id).first();
 }
+// A consulta autenticada verifica a revogação na mesma leitura do usuário,
+// evitando uma segunda operação D1 em cada requisição.
+async function findUserForSession(db, id, sessionKey) {
+  return db.prepare(
+    `SELECT ${USER_COLUMNS} FROM usuarios WHERE id = ? AND excluido_em IS NULL
+       AND NOT EXISTS (SELECT 1 FROM sessoes_revogadas WHERE session_key = ?) LIMIT 1`
+  ).bind(id, sessionKey).first();
+}
+async function revokeSession(db, sessionKey, expiresAt) {
+  await db.prepare(
+    "INSERT OR IGNORE INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?)"
+  ).bind(sessionKey, expiresAt).run();
+}
+async function pruneRevokedSessions(db, nowSeconds = Math.floor(Date.now() / 1000)) {
+  return db.prepare("DELETE FROM sessoes_revogadas WHERE expira_em <= ?")
+    .bind(nowSeconds).run();
+}
 async function upgradeUserPasswordHash(db, userId, expectedHash, passwordHash) {
   // Não sobrescrever uma senha alterada por outra sessão/admin durante o login.
   const result = await db.prepare(
@@ -217,7 +234,10 @@ export {
   createInactiveFirstAdmin,
   createUser,
   findUserById,
+  findUserForSession,
   findUserByLogin,
+  revokeSession,
+  pruneRevokedSessions,
   hasAdmin,
   listUsers,
   softDeleteUser,
