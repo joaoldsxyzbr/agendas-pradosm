@@ -23,7 +23,7 @@ function isValidIsoDate(value: string) {
 }
 function timeToMinutes(value: string) {
   const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
+  return (hour ?? 0) * 60 + (minute ?? 0);
 }
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidIsoDate, { message: "Data inv\xE1lida." });
 const Time = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
