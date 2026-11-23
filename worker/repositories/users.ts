@@ -126,7 +126,7 @@ async function updateUser(db, current, input, actorUserId) {
   const sessionVersion = current.session_version + (input.senha || statusChanged || identityChanged ? 1 : 0);
   const statements = [
     db.prepare(
-      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL"
+      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ?"
     ).bind(
       lojaId,
       nome,
@@ -136,13 +136,21 @@ async function updateUser(db, current, input, actorUserId) {
       ativo,
       sessionVersion,
       now,
-      current.id
+      current.id,
+      current.nome,
+      current.login,
+      current.senha_hash,
+      current.papel,
+      current.ativo,
+      current.loja_id,
+      current.session_version
     )
   ];
   statements.push(
     auditStatement(db, {
       userId: actorUserId,
       action: "usuario_atualizado",
+      onlyIfPreviousWrite: true,
       entity: "usuario",
       entityId: current.id,
       storeId: lojaId,
@@ -165,7 +173,10 @@ async function updateUser(db, current, input, actorUserId) {
       createdAt: now
     })
   );
-  await db.batch(statements);
+  const [write] = await db.batch(statements);
+  if (write?.meta?.changes !== 1) {
+    throw Object.assign(new Error("O usuário foi modificado por outra operação."), { code: "CONFLITO_ESTADO" });
+  }
   return await findUserById(db, current.id);
 }
 async function softDeleteUser(db, current, actorUserId) {
@@ -177,6 +188,7 @@ async function softDeleteUser(db, current, actorUserId) {
     auditStatement(db, {
       userId: actorUserId,
       action: "usuario_removido",
+      onlyIfPreviousWrite: true,
       entity: "usuario",
       entityId: current.id,
       storeId: current.loja_id,
