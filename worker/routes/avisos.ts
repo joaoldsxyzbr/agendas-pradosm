@@ -40,7 +40,7 @@ avisoRoutes.get("/", async (c) => {
   const before = c.req.query("before");
   const beforeId = c.req.query("beforeId");
   if ((before && !beforeId) || (!before && beforeId) ||
-      (before && (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(before) || Number.isNaN(Date.parse(before)))) ||
+      (before && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before) || Number.isNaN(Date.parse(before)))) ||
       (beforeId && (beforeId.length > 128 || beforeId.length === 0))) {
     return c.json({ error: "REQUISICAO_INVALIDA", message: "Cursor de avisos inválido." }, 400);
   }
