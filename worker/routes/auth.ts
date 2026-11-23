@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { RegisterFirstAdminInput } from "../../shared/api.ts";
 import { checkLoginRateLimit } from "../lib/login-rate-limit.ts";
-import { hashPassword, passwordNeedsUpgrade, verifyPassword } from "../lib/password.ts";
+import { DUMMY_HASH, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../lib/password.ts";
 import { createSessionToken, SESSION_MAX_AGE, verifySessionToken } from "../lib/session.ts";
 import { requireAuth } from "../middleware/auth.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
@@ -141,7 +141,12 @@ authRoutes.post("/login", async (c) => {
   }
 
   const user = await findUserByLogin(c.env.DB, parsed.data.login);
-  if (!user || user.ativo !== 1) return invalidCredentials(c);
+  if (!user || user.ativo !== 1) {
+    // Anti-enumeracao por timing: usuario inexistente paga o mesmo custo PBKDF2
+    // de um usuario real com senha errada, sem alterar a resposta.
+    await verifyPassword(parsed.data.senha, DUMMY_HASH);
+    return invalidCredentials(c);
+  }
 
   const passwordOk = await verifyPassword(parsed.data.senha, user.senha_hash);
   if (!passwordOk) return invalidCredentials(c);
