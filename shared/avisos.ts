@@ -30,9 +30,17 @@ export const avisoSchema = z.object({
   lojas: z.array(z.string()).nullable(),
 });
 
+export const avisoCursorSchema = z.object({
+  criadoEm: z.string(),
+  id: z.string(),
+});
+
 export const avisosResponseSchema = z.object({
   avisos: z.array(avisoSchema),
   naoLidos: z.number().int().nonnegative(),
+  // Opcionais para tolerar respostas dos mocks e da API anterior.
+  hasMore: z.boolean().optional(),
+  nextCursor: avisoCursorSchema.nullable().optional(),
 });
 
 // Corpo do POST /api/admin/avisos. "lojas" null (ou omitido) publica para
@@ -52,6 +60,7 @@ export const publicarAvisoSchema = z.object({
   lojas: avisoLojasSchema.nullable().optional().default(null),
 });
 
+export type AvisoCursor = z.infer<typeof avisoCursorSchema>;
 export type AvisoTipo = z.infer<typeof avisoTipoSchema>;
 export type Aviso = z.infer<typeof avisoSchema>;
 export type AvisosResponse = z.infer<typeof avisosResponseSchema>;
