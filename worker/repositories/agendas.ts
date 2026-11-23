@@ -419,6 +419,7 @@ async function importAgendaBatchAtomic(db, userId, entries) {
 async function createManualAppointment(db, agenda, userId, supplier, businessHour, adminAdjustmentDetails, requireOpenDay = false) {
   const id = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
       "INSERT INTO agendamentos (id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, origem, ativo, criado_em, atualizado_em) " +
@@ -439,6 +440,7 @@ async function createManualAppointment(db, agenda, userId, supplier, businessHou
     auditStatement(db, {
       onlyIfPreviousWrite: true,
       userId,
+      id: auditId,
       action: "fornecedor_manual_criado",
       entity: "agendamento",
       entityId: id,
@@ -455,7 +457,8 @@ async function createManualAppointment(db, agenda, userId, supplier, businessHou
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
   const result = await db.batch(statements);
@@ -470,6 +473,7 @@ async function updateManualAppointmentSupplier(db, agenda, appointment, userId, 
   }
   if (appointment.fornecedor === supplier) return appointment;
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
       "UPDATE agendamentos SET fornecedor = ?, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1 AND fornecedor = ?" +
@@ -477,6 +481,7 @@ async function updateManualAppointmentSupplier(db, agenda, appointment, userId, 
     ).bind(supplier, now, appointment.id, appointment.fornecedor),
     auditStatement(db, {
       userId,
+      id: auditId,
       action: "fornecedor_manual_editado",
       onlyIfPreviousWrite: true,
       entity: "agendamento",
@@ -495,7 +500,8 @@ async function updateManualAppointmentSupplier(db, agenda, appointment, userId, 
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
   const result = await db.batch(statements);
@@ -509,6 +515,7 @@ async function softDeleteManualAppointment(db, agenda, appointment, userId, admi
     throw new Error("Agendamento manual inv\xE1lido.");
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
       "UPDATE agendamentos SET ativo = 0, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1" +
@@ -516,6 +523,7 @@ async function softDeleteManualAppointment(db, agenda, appointment, userId, admi
     ).bind(now, appointment.id),
     auditStatement(db, {
       userId,
+      id: auditId,
       action: "fornecedor_manual_removido",
       onlyIfPreviousWrite: true,
       entity: "agendamento",
@@ -534,7 +542,8 @@ async function softDeleteManualAppointment(db, agenda, appointment, userId, admi
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
   const result = await db.batch(statements);
