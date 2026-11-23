@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api";
 import { parseAgendaCsv, parseAgendaPdfText } from "../../../../../shared/import/parseAgendaBatch.ts";
 import { readCsvText } from "../../../../../shared/import/readCsvText.ts";
 import { extractPdfText } from "../../../../../shared/import/extractPdfText.ts";
+import { validateImportBatchPayload } from "../../../../../shared/import/validateImportBatch.ts";
 
 export const MAX_SOURCE_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -44,6 +45,9 @@ const errorLabels: Record<string, string> = {
   COLUNAS_CSV_EXCEDIDAS: "O CSV possui mais colunas do que o limite seguro.",
   CAMPO_CSV_INVALIDO: "O CSV possui campos inválidos ou títulos repetidos.",
   CAMPOS_CSV_EXCEDIDOS: "O CSV possui campos longos demais para armazenamento.",
+  REGISTRO_INVALIDO: "Agendamento com dados que o servidor não aceita. Confira o campo indicado.",
+  AGENDA_INVALIDA: "Agenda com dados fora dos limites aceitos.",
+  LOTE_INVALIDO: "O lote de agendas não pode ser importado.",
 };
 
 export function importErrorLabel(error: string) {
@@ -85,8 +89,18 @@ export async function parseSelectedFile(file: File): Promise<ImportPreview> {
   const parsed: unknown = isCsvAgenda(file)
     ? parseAgendaCsv(await readCsvText(file))
     : parseAgendaPdfText(await extractPdfText(file));
+  const preview = parsed as ImportPreview;
   // Parser oficial já retorna o contrato acima. A validação de gravação continua no Worker.
-  return parsed as ImportPreview;
+  // A prévia também roda o schema do endpoint de lote: o que rejeitaria o POST
+  // aparece aqui com protocolo e campo, em vez de virar um 400 genérico.
+  const payload = buildImportPayload(file, preview);
+  if (payload) {
+    const issues = validateImportBatchPayload(payload);
+    if (issues.length) {
+      preview.blockingErrors = [...new Set([...preview.blockingErrors, ...issues])];
+    }
+  }
+  return preview;
 }
 
 export async function submitImport(file: File, preview: ImportPreview, replace = false) {
