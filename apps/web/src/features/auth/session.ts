@@ -35,7 +35,7 @@ export function canUse(user:SessionUser|null|undefined,permission:Permission,leg
 }
 export function homeForUser(user:SessionUser):string{
   if(!user.permissoes)return homeForRole(user.papel);
-  return ACCESS_PAGES.find(([,p])=>user.permissoes?.includes(p))?.[0]??"/sem-acesso";
+  return ACCESS_PAGES.find(([,p])=>user.permissoes?.includes(p))?.[0]??(user.permissoes.includes("auditoria.ver")?"/admin/diagnostics":"/sem-acesso");
 }
 export async function loadSession(): Promise<SessionUser | null> {
   try {

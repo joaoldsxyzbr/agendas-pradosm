@@ -82,3 +82,7 @@ Leitura consistente em `worker/repositories/access.ts` resolve perfis, vínculos
 ### Escrita transacional preparatória
 
 `saveAccessConfiguration` grava perfil, vínculos, exceções, versão de sessão e auditoria em um batch atômico; CAS e autoridade do administrador integral são verificados no mesmo batch. A migration 0027 protege pelo menos um administrador integral não personalizado. A escrita NÃO está exposta na API; não criar configurações reais antes dos guards, filtros, revogação de WebSocket e UI. A reversão deve suspender contas customizadas antes de usar código anterior.
+
+### Integração local (preview)
+
+A flag ACCESS_MODE=on no servidor Node local habilita sessão com perfil efetivo e permissões, API de cadastro/configuração, revogação de sessão, filtros SQL por loja em agendas e relatórios, guards de IDs e lote, seletor de loja de conferência, menu e editor por usuário. Usuários legados permanecem inalterados. O Agendador fictício é incluído no seed local. A administração de credenciais e delegação fica com administradores integrais; direitos de gestão global exigem escopo global. Exportação cliente não é barreira contra copiar dados visíveis. Eventos antigos sem loja não são exibidos a usuários de escopo limitado, e contas customizadas usam polling HTTP. A flag remota permanece desligada até testes verdes e garantia de rollback (código antigo não pode interpretar perfil físico como autorização de conta customizada).

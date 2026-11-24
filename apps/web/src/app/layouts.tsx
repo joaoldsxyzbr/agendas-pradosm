@@ -65,7 +65,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       navigate("/login", { replace: true });
     },
   });
-  const items = menu.filter(item => user.permissoes ? user.permissoes.some(p=>ACCESS_PAGES.some(([path,permission])=>path===item.path&&permission===p)) : (item.roles as readonly Role[]).includes(user.papel));
+  const items = menu.filter(item => user.permissoes ? (user.permissoes.some(p=>ACCESS_PAGES.some(([path,permission])=>path===item.path&&permission===p))||(item.path==="/admin/diagnostics"&&user.permissoes.includes("auditoria.ver"))) : (item.roles as readonly Role[]).includes(user.papel));
   const toggleCollapsed = () => {
     const next = !collapsed;
     setCollapsed(next);

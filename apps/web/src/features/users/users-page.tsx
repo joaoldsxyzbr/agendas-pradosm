@@ -22,7 +22,7 @@ const input = "h-9 min-w-0 w-full rounded-md border border-[#48617b] bg-[#192d46
 const errorText = (e: unknown) => e instanceof ApiError ? e.message : "A operação não pôde ser concluída. Tente novamente.";
 const auditActions: Record<string, string> = {
   usuario_criado: "Usuário criado", usuario_atualizado: "Usuário atualizado",
-  usuario_removido: "Usuário removido", admin_bootstrap_preparado: "Administrador preparado",
+  usuario_removido: "Usuário removido", usuario_acesso_atualizado:"Permissões alteradas", admin_bootstrap_preparado: "Administrador preparado",
 };
 function auditValue(value: Record<string, unknown> | null | undefined) {
   if (!value) return null;
@@ -32,7 +32,7 @@ function auditValue(value: Record<string, unknown> | null | undefined) {
     };
     const label = labels[key] ?? key;
     if (key === "senhaAlterada") return item ? "senha alterada" : null;
-    return label + ": " + (typeof item === "boolean" ? item ? "sim" : "não" : String(item ?? "-"));
+    return label + ": " + (typeof item === "boolean" ? item ? "sim" : "não" : typeof item==="object"&&item!==null?JSON.stringify(item):String(item ?? "-"));
   }).filter(Boolean).join(" · ");
 }
 

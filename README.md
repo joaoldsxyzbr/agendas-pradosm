@@ -63,17 +63,18 @@ npm ci --legacy-peer-deps
 npm run dev:mock
 ```
 
-Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations em SQLite local e popula dados sintéticos. O modo padrão não usa Workerd/Wrangler. A tela de login oferece acesso rápido às cinco contas fictícias (sem digitar senha). O servidor Node encaminha o pedido ao login real; as rotas de acesso rápido não existem no Worker publicado. Se a senha de uma conta for alterada, use o formulário manual. Para testar o runtime Cloudflare e o D1 emulado, use `npm run dev:mock:wrangler` (estado separado). Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
+Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations em SQLite local e popula dados sintéticos. O modo padrão não usa Workerd/Wrangler. A tela de login oferece acesso rápido às seis contas fictícias (sem digitar senha). O servidor Node encaminha o pedido ao login real; as rotas de acesso rápido não existem no Worker publicado. Se a senha de uma conta for alterada, use o formulário manual. Para testar o runtime Cloudflare e o D1 emulado, use `npm run dev:mock:wrangler` (estado separado). Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
 
 | Login fictício | Perfil |
 | --- | --- |
 | `admin.mock` | Administrador |
+| `agendador.mock` | Agendador |
 | `gerente.mock` | Visualizador |
 | `conferente01.mock` | Conferente da F901 |
 | `conferente02.mock` | Conferente da F902 |
 | `conferente03.mock` | Conferente da F903 |
 
-A base inclui três lojas, agendas dos últimos seis dias e de hoje (data operacional de São Paulo), fornecedores recebidos, não recebidos, pendentes e sem agenda, históricos, auditoria e um aviso. O CSV `importacao-mock.csv` no diretório de estado permite testar a importação de amanhã nas três lojas. O perfil Agendador será incluído quando a issue #248 integrar esse papel à autenticação; não simular permissões no cliente.
+A base inclui três lojas, agendas dos últimos seis dias e de hoje (data operacional de São Paulo), fornecedores recebidos, não recebidos, pendentes e sem agenda, históricos, auditoria e um aviso. O CSV `importacao-mock.csv` no diretório de estado permite testar a importação de amanhã nas três lojas. O perfil Agendador é habilitado no modo Node SQLite. Entre como administrador e use Usuários → Novo usuário → Configurar perfil, lojas e permissões; em contas ativas existentes, use Editar → Configurar perfil e permissões. O backend valida as permissões e lojas; alterações invalidam a sessão anterior. A autorização personalizada permanece habilitada somente no ambiente local nesta etapa; a preview publicada e produção preservam o legado até a validação e a definição do rollback seguro. Contas personalizadas usam polling HTTP em vez de WebSocket.
 
 No Windows, o estado fica em `%LOCALAPPDATA%\AgendasPradoMock\<identificador-do-checkout>` (fora do OneDrive); nos demais sistemas, em `.wrangler/mock-state/` (ignorado pelo Git). O modo Node usa a subpasta `node` do diretório de estado; o modo Wrangler preserva seu estado anterior. O caminho exato aparece no terminal. O estado é separado do modo `npm run dev`. Se você usou a versão anterior dentro do OneDrive, o estado antigo não é apagado ou migrado automaticamente. Ambos os servidores são restritos ao loopback e usam WebSocket desligado (fallback HTTP). O modo Node executa o backend Hono real com adaptador SQLite, mas não emula Durable Objects, runtime Workerd ou tarefas cron. O modo Wrangler usa `--local` e o UUID sintético de `wrangler.local.jsonc`. Não usa D1 de preview ou produção, bootstrap remoto, R2 ou deploy.
 

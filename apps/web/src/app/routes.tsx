@@ -32,7 +32,7 @@ function Guard({ roles, path }: { roles: Role[]; path?:string }) {
   </main>;
   if (!session.data) return <Navigate to="/login" replace />;
   const permission=ACCESS_PAGES.find(([p])=>p===path)?.[1];
-  if(path!=="/sem-acesso" && (session.data.permissoes ? !permission||!session.data.permissoes.includes(permission) : !roles.includes(session.data.papel))) return <Navigate to={homeForUser(session.data)} replace />;
+  if(path!=="/sem-acesso" && (session.data.permissoes ? !permission||(!session.data.permissoes.includes(permission)&&!(path==="/admin/diagnostics"&&session.data.permissoes.includes("auditoria.ver"))) : !roles.includes(session.data.papel))) return <Navigate to={homeForUser(session.data)} replace />;
   return <Outlet context={session.data} />;
 }
 

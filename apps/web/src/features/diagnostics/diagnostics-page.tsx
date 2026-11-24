@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -74,11 +76,14 @@ function AuditRow({ item }: { item: AuditRecord }) {
 }
 
 export function DiagnosticsPage() {
-  const [tab, setTab] = useState<DiagnosticsTab>("errors");
+  const {data:user}=useSession();
+  const canDiagnose=canUse(user,"diagnosticos.ver",true);
+  const canAudit=canUse(user,"auditoria.ver",true);
+  const [tab, setTab] = useState<DiagnosticsTab>(canDiagnose?"errors":"audit");
   const [draft, setDraft] = useState<DiagnosticsFilters>(emptyDiagnosticsFilters);
   const [applied, setApplied] = useState<DiagnosticsFilters>(emptyDiagnosticsFilters);
-  const usersQuery = useQuery({ queryKey: usersKey, queryFn: listUsers });
-  const storesQuery = useQuery({ queryKey: storesKey, queryFn: listStores });
+  const usersQuery = useQuery({ queryKey: usersKey, queryFn: listUsers, enabled:canUse(user,"usuarios.ver",true) });
+  const storesQuery = useQuery({ queryKey: storesKey, queryFn: listStores, enabled:canUse(user,"lojas.ver",true) });
   const records = useQuery({
     queryKey: [...(tab === "audit" ? auditLogKey : diagnosticsKey), tab, applied],
     queryFn: async (): Promise<AuditRecord[] | DiagnosticRecord[]> =>
@@ -100,7 +105,7 @@ export function DiagnosticsPage() {
       description="Diagnostique falhas técnicas e consulte alterações realizadas no sistema."
       actions={<Button variant="secondary" onClick={reload}><RefreshCw size={14} />Atualizar</Button>} />
     <div role="tablist" aria-label="Categoria de registros" className="flex min-w-0 flex-wrap gap-2">
-      {tabs.map(entry => {
+      {tabs.filter(entry=>entry.id==="audit"?canAudit:canDiagnose).map(entry => {
         const active = tab === entry.id;
         return <Button key={entry.id} role="tab" aria-selected={active} variant={active ? "secondary" : "ghost"}
           onClick={() => setTab(entry.id)} className={active ? "border-sky-400" : ""}>{entry.label}</Button>;
