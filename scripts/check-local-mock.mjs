@@ -10,9 +10,10 @@ import { mockStatePath } from "./mock-state.mjs";
 
 const root=fileURLToPath(new URL("../",import.meta.url));
 const env={...process.env,WRANGLER_SEND_METRICS:"false"};
-const state=mockStatePath(root);
+const native=process.argv.includes("--node");
+const state=native?join(mockStatePath(root),"node"):mockStatePath(root);
 const base="http://127.0.0.1:8787";
-const logs=join(root,".tmp","local-mock-smoke.log");
+const logs=join(root,".tmp",native?"local-mock-node-smoke.log":"local-mock-smoke.log");
 mkdirSync(join(root,".tmp"),{recursive:true});
 // Credenciais efêmeras, produzidas pelo próprio smoke. Não transmitir dados lidos de arquivos.
 // A criação exclusiva garante que o teste nunca sobrescreva uma conta local existente.
@@ -20,7 +21,7 @@ mkdirSync(state,{recursive:true});
 const password=randomBytes(18).toString("base64url");
 writeFileSync(join(state,"credentials.json"),JSON.stringify({password,sessionSecret:randomBytes(48).toString("hex")}),{flag:"wx",mode:0o600});
 let output="";
-const child=spawn(process.execPath,[join(root,"scripts","dev-mock.mjs")],{cwd:root,env,stdio:["ignore","pipe","pipe"],windowsHide:true});
+const child=spawn(process.execPath,[join(root,"scripts",native?"dev-mock-node.mjs":"dev-mock.mjs")],{cwd:root,env,stdio:["ignore","pipe","pipe"],windowsHide:true});
 let exited=false;
 const done=new Promise((resolve,reject)=>{
   child.once("error",reject);

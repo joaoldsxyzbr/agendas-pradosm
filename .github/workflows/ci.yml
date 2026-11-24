@@ -116,6 +116,8 @@ jobs:
         run: npm.cmd ci --legacy-peer-deps
       - name: Build real no Windows
         run: npm.cmd run build
+      - name: Validar modo Node SQLite (sem Workerd)
+        run: node scripts/check-local-mock.mjs --node
       - name: Validar migrations, seed e login no D1 local
         run: node scripts/check-local-mock.mjs
       - name: Logs locais em caso de falha
@@ -123,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: diagnosticos-local-windows
-          path: .tmp/local-mock-smoke.log
+          path: .tmp/local-mock*-smoke.log
           if-no-files-found: ignore
           retention-days: 7
 

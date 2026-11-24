@@ -24,7 +24,7 @@ call npm.cmd ci --legacy-peer-deps
 if errorlevel 1 goto :erro
 
 echo.
-echo [2/2] Preparando o banco local e iniciando o servidor...
+echo [2/2] Preparando SQLite local e iniciando o servidor Node...
 echo A senha de teste aparecera nesta janela.
 echo Mantenha a janela aberta enquanto estiver usando o sistema.
 echo.
