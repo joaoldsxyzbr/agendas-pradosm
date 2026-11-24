@@ -1,3 +1,4 @@
+import { canUse } from "@/features/auth/session";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, RefreshCw, Store as StoreIcon } from "lucide-react";
@@ -126,7 +127,7 @@ export function ReceivingPage() {
   const loading = stores.isPending || agendas.isPending;
   const failure = stores.isError || agendas.isError;
   const updating = stores.isFetching || agendas.isFetching || presence.isFetching;
-  const readonly = session.data?.papel === "visualizador";
+  const readonly = !canUse(session.data,"recebimento.editar",session.data?.papel==="admin");
   const reload = () => void queryClient.invalidateQueries({ queryKey: ["receiving"] });
 
   return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-3" aria-label="Recebimento">
@@ -180,6 +181,6 @@ export function ReceivingPage() {
       {model.rows.length ? <ReceivingTable rows={model.rows} onDetails={setDetailId} presenceUnavailable={presence.isError} />
         : <p className="rounded-lg border border-[#38516d] bg-[#142338] p-6 text-sm text-slate-400">Nenhuma loja com conferente ativo.</p>}
     </>}
-    {detailId && <ConferenceAgendaDialog key={detailId} agendaId={detailId} canEdit={session.data?.papel === "admin"} onClose={() => setDetailId(null)} />}
+    {detailId && <ConferenceAgendaDialog key={detailId} agendaId={detailId} canEdit={canUse(session.data,"recebimento.editar",session.data?.papel==="admin")||canUse(session.data,"recebimento.manual.criar",false)||canUse(session.data,"recebimento.manual.editar",false)||canUse(session.data,"recebimento.manual.excluir",false)||canUse(session.data,"recebimento.reabrir",false)} onClose={() => setDetailId(null)} />}
   </section>;
 }

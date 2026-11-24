@@ -4,7 +4,7 @@ import { NavLink, Outlet, useNavigate } from "react-router";
 import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, PanelLeft, Settings2, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { logout, type SessionUser, type Role } from "@/features/auth/session";
+import { logout, ACCESS_PAGES, canUse, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosBell } from "@/features/avisos/avisos-bell";
 
 const menu = [
@@ -18,8 +18,9 @@ const menu = [
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
 ] as const;
 
-const labels: Record<Role, string> = {
+const labels: Record<Role | "agendador", string> = {
   admin: "Administrador",
+  agendador: "Agendador",
   visualizador: "Visualizador",
   conferente: "Conferente",
 };
@@ -64,7 +65,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       navigate("/login", { replace: true });
     },
   });
-  const items = menu.filter(item => (item.roles as readonly Role[]).includes(user.papel));
+  const items = menu.filter(item => user.permissoes ? user.permissoes.some(p=>ACCESS_PAGES.some(([path,permission])=>path===item.path&&permission===p)) : (item.roles as readonly Role[]).includes(user.papel));
   const toggleCollapsed = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -98,13 +99,17 @@ export function AppLayout({ user }: { user: SessionUser }) {
         </>}
       </div>
       <div className="flex-1">{renderNav(collapsed)}</div>
-      <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-[11px] text-slate-500", collapsed && "truncate text-center")}>{labels[user.papel]}</div>
+      <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-[11px] text-slate-500", collapsed && "truncate text-center")}>{labels[user.perfil??user.papel]}</div>
     </aside>
     <div className="flex w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
       <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[#2b415b] bg-[#142337] px-4">
         <span className="text-sm font-semibold text-slate-200 md:text-xs">Painel operacional</span>
         <div className="flex items-center gap-3">
-          <AvisosBell papel={user.papel} />
+          {canUse(user,"avisos.ver",true)&&<AvisosBell papel={user.papel} canPublish={canUse(user,"avisos.publicar",user.papel==="admin")} canMarkRead={canUse(user,"avisos.marcar_lido",true)} />}
+          {user.lojasDisponiveis && user.lojasDisponiveis.length>1 && canUse(user,"conferencia.ver",false) && <select aria-label="Loja de conferência" className="max-w-40 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white" value={user.lojaId??""}
+            onChange={event=>{sessionStorage.setItem("agenda-store",event.target.value);window.location.reload();}}>
+            {user.lojasDisponiveis.map(store=><option key={store.id} value={store.id}>{store.codigo} — {store.nome}</option>)}
+          </select>}
           <span className="max-w-40 truncate text-xs text-slate-400">{user.nome}</span>
           <Button variant="ghost" size="sm" disabled={signout.isPending} onClick={() => signout.mutate()}>
             <LogOut size={14} aria-hidden="true" /> Sair

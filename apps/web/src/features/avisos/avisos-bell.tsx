@@ -12,7 +12,7 @@ import { PublishAvisoDialog } from "./publish-aviso-dialog";
 // mais recente para o mais antigo — o aviso é registro permanente, o
 // histórico é a própria lista — e "Marcar todos" para o usuário.
 // Todos os papéis autenticados veem os avisos (spec 2026-11-11, decisão 3).
-export function AvisosBell({ papel }: { papel: Role }) {
+export function AvisosBell({ papel, canPublish, canMarkRead: _canMarkRead = true }: { papel: Role; canPublish?:boolean; canMarkRead?:boolean }) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -20,7 +20,7 @@ export function AvisosBell({ papel }: { papel: Role }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const isAdmin = papel === "admin";
+  const isAdmin = canPublish ?? papel === "admin";
   const avisos = useQuery({
     queryKey: ["avisos"],
     queryFn: () => getAvisos(),

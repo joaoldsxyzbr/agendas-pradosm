@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { Fragment, useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ClipboardList, RefreshCw, CheckCircle2 } from "lucide-react";
@@ -109,6 +111,8 @@ function StoreRow({ board, index, isSupplierPending, onToggle }: {
   isSupplierPending: (supplier: string) => boolean;
   onToggle: (agendaId: string, item: Supplier, checked: boolean) => void;
 }) {
+  const session=useSession();
+  const canEdit=canUse(session.data,"agendas.editar",true);
   const [expanded, setExpanded] = useState(false);
   const result = useQuery({
     queryKey: ["agenda-suppliers", board.id],
@@ -166,7 +170,7 @@ function StoreRow({ board, index, isSupplierPending, onToggle }: {
           </div>
           {suppliers.length
             ? <ul aria-label="Fornecedores desta loja" className="min-w-0 divide-y divide-[#304865] overflow-hidden rounded-lg border border-[#38516d]">{suppliers.map(item =>
-                <SupplierItem key={item.supplier} item={item} busy={isSupplierPending(item.supplier)}
+                <SupplierItem key={item.supplier} item={item} busy={!canEdit||isSupplierPending(item.supplier)}
                   onToggle={(supplier, checked) => onToggle(board.id, supplier, checked)}/>)}</ul>
             : <p className="text-xs text-slate-400">Nenhum fornecedor importado nesta agenda.</p>}
         </div>}

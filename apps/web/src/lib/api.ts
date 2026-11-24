@@ -11,7 +11,9 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Somente endpoints de mesma origem; cookies de sessao ficam sob controle do Worker.
   if (!path.startsWith("/api/")) throw new Error("Apenas endpoints internos sao permitidos.");
-  const response = await fetch(path, { ...init, credentials: "include" });
+  const headers=new Headers(init.headers);
+  if(typeof window!=="undefined"){const selected=window.sessionStorage.getItem("agenda-store");if(selected)headers.set("X-Agenda-Store",selected);}
+  const response = await fetch(path, { ...init, headers, credentials: "include" });
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     const error = z.object({ error: z.string().optional(), message: z.string().optional() }).safeParse(body);

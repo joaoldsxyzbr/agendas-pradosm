@@ -10,7 +10,7 @@ export async function sessionIdentity(env:Env,user:UserRow,requestedStore?:strin
   if(!access?.customized){
     const store=user.papel==="conferente"&&user.loja_id?await findActiveStoreById(env.DB,user.loja_id):null;
     if(user.papel==="conferente"&&!store)return null;
-    return {user:{id:user.id,nome:user.nome,papel:user.papel,lojaId:user.loja_id,lojaCodigo:store?.codigo??null,lojaNome:store?.nome??null},access};
+    return {user:{id:user.id,nome:user.nome,papel:user.papel,lojaId:user.loja_id,lojaCodigo:store?.codigo??null,lojaNome:store?.nome??null,...(env.ACCESS_MODE==="on"&&user.papel==="admin"?{acessoConfiguravel:true}:{})},access};
   }
   const result=await env.DB.prepare("SELECT id,codigo,nome FROM lojas WHERE ativo=1 AND excluido_em IS NULL ORDER BY codigo").all<{id:string;codigo:string;nome:string}>();
   const stores=(result.results??[]).filter(store=>canAccessStore(access.scope,store.id));

@@ -8,6 +8,7 @@ export interface AuthUser {
   lojaId: string | null;
   lojaCodigo: string | null;
   lojaNome: string | null;
+  acessoConfiguravel?: boolean;
   perfil?: AccessProfile;
   permissoes?: Permission[];
   escopo?: StoreScope;

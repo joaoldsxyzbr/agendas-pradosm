@@ -4,7 +4,7 @@ import { Navigate, useNavigate } from "react-router";
 import { LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import { homeForRole, login, isLocalMockOrigin, loadQuickAccounts, quickLogin } from "./session";
+import { homeForUser, login, isLocalMockOrigin, loadQuickAccounts, quickLogin } from "./session";
 import { useSession } from "@/app/session-query";
 
 export function LoginPage() {
@@ -27,7 +27,7 @@ export function LoginPage() {
       // abriria com lidos e eventos de outra sessão (bug de 12/11/2026).
       client.clear();
       client.setQueryData(["session"], person);
-      navigate(homeForRole(person.papel), { replace: true });
+      navigate(homeForUser(person), { replace: true });
     },
     onError: (error) => {
       setErrorMessage(error instanceof ApiError ? error.message : "Não foi possível entrar. Tente novamente.");
@@ -38,7 +38,7 @@ export function LoginPage() {
     <p role="alert">Não foi possível verificar a sessão.</p>
     <Button onClick={() => void refetch()}>Tentar novamente</Button>
   </main>;
-  if (user) return <Navigate to={homeForRole(user.papel)} replace />;
+  if (user) return <Navigate to={homeForUser(user)} replace />;
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage("");
