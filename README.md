@@ -52,7 +52,11 @@ Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/READM
 
 ## Desenvolvimento local com dados fictícios (mock)
 
-Para testar a aplicação completa (React, Worker, autenticação e D1 local), sem conta Cloudflare e sem dados reais, use Node.js 22.18+ e, na raiz do projeto:
+Para testar a aplicação completa (React, Worker, autenticação e D1 local), sem conta Cloudflare e sem dados reais, use Node.js 22.18+ (recomendado: 22 LTS).
+
+**Windows:** dê dois cliques em `iniciar-preview.bat` na raiz do repositório. Ele instala as dependências, prepara o D1 local, inicia o servidor e abre o navegador após o health check. Mantenha a janela aberta; a senha inicial aparece nela. Pressione Ctrl+C para parar.
+
+Em outros sistemas, ou para iniciar manualmente, execute na raiz:
 
 ```bash
 npm ci --legacy-peer-deps
