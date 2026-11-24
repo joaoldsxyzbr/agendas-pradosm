@@ -50,6 +50,35 @@ As branches `main` (produção) e `preview` (homologação) utilizam a interface
 
 Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/README.md) e [Publicação segura](docs/operations/production-release.md). Ambas as branches usam React; cada ambiente mantém suas próprias configurações e recursos Cloudflare.
 
+## Desenvolvimento local com dados fictícios (mock)
+
+Para testar a aplicação completa (React, Worker, autenticação e D1 local), sem conta Cloudflare e sem dados reais, use Node.js 22.18+ (o CI mantém Node 22 e testa também o modo local em Windows com Node 26).
+
+**Windows:** dê dois cliques em `iniciar-preview.bat` na raiz do repositório. Ele instala as dependências, prepara o D1 local, inicia o servidor e abre o navegador após o health check. Mantenha a janela aberta; a senha inicial aparece nela. Pressione Ctrl+C para parar.
+
+Em outros sistemas, ou para iniciar manualmente, execute na raiz:
+
+```bash
+npm ci --legacy-peer-deps
+npm run dev:mock
+```
+
+Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations no D1 local e popula dados sintéticos. Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
+
+| Login fictício | Perfil |
+| --- | --- |
+| `admin.mock` | Administrador |
+| `gerente.mock` | Visualizador |
+| `conferente01.mock` | Conferente da F901 |
+| `conferente02.mock` | Conferente da F902 |
+| `conferente03.mock` | Conferente da F903 |
+
+A base inclui três lojas, agendas dos últimos seis dias e de hoje (data operacional de São Paulo), fornecedores recebidos, não recebidos, pendentes e sem agenda, históricos, auditoria e um aviso. O CSV `importacao-mock.csv` no diretório de estado permite testar a importação de amanhã nas três lojas. O perfil Agendador será incluído quando a issue #248 integrar esse papel à autenticação; não simular permissões no cliente.
+
+No Windows, o estado fica em `%LOCALAPPDATA%\AgendasPradoMock\<identificador-do-checkout>` (fora do OneDrive); nos demais sistemas, em `.wrangler/mock-state/` (ignorado pelo Git). O caminho exato aparece no terminal. O estado é separado do modo `npm run dev`. Se você usou a versão anterior dentro do OneDrive, o estado antigo não é apagado ou migrado automaticamente. O servidor é restrito ao loopback e usa `--local`, o UUID sintético de `wrangler.local.jsonc` e WebSocket desligado (fallback HTTP). Não usa D1 de preview ou produção, bootstrap remoto, R2 ou deploy.
+
+Reexecutar `npm run dev:mock` preserva alterações em registros existentes; cria apenas os fixtures ausentes e novas datas. Senha inicial e segredo ficam em `credentials.json` no diretório de estado, exclusivamente local. Se alterar uma senha na interface, o seed não a redefine. Para apenas preparar/atualizar o banco e o CSV, com o servidor parado, use `npm run mock:seed`. Para iniciar um ambiente totalmente novo, pare o servidor e **renomeie** o diretório de estado informado no terminal para um backup local antes de executar o comando novamente.
+
 ## Desenvolvimento local
 
 Pré-requisitos:
