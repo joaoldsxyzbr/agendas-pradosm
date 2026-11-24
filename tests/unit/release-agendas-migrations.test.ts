@@ -31,7 +31,7 @@ describe("Release candidata: migrations sobre schema de produção", () => {
       assert.ok(agenda.includes("digitado_em") && agenda.includes("digitado_por"));
       assert.ok(agenda.includes("versao_importacao"), "Versão de importação ausente");
       assert.deepEqual(names("sessoes_revogadas"), ["session_key", "expira_em"]);
-      assert.deepEqual(names("usuario_acesso"), ["usuario_id", "perfil", "escopo"]);
+      assert.deepEqual(names("usuario_acesso"), ["usuario_id", "perfil", "escopo", "ativo"]);
       assert.deepEqual(names("usuario_acesso_lojas"), ["usuario_id", "escopo", "loja_id"]);
       assert.deepEqual(names("usuario_acesso_excecoes"), ["usuario_id", "permissao", "efeito"]);
       assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'agendas'").get().sql, /ck_agenda_versao_importacao/);

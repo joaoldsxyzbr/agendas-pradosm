@@ -35,8 +35,8 @@ function storeFilter({ start, end, storeCodes },storeIds?:readonly string[]) {
   const where=["a.data_agenda BETWEEN ? AND ?"];
   if(codes.length===1)where.push("AND l.codigo = ? COLLATE NOCASE");
   else if(codes.length>1)where.push("AND l.codigo COLLATE NOCASE IN ("+codes.map(()=>"?").join(",")+")");
-  if(storeIds!==undefined)where.push(storeIds.length?"AND a.loja_id IN ("+storeIds.map(()=>"?").join(",")+")":"AND 1=0");
-  return {where:where.join(" "),args:[start,end,...codes,...(storeIds??[])],codes};
+  if(storeIds!==undefined)where.push("AND a.loja_id IN (SELECT value FROM json_each(?))");
+  return {where:where.join(" "),args:[start,end,...codes,...(storeIds===undefined?[]:[JSON.stringify(storeIds)])],codes};
 }
 adminReportRoutes.get("/", async (c) => {
   const parsed = parseFilters(c.req);

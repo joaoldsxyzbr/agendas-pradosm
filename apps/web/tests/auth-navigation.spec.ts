@@ -150,3 +150,15 @@ test("React: sidebar colapsa e persiste o estado entre recarregamentos", async (
   await expect(page.getByRole("button", { name: "Recolher navegação" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Recebimento" })).toBeVisible();
 });
+
+
+test("React: agendador personalizado recebe menu autorizado e bloqueio de rota direta", async ({ page }) => {
+  await sessionMocks(page,{...viewer,perfil:"agendador",permissoes:["recebimento.ver","recebimento.editar","agendas.ver","agendas.historico","importacao.ver","relatorios.ver"]});
+  await page.goto("/admin/users");
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Histórico",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Importação",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Usuários",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"Lojas",exact:true})).toHaveCount(0);
+});

@@ -1,7 +1,7 @@
 // Servidor exclusivamente local usando as rotas Hono reais e SQLite nativo do Node.
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,9 +95,14 @@ else{
     const data=html?asset.data.toString("utf8").replace("</head>",'<meta name="agenda-local-token" content="'+quickToken+'"></head>'):asset.data;
     return new Response(data,{headers:{"Content-Type":asset.type,...(html?{"Cache-Control":"no-store"}:{}),"X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:"}});
   }
+  // Validação de autoridade HTTP contra o valor fixo do listener: protege contra DNS rebinding.
+  const expectedAuthority=createHash("sha256").update(new URL(base).host).digest();
+  function hasLocalAuthority(host){
+    return timingSafeEqual(createHash("sha256").update(typeof host==="string"?host:"").digest(),expectedAuthority);
+  }
   const server=createServer(async(req,res)=>{
     try{
-      if(req.headers.host!=="127.0.0.1:8787"){res.writeHead(403).end();return;}
+      if(!hasLocalAuthority(req.headers.host)){res.writeHead(403).end();return;}
       if(!req.url?.startsWith("/")||req.url.startsWith("//")){res.writeHead(400).end();return;}
       const url=new URL(base+req.url);
       const headers=new Headers();

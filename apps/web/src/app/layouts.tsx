@@ -11,6 +11,7 @@ const menu = [
   { path: "/admin", label: "Recebimento", icon: ClipboardCheck, roles: ["admin", "visualizador"] },
   { path: "/admin/reports", label: "Relatório Gerencial", icon: FileBarChart, roles: ["admin", "visualizador"] },
   { path: "/admin/agendas", label: "Agendas", icon: ClipboardList, roles: ["admin"] },
+  { path: "/admin/history", label: "Histórico", icon: ClipboardList, roles: [] },
   { path: "/admin/import", label: "Importação", icon: FileUp, roles: ["admin"] },
   { path: "/admin/stores", label: "Lojas", icon: Store, roles: ["admin"] },
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },

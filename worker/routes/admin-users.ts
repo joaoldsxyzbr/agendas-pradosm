@@ -2,7 +2,7 @@ import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import { ACCESS_PROFILES, PERMISSIONS } from "../../shared/permissions.ts";
-import { accessJson, findEffectiveAccess, saveAccessConfiguration, validChange, type AccessChange } from "../repositories/access.ts";
+import { accessJson, findEffectiveAccess, listUsersWithAccess, saveAccessConfiguration, validChange, type AccessChange } from "../repositories/access.ts";
 import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findStoreById } from "../repositories/stores.ts";
@@ -67,9 +67,9 @@ async function validateStoreForRole(db, papel, lojaId) {
   return { ok: true, lojaId };
 }
 adminUserRoutes.get("/", async (c) => {
-  const users = await listUsers(c.env.DB);
-  if(c.env.ACCESS_MODE!=="on")return c.json(users.map(userJson));
-  return c.json(await Promise.all(users.map(async user=>{const access=await findEffectiveAccess(c.env.DB,user.id,true);return {...userJson(user),...(access?{perfil:access.profile,acessoPersonalizado:access.customized,ativo:access.active,escopo:access.scope}:{} )};})));
+  if(c.env.ACCESS_MODE!=="on")return c.json((await listUsers(c.env.DB)).map(userJson));
+  const rows=await listUsersWithAccess(c.env.DB);
+  return c.json(rows.map(({user,access})=>({...userJson(user),...(access?{perfil:access.profile,acessoPersonalizado:access.customized,ativo:access.active,escopo:access.scope}:{ativo:false})})));
 });
 adminUserRoutes.post("/", async (c) => {
   const body=await c.req.json().catch(()=>null);

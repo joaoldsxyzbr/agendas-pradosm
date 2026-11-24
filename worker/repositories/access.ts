@@ -1,4 +1,4 @@
-// Resolução única de acesso. Preparatória: não habilita contas personalizadas nas rotas.
+// Resolução única de acesso, compartilhada pelas rotas e pela sessão.
 import { isAccessProfile, resolvePermissions, type AccessProfile, type Permission, type PermissionOverride, type StoreScope } from "../../shared/permissions.ts";
 import { auditStatement } from "./audit.ts";
 
@@ -47,17 +47,24 @@ export function decodeAccess(row: {
 
 // Uma leitura consistente: configurações, vínculos e exceções no mesmo snapshot SQL.
 // Não concede privilégios caso a conta esteja inativa ou removida.
-export async function findEffectiveAccess(db: D1Database,userId:string,includeInactive=false):Promise<EffectiveAccess|null>{
-  const row=await db.prepare(`
-    SELECT u.papel,u.loja_id,u.session_version,a.perfil,a.escopo,CASE WHEN a.usuario_id IS NULL THEN u.ativo ELSE a.ativo END AS ativo_efetivo,
+const ACCESS_SELECT=`
+    SELECT u.id,u.nome,u.login,u.ativo,u.papel,u.loja_id,u.session_version,a.perfil,a.escopo,CASE WHEN a.usuario_id IS NULL THEN u.ativo ELSE a.ativo END AS ativo_efetivo,
       COALESCE((SELECT json_group_array(x.loja_id) FROM
         (SELECT loja_id FROM usuario_acesso_lojas WHERE usuario_id=u.id ORDER BY loja_id) x),'[]') AS lojas,
       COALESCE((SELECT json_group_array(json_object('permission',x.permissao,'effect',x.efeito)) FROM
         (SELECT permissao,efeito FROM usuario_acesso_excecoes WHERE usuario_id=u.id ORDER BY permissao) x),'[]') AS excecoes
-    FROM usuarios u LEFT JOIN usuario_acesso a ON a.usuario_id=u.id
+    FROM usuarios u LEFT JOIN usuario_acesso a ON a.usuario_id=u.id`;
+export async function findEffectiveAccess(db: D1Database,userId:string,includeInactive=false):Promise<EffectiveAccess|null>{
+  const row=await db.prepare(ACCESS_SELECT+`
     WHERE u.id=? AND u.excluido_em IS NULL AND (?=1 OR CASE WHEN a.usuario_id IS NULL THEN u.ativo ELSE a.ativo END=1)
   `).bind(userId,includeInactive?1:0).first<Parameters<typeof decodeAccess>[0]>();
   return row?decodeAccess(row):null;
+}
+
+// Evita uma consulta D1 adicional por usuário e mantém a listagem sem hashes de senha.
+export async function listUsersWithAccess(db:D1Database){
+  const rows=await db.prepare(ACCESS_SELECT+" WHERE u.excluido_em IS NULL ORDER BY u.nome COLLATE NOCASE,u.id").all<Parameters<typeof decodeAccess>[0]&{id:string;nome:string;login:string;ativo:number}>();
+  return rows.results.map(row=>({user:row,access:decodeAccess(row)}));
 }
 
 export interface AccessChange {
@@ -77,8 +84,7 @@ export function validChange(input:AccessChange):boolean {
     new Set(scope.storeIds).size===scope.storeIds.length&&scope.storeIds.every(id=>typeof id==="string"&&id.length>0&&id===id.trim());
 }
 
-// Escrita transacional preparatória; NÃO expor por HTTP antes dos guards de rota,
-// filtros de loja e da estratégia de revogação/rollback estarem completos.
+// Escrita transacional: os guards, filtros de loja e o rollback seguro são obrigatórios.
 // A conta delegadora precisa ser um administrador integral sem customização.
 export async function saveAccessConfiguration(db:D1Database, actor:{id:string;sessionVersion:number},
   targetId:string,expectedVersion:number,input:AccessChange):Promise<EffectiveAccess>{
