@@ -162,3 +162,18 @@ test("React: agendador personalizado recebe menu autorizado e bloqueio de rota d
   await expect(page.getByRole("link",{name:"Usuários",exact:true})).toHaveCount(0);
   await expect(page.getByRole("link",{name:"Lojas",exact:true})).toHaveCount(0);
 });
+
+
+test("React: administrador configura perfil, escopo e exceções no cadastro",async({page})=>{
+  await sessionMocks(page,{...admin,acessoConfiguravel:true});
+  await page.goto("/admin/users");
+  await page.getByRole("button",{name:"Novo usuário"}).click();
+  await page.getByLabel("Configurar perfil, lojas e permissões").check();
+  await expect(page.getByLabel("Perfil base")).toHaveValue("agendador");
+  await page.getByLabel("Recebimento — Editar",{exact:true}).selectOption("deny");
+  await expect(page.getByLabel("Recebimento — Editar",{exact:true})).toHaveValue("deny");
+  await page.getByRole("button",{name:"Restaurar permissões do perfil"}).click();
+  await expect(page.getByLabel("Recebimento — Editar",{exact:true})).toHaveValue("inherit");
+  await page.getByLabel("Escopo de lojas").selectOption("assigned");
+  await expect(page.getByRole("button",{name:"Cadastrar usuário",exact:true})).toBeDisabled();
+});

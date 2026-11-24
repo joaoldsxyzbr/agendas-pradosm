@@ -5,15 +5,25 @@ import { canAccessStore } from "../../shared/permissions.ts";
 import { ImportAgendaInput, ImportAgendaBatchInput } from "../../shared/agenda.ts";
 import { publicarAvisoSchema } from "../../shared/avisos.ts";
 import { findStoreByCode } from "../repositories/agendas.ts";
+import { recordAudit } from "../repositories/audit.ts";
 
 export const enforceAccess=createMiddleware<AppEnv>(async(c,next)=>{
   const access=c.get("effectiveAccess");
   if(!access?.customized){await next();return;}
   const user=c.get("authUser");
-  const deny=()=>c.json({error:"ACESSO_NEGADO",message:"Operação ou loja não permitida."},403);
-  if(!user)return deny();
   const path=c.req.path,method=c.req.method;
   const policy=routePolicy(method,path);
+  const deny=async()=>{
+    // Somente operações sensíveis ou tentativas de acessar entidades por ID.
+    // Não registrar URLs, conteúdo de pedidos, senhas, tokens ou cabeçalhos.
+    if(user&&policy&&(method!=="GET"||["agenda-id","appointment-id","store-id"].includes(policy.scope))){
+      try{await recordAudit(c.env.DB,{userId:user.id,action:"acesso_negado",entity:"usuario",entityId:user.id,
+        details:"Operação negada pela política de autorização.",after:{method,required:policy.any,scope:policy.scope}});}
+      catch{console.error("Não foi possível registrar tentativa de acesso negado.");}
+    }
+    return c.json({error:"ACESSO_NEGADO",message:"Operação ou loja não permitida."},403);
+  };
+  if(!user)return deny();
   if(!permitsAction(policy,access.permissions)||!policy)return deny();
   // Configuração de usuários é reservada ao administrador integral. Permissão
   // de edição de cadastro não pode ser usada como delegação ou autoelevação.

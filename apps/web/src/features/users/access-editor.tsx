@@ -41,6 +41,7 @@ export function AccessEditor({value,onChange,stores,disabled=false}:{value:Acces
       </label>)}
     </div>}
     <p className="text-xs text-slate-400">Herdar usa o padrão do perfil. Permitir e negar substituem esse padrão. Apenas o administrador integral pode cadastrar, editar ou excluir usuários e delegar direitos. A exportação é uma permissão de interface; dados visíveis podem ser copiados.</p>
+    <Button variant="secondary" size="sm" disabled={value.overrides.length===0} onClick={()=>onChange({...value,overrides:[]})}>Restaurar permissões do perfil</Button>
     <div className="max-h-80 overflow-auto space-y-3">
       {Object.entries(groups).map(([group,label])=><section key={group} className="rounded border border-slate-700 p-2">
         <h4 className="mb-2 text-xs font-bold text-sky-200">{label}</h4>

@@ -89,6 +89,8 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     assert.equal((await request("/api/admin/users/"+admin.user.id+"/access","PUT",admin.cookie,{version:1,access:edit})).status,409);
     const audit=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='usuario_acesso_atualizado' AND usuario_id=? AND entidade_id=?").bind(admin.user.id,schedulerId).first();
     assert.equal(audit.n,1);
+    const denied=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='acesso_negado' AND usuario_id=?").bind(schedulerId).first();
+    assert.ok(denied.n>0);
     const disabled=await request("/api/admin/users","PATCH",admin.cookie,{id:multi.user.id,ativo:false});
     assert.equal(disabled.status,200,await disabled.clone().text());
     assert.equal((await disabled.json()).ativo,false);
