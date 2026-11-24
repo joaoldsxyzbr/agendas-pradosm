@@ -60,3 +60,17 @@ Rollback de código antigo não pode devolver direitos revogados ou escopo
 global a contas personalizadas. Definir procedimento de suspensão/revogação
 dessas contas e compatibilidade antes da ativação; não basta republicar uma
 versão anterior.
+
+### Persistência aditiva preparada (0026)
+
+A migration cria três tabelas, sem backfill nem modificação de usuários existentes:
+`usuario_acesso` (perfil efetivo e escopo explícito),
+`usuario_acesso_lojas` (vínculos; FK composta impede vínculos em escopo todas)
+e `usuario_acesso_excecoes` (concessões/negações únicas por permissão).
+A ausência de configuração permanece equivalente ao legado até a integração.
+Uma configuração vinculada sem lojas deve negar todo acesso por loja.
+O catálogo valida identificadores de permissão; a tabela não concede acesso
+por si só. Mudanças futuras precisam de transação atômica com CAS de
+session_version e auditoria. O teste aplica o SQL após as 25 migrations
+anteriores, com dados sintéticos já existentes, e verifica preservação e FKs.
+Nenhuma conta com o novo perfil deve ser provisionada antes da integração.
