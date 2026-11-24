@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Clock3, RefreshCw, Users, XCircle } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, RefreshCw, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/operations/page-header";
 import { Loading } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
@@ -45,26 +45,89 @@ function DeltaTag({ delta: value }: { delta: Delta }) {
   </p>;
 }
 
-const kpiDefs = [
-  { key: "total", label: "Agendamentos", icon: CalendarDays, tone: "text-sky-300", kind: "neutral", description: "agendas" },
-  { key: "recebido", label: "Recebidos", icon: CheckCircle2, tone: "text-emerald-300", kind: "good", description: "rate" },
-  { key: "naoChegou", label: "Não recebidos", icon: XCircle, tone: "text-rose-300", kind: "invert", description: "Registrados na conferência" },
-  { key: "naoCompareceu", label: "Não compareceu", icon: Users, tone: "text-amber-300", kind: "invert", description: "Classificados no fechamento" },
-  { key: "aguardando", label: "Aguardando", icon: Clock3, tone: "text-violet-300", kind: "neutral", description: "Pendentes em agendas abertas" },
-  { key: "recusado", label: "Recusados", icon: XCircle, tone: "text-orange-300", kind: "invert", description: "Status de recusa registrado" },
-  { key: "semAgenda", label: "Sem agenda", icon: CalendarDays, tone: "text-amber-300", kind: "neutral", description: "manual" },
-] as const;
+function Kpis({ sum, prior, onOccurrences }: { sum: Totals; prior: Totals | null; onOccurrences: (type: OccurrenceType) => void }) {
+  const problems = sum.naoChegou + sum.naoCompareceu + sum.recusado;
+  const priorProblems = prior ? prior.naoChegou + prior.naoCompareceu + prior.recusado : null;
+  const card = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-3.5";
+  const title = "flex items-center gap-1.5 text-xs font-medium text-slate-300";
+  const value = "mt-2 block text-3xl font-bold leading-none tabular-nums text-white";
+  const line = "flex items-center justify-between gap-2 text-[11px] text-slate-300";
+  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores gerenciais">
+    <section className={card}>
+      <h3 className={title}><CalendarDays size={15} className="text-sky-300" aria-hidden="true" />Registros no período<HelpTip title="Registros no período" /></h3>
+      <strong className={value}>{numberBR(sum.total)}</strong>
+      <p className="mt-1.5 text-[11px] text-slate-400">{numberBR(sum.agendas)} agendas · {numberBR(sum.abertas)} abertas</p>
+      <div className="mt-3 space-y-1.5 border-t border-[#314b66] pt-2">
+        <p className={line}>Com agendamento <strong className="tabular-nums">{numberBR(sum.total - sum.semAgenda)}</strong></p>
+        <p className={line}>Aguardando <strong className="tabular-nums text-violet-300">{numberBR(sum.aguardando)}</strong></p>
+      </div>
+      {prior && <DeltaTag delta={delta(sum.total, prior.total)} />}
+    </section>
+    <section className={card}>
+      <h3 className={title}><CheckCircle2 size={15} className="text-emerald-300" aria-hidden="true" />Recebidos<HelpTip title="Recebidos" /></h3>
+      <strong className={value}>{numberBR(sum.recebido)}</strong>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-300">
+        <span>Taxa de recebimento<HelpTip title="Taxa de recebimento" /></span><strong className="text-sm tabular-nums text-emerald-300">{sum.total ? percentBR(rate(sum)) : "—"}</strong>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#2d4764]"><div className="h-full rounded-full bg-emerald-400" style={{width: clampPercent(rate(sum)) + "%"}} /></div>
+      {prior && sum.total > 0 && prior.total > 0 ? <p className="mt-2 text-[11px] text-slate-400">{(rate(sum)-rate(prior)>0?"+":"")+(rate(sum)-rate(prior)).toLocaleString("pt-BR",{maximumFractionDigits:1})} p.p. vs. período anterior</p> : <p className="mt-2 text-[11px] text-slate-500">Sem comparação disponível</p>}
+    </section>
+    <section className={card}>
+      <h3 className={title}><XCircle size={15} className="text-rose-300" aria-hidden="true" />Ocorrências<HelpTip title="Ocorrências" /></h3>
+      <strong className={value}>{numberBR(problems)}</strong>
+      <div className="mt-2 space-y-0.5">
+        {([{ key:"nao_recebido",label:"Não recebidos",count:sum.naoChegou,tone:"text-rose-300" },{key:"nao_compareceu",label:"Não compareceu",count:sum.naoCompareceu,tone:"text-amber-300"},{key:"recusado",label:"Recusados",count:sum.recusado,tone:"text-orange-300"}] as const).map(item=>
+          <button key={item.key} type="button" onClick={()=>onOccurrences(item.key)} className={line+" w-full rounded px-1 py-1 text-left hover:bg-slate-700/40 focus-visible:outline-2 focus-visible:outline-sky-400"} title={"Detalhar "+item.label.toLowerCase()}>
+            <span>{item.label}</span><strong className={item.tone+" tabular-nums"}>{numberBR(item.count)}</strong>
+          </button>)}
+      </div>
+      {prior && <DeltaTag delta={delta(problems,priorProblems,"invert")} />}
+    </section>
+    <section className={card}>
+      <h3 className={title}><CalendarDays size={15} className="text-amber-300" aria-hidden="true" />Sem agenda<HelpTip title="Sem agenda" /></h3>
+      <strong className={value}>{numberBR(sum.semAgenda)}</strong>
+      <p className="mt-1.5 text-[11px] text-slate-400">{sum.total ? percentBR(sum.semAgenda / sum.total * 100) : "—"} dos registros</p>
+      <div className="mt-3 space-y-1.5 border-t border-[#314b66] pt-2">
+        <p className={line}>Recebidos <strong className="tabular-nums text-emerald-300">{numberBR(sum.semAgendaRecebidos)}</strong></p>
+        <p className={line}>Demais situações <strong className="tabular-nums">{numberBR(sum.semAgenda - sum.semAgendaRecebidos)}</strong></p>
+      </div>
+      {prior && <DeltaTag delta={delta(sum.semAgenda,prior.semAgenda)} />}
+    </section>
+  </div>;
+}
 
-function Kpis({ sum, prior }: { sum: Totals; prior: Totals | null }) {
-  return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7" aria-label="Indicadores gerenciais">
-    {kpiDefs.map(({ key, label, icon: Icon, tone, kind, description }) => <div key={key} className="min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4 shadow-lg">
-      <div className="flex items-center gap-1.5 text-[11px] text-slate-300"><Icon size={15} className={tone} aria-hidden="true" />{label}<HelpTip title={label} /></div>
-      <strong className="mt-2 block text-2xl font-bold tabular-nums text-white md:text-3xl">{numberBR(sum[key])}</strong>
-      {prior && <DeltaTag delta={delta(sum[key], prior[key], kind)} />}
-      <small className="mt-1 block text-[11px] text-slate-400">
-        {description === "agendas" ? numberBR(sum.agendas) + " agendas" : description === "rate" ? percentBR(rate(sum)) + " do total" : description === "manual" ? numberBR(sum.semAgendaRecebidos) + " recebidos · registros manuais" : description}
-      </small>
-    </div>)}
+// Evolução diária com o mesmo denominador e classificações do consolidado.
+// Datas sem registros aparecem como lacunas, não como taxa de 0%.
+function DailyTrend({ days, start, end }: { days: Grouped[]; start: string; end: string }) {
+  if (!days.some(day=>day.total>0)) return <Empty text="Nenhum registro para apresentar a evolução diária." />;
+  const byDate = new Map(days.map(day=>[day.key,day]));
+  const dateKeys: string[]=[];
+  for(let time=Date.parse(start+"T12:00:00Z"),last=Date.parse(end+"T12:00:00Z");time<=last&&dateKeys.length<93;time+=86400000)dateKeys.push(new Date(time).toISOString().slice(0,10));
+  const peak=Math.max(1,...days.map(day=>day.total));
+  const step=Math.max(1,Math.ceil(peak/3));
+  const max=step*3;
+  return <div>
+    <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-300">{STATUS.map(status=><span key={status.key} className="flex items-center gap-1.5"><i className="size-2 rounded-sm" style={{background:status.color}}/>{status.label}</span>)}</div>
+    <div className="flex gap-2">
+      <div className="flex h-36 shrink-0 flex-col justify-between py-0.5 text-right text-[10px] tabular-nums text-slate-400" aria-hidden="true">{[max,step*2,step,0].map(n=><span key={n}>{numberBR(n)}</span>)}</div>
+      <div className="min-w-0 flex-1 overflow-x-auto pb-1" aria-label="Evolução diária por situação">
+        <div className="relative flex gap-1.5" style={{minWidth:Math.max(0,dateKeys.length*27)+"px"}}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex h-36 flex-col justify-between" aria-hidden="true">{[0,1,2,3].map(n=><div key={n} className="border-t border-slate-700/70"/>)}</div>
+          {dateKeys.map(date=>{
+            const day=byDate.get(date);
+            const description=formatDay(date)+(day&&day.total>0?": "+numberBR(day.total)+" registros, "+STATUS.map(status=>status.label+" "+numberBR(day[status.key])).join(", "):": sem registros");
+            return <div key={date} className="relative flex min-w-0 flex-1 flex-col items-center gap-1" title={description}>
+              <div className="flex h-36 w-full items-end justify-center">
+                {day&&day.total>0&&<div tabIndex={0} role="img" aria-label={description} className="flex w-full max-w-7 flex-col-reverse overflow-hidden rounded-t-sm focus-visible:outline-2 focus-visible:outline-sky-300" style={{height:(day.total/max*100)+"%"}}>
+                  {STATUS.filter(status=>day[status.key]>0).map(status=><div key={status.key} style={{height:(day[status.key]/day.total*100)+"%",background:status.color}}/>)}
+                </div>}
+              </div><span className="whitespace-nowrap text-[9px] tabular-nums text-slate-400">{shortDate(date)}</span>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+    <p className="mt-1 text-[10px] text-slate-400">Volume por data da agenda · dias sem registros ficam em branco.</p>
   </div>;
 }
 
@@ -80,13 +143,13 @@ function Donut({ sum }: { sum: Totals }) {
   }).join(", ");
   return <div className="flex flex-wrap items-center gap-5">
     <div className="relative size-32 shrink-0 rounded-full" style={{ background: "conic-gradient(" + stops + ")" }}
-      role="img" aria-label={"Distribuição dos " + numberBR(sum.total) + " agendamentos por situação."}>
+      role="img" aria-label={"Distribuição dos " + numberBR(sum.total) + " registros por situação."}>
       <div data-testid="donut-center" className="absolute inset-[20%] flex flex-col items-center justify-center rounded-full bg-[#142338]">
         <strong className="text-xl font-bold leading-none tabular-nums text-white">{numberBR(sum.total)}</strong>
-        <small data-testid="donut-center-label" className="mt-0.5 whitespace-nowrap text-[9px] leading-none text-slate-400">agendamentos</small>
+        <small data-testid="donut-center-label" className="mt-0.5 whitespace-nowrap text-[9px] leading-none text-slate-400">registros</small>
       </div>
     </div>
-    <ul className="min-w-0 flex-1 space-y-1.5">{shown.map(status => <li key={status.key} className="flex items-center justify-between gap-2 text-xs">
+    <ul className="min-w-0 flex-1 space-y-1.5">{STATUS.map(status => <li key={status.key} className="flex items-center justify-between gap-2 text-xs">
       <span className="flex min-w-0 items-center gap-2 text-slate-300"><i className="size-2 shrink-0 rounded-sm" style={{ background: status.color }} />{status.label}</span>
       <strong className="shrink-0 text-slate-100">{numberBR(sum[status.key])} <span className="font-normal text-slate-400">({percentBR(sum[status.key] / sum.total * 100)})</span></strong>
     </li>)}</ul>
@@ -106,10 +169,11 @@ function Meter({ title, strong, width, footnote, tone = "#3f9cff" }: { title: st
 
 function StoreTop({ stores, onOpenAll }: { stores: Grouped[]; onOpenAll: () => void }) {
   const ranking = stores.filter(store => store.total > 0)
-    .sort((a, b) => rate(b) - rate(a) || a.key.localeCompare(b.key, "pt-BR", { numeric: true }))
+    .sort((a, b) => rate(a) - rate(b) || a.key.localeCompare(b.key, "pt-BR", { numeric: true }))
     .slice(0, 5);
   if (!ranking.length) return <Empty text="Sem resultados por loja no período." />;
-  return <div className="space-y-4">
+  return <div className="space-y-3">
+    <p className="text-[11px] text-slate-400">Menores taxas primeiro · até 5 lojas</p>
     {ranking.map(store => <Meter key={store.key} title={store.label} strong={percentBR(rate(store))} width={rate(store)}
       footnote={numberBR(store.recebido) + " / " + numberBR(store.total)} />)}
     <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver todas as lojas <ArrowRight size={13} aria-hidden="true" /></Button>
@@ -118,7 +182,7 @@ function StoreTop({ stores, onOpenAll }: { stores: Grouped[]; onOpenAll: () => v
 
 function OccurrenceBadge({ type }: { type: string }) {
   const automatic = type === "nao_compareceu";
-  return <span className={"shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (automatic ? "bg-amber-400/15 text-amber-300" : "bg-rose-400/15 text-rose-300")}>
+  return <span className={"shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (automatic ? "bg-amber-400/15 text-amber-300" : type === "recusado" ? "bg-orange-400/15 text-orange-300" : "bg-rose-400/15 text-rose-300")}>
     {automatic ? "Não compareceu" : type === "recusado" ? "Recusado" : "Não recebido"}
   </span>;
 }
@@ -152,13 +216,12 @@ function SupplierRanking({ suppliers, limit, onOpenAll }: { suppliers: Supplier[
   if (!suppliers.length) return <Empty text="Sem ocorrências." />;
   const highest = Math.max(1, ...suppliers.map(occurrenceCount));
   const shown = limit ? suppliers.slice(0, limit) : suppliers;
-  return <div className="space-y-4">
+  return <div className="space-y-3">
     {shown.map((supplier, index) => <Meter key={supplier.supplier}
       title={(index + 1) + ". " + supplier.supplier} strong={numberBR(occurrenceCount(supplier))}
       width={occurrenceCount(supplier) / highest * 100} tone="#f0525f"
-      footnote={numberBR(supplier.naoChegou) + " não recebidos · " + numberBR(supplier.naoCompareceu) + " não comparecimentos · " + numberBR(supplier.recusado) + " recusados. Taxa: " + percentBR(supplier.total ? supplier.recebido / supplier.total * 100 : 0)
-        + " (" + numberBR(supplier.recebido) + " de " + numberBR(supplier.total) + ")"} />)}
-    {onOpenAll && suppliers.length > shown.length && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver ranking de fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
+      footnote={[supplier.naoChegou ? numberBR(supplier.naoChegou)+" não recebidos" : "", supplier.naoCompareceu ? numberBR(supplier.naoCompareceu)+" não comparecimentos" : "", supplier.recusado ? numberBR(supplier.recusado)+" recusados" : ""].filter(Boolean).join(" · ") + " | " + percentBR(rate(supplier)) + " recebidos"} />)}
+    {onOpenAll && suppliers.length > 0 && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver ranking de fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
   </div>;
 }
 
@@ -174,7 +237,7 @@ function SupplierWithoutAgenda({ suppliers, total, received, supplierCount, onOp
       strong={numberBR(supplier.vezes) + (supplier.vezes === 1 ? " vez" : " vezes")}
       width={supplier.vezes / highest * 100} tone="#ffbf40"
       footnote={numberBR(supplier.recebidos) + " recebidos · Último registro: " + formatDay(supplier.ultima)} />)}
-    {suppliers.length > 5 && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver todos os fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
+    {suppliers.length > 0 && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver ranking de fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
   </div>;
 }
 
@@ -258,7 +321,11 @@ export function ReportsPage() {
   const summary = useMemo(() => totals(report.data?.rows ?? []), [report.data]);
   const priorSummary = useMemo(() => applied.compare && previousReport.data ? totals(previousReport.data.rows) : null, [applied.compare, previousReport.data]);
   const units = useMemo(() => group(report.data?.rows ?? [], "store"), [report.data]);
-  const rateDifference = priorSummary && priorSummary.total > 0 ? rate(summary) - rate(priorSummary) : null;
+  const days = useMemo(() => group(report.data?.rows ?? [], "date"), [report.data]);
+  const comparable = priorSummary && priorSummary.total > 0 ? priorSummary : null;
+  const openOccurrences = (type: OccurrenceType = "todos") => {
+    setOccurrenceType(type); setOccurrenceOffset(0); setOccurrenceInput(""); setOccurrenceQuery(""); setDialog("occurrences");
+  };
   const working = report.isFetching || recent.isFetching || occurrences.isFetching;
   const apply = (event: FormEvent) => {
     event.preventDefault();
@@ -316,11 +383,10 @@ export function ReportsPage() {
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("click", dismiss); document.removeEventListener("keydown", escape); };
   }, []);
-  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-5" aria-label="Relatório Gerencial">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-3" aria-label="Relatório Gerencial">
     <PageHeader eyebrow="Inteligência operacional" title="Relatório Gerencial"
       description="Panorama dos recebimentos, desempenho das lojas e ocorrências registradas."
       actions={<div className="flex items-center gap-2">
-        <span className="hidden rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-1 text-[10px] font-semibold text-sky-300 sm:inline-block">Visão consolidada</span>
         <Button variant="secondary" size="sm" disabled={working} onClick={() => void queryClient.invalidateQueries({ queryKey: ["manager-report"] })}>
           <RefreshCw size={14} aria-hidden="true" />{working ? "Atualizando…" : "Atualizar"}
         </Button>
@@ -380,26 +446,13 @@ export function ReportsPage() {
     {report.isPending && <Loading label="Carregando relatório…" className={panel} />}
     {report.isError && <Failure retry={() => void report.refetch()} text="Não foi possível carregar os indicadores gerenciais." />}
     {report.data && <>
-      <Kpis sum={summary} prior={priorSummary} />
+      <Kpis sum={summary} prior={comparable} onOccurrences={openOccurrences} />
       {applied.compare && previousReport.isError && <Failure retry={() => void previousReport.refetch()} text="Comparação indisponível. Os indicadores atuais continuam disponíveis." />}
       {summary.abertas > 0 && <p role="status" className="text-xs text-amber-300">{numberBR(summary.abertas)} agenda(s) em aberto: os indicadores podem mudar até o fechamento.</p>}
       <div className="space-y-4" aria-label="Visão gerencial de recebimentos">
-        {/* Resumo do período: taxa geral + composição por situação. */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card title="Taxa de recebimento">
-            <strong className="block text-4xl font-bold tracking-tight tabular-nums text-white">{percentBR(rate(summary))}</strong>
-            <p className="mt-2 text-xs text-slate-400">{numberBR(summary.recebido)} de {numberBR(summary.total)} agendamentos</p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#2d4764]"><div className="h-full rounded-full bg-[#3f9cff]" style={{ width: clampPercent(rate(summary)) + "%" }} /></div>
-            {rateDifference === null
-              ? <p className="mt-2 text-[11px] text-slate-500">Sem comparação disponível</p>
-              : <p className={"mt-2 flex items-center gap-1 text-[11px] " + (rateDifference >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                {rateDifference >= 0 ? <ArrowUpRight size={12} aria-hidden="true" /> : <ArrowDownRight size={12} aria-hidden="true" />}
-                {(rateDifference > 0 ? "+" : "") + rateDifference.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p. em relação ao período anterior
-              </p>}
-          </Card>
-          <Card title="Distribuição das situações">
-            <Donut sum={summary} />
-          </Card>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Card title="Evolução diária"><DailyTrend days={days} start={applied.start} end={applied.end}/></Card>
+          <Card title="Distribuição das situações"><Donut sum={summary}/><p className="mt-3 text-[11px] text-slate-400">Taxa de recebimento: {summary.total ? percentBR(rate(summary)) : "—"}</p></Card>
         </div>
         {/* Fileira dos rankings: lojas e os dois de fornecedores, com medidores
             e alturas equivalentes. */}
@@ -416,7 +469,7 @@ export function ReportsPage() {
             registros mais recentes. */}
         <div className="grid grid-cols-1 gap-4">
           <Card title="Ocorrências recentes"
-            action={<Button variant="ghost" size="sm" className="text-sky-300" onClick={() => setDialog("occurrences")}>Ver todas as ocorrências <ArrowRight size={13} aria-hidden="true" /></Button>}>
+            action={<Button variant="ghost" size="sm" className="text-sky-300" onClick={() => openOccurrences()}>Ver todas as ocorrências <ArrowRight size={13} aria-hidden="true" /></Button>}>
             {recent.isPending ? <Empty text="Carregando ocorrências…" /> : recent.isError
               ? <Empty text="Ocorrências indisponíveis." /> : <OccurrenceItems rows={recent.data?.rows.slice(0, 5) ?? []} />}
           </Card>

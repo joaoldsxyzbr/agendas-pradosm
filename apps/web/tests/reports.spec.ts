@@ -74,6 +74,8 @@ test("Relatório React mostra KPIs, rankings de fornecedores, visão gerencial e
   await expect(page.getByLabel("Indicadores gerenciais")).toContainText("30");
   await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("Taxa de recebimento");
   await expect(page.getByRole("heading", { name: "Distribuição das situações" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Evolução diária" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Registros no período" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Desempenho por loja" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores com ocorrências" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores sem agenda" })).toBeVisible();
@@ -185,7 +187,7 @@ test("Rosca do relatório mantém o rótulo central dentro do anel colorido", as
   await mock(page);
   await page.goto("/admin/reports");
   const label = page.getByTestId("donut-center-label");
-  await expect(label).toHaveText("agendamentos");
+  await expect(label).toHaveText("registros");
   const inside = await page.evaluate(() => {
     const label = document.querySelector('[data-testid="donut-center-label"]');
     const circle = document.querySelector('[data-testid="donut-center"]');
@@ -201,4 +203,16 @@ test("Rosca do relatório mantém o rótulo central dentro do anel colorido", as
     return corners.every(([x, y]) => Math.hypot(x - cx, y - cy) <= radius);
   });
   expect(inside).toBe(true);
+});
+
+
+test("Resumo compacto abre ocorrência pelo indicador e mantém a série diária", async({page})=>{
+  const requests=await mock(page);
+  await page.goto("/admin/reports");
+  await page.getByRole("button",{name:"Recusados 2",exact:true}).click();
+  await expect(page.getByLabel("Tipo de ocorrência")).toHaveValue("recusado");
+  await expect.poll(()=>requests.some(row=>row.type==="recusado")).toBe(true);
+  await expect(page.getByRole("table",{name:"Ocorrências e observações"})).toContainText("Fornecedor Beta");
+  await page.getByRole("button",{name:"Fechar"}).click();
+  await expect(page.getByRole("heading",{name:"Evolução diária"})).toBeVisible();
 });

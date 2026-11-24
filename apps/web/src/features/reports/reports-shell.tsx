@@ -3,9 +3,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const panel = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4 shadow-lg md:p-5";
+const panel = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4";
 
 const REPORT_HELP: Record<string, string> = {
+  "Registros no período": "Total de registros ativos, incluindo os importados e os manuais. Com agendamento exclui os registros manuais; aguardando é um status já incluído no total.",
+  "Ocorrências": "Soma dos registros não recebidos, não comparecimentos classificados e recusados. Cada registro pertence a somente uma situação. Clique na linha para detalhar.",
+  "Evolução diária": "Volume de registros por data da agenda, dividido pelas situações. Uma data sem registros não equivale a uma taxa de recebimento de zero.",
   "Agendamentos": "Quantidade total de agendamentos no período selecionado, incluindo todos os status.",
   "Recebidos": "Agendamentos marcados como recebidos. O percentual considera o total do período.",
   "Não recebidos": "Quantidade marcada como não recebida. Os motivos aparecem em Ocorrências e observações.",
@@ -13,9 +16,9 @@ const REPORT_HELP: Record<string, string> = {
   "Recusados": "Registros com status recusado, separados de não recebidos e não comparecimentos.",
   "Sem agenda": "Registros manuais ativos, já incluídos no total. O subtítulo mostra quantos foram recebidos.",
   "Aguardando": "Agendamentos pendentes de recebimento em agendas que continuam abertas.",
-  "Taxa de recebimento": "Recebidos ÷ total de agendamentos × 100. Os agendamentos pendentes também entram no total.",
+  "Taxa de recebimento": "Recebidos ÷ total de registros ativos × 100, incluindo os manuais. Os agendamentos pendentes também entram no total.",
   "Distribuição das situações": "Distribui todos os agendamentos do período por situação. As porcentagens são calculadas sobre o total e incluem entregas aguardando.",
-  "Desempenho por loja": "Mostra as cinco lojas com maior taxa de recebimento no período filtrado. A barra representa recebidos ÷ total da loja × 100, não o volume de entregas.",
+  "Desempenho por loja": "Mostra até cinco lojas com menor taxa de recebimento no período filtrado. A barra representa recebidos ÷ total da loja × 100, não o volume de entregas.",
   "Ocorrências recentes": "Exibe até cinco ocorrências das datas mais recentes do período: não recebidos, recusas e não comparecimentos classificados pelo sistema. A lista completa abre no botão abaixo.",
   "Fornecedores com ocorrências": "Fornecedores com mais ocorrências: não recebidos, não comparecimentos e recusas. A barra compara a quantidade de cada um com a do líder do ranking e mostra também a taxa de recebimento do fornecedor no período.",
   "Fornecedores sem agenda": "Fornecedores com mais registros manuais sem agendamento no período; nem todos foram recebidos. A barra compara as ocorrências de cada um com a do líder do ranking e mostra a data da última ocorrência.",
