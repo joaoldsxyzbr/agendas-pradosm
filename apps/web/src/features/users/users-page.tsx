@@ -112,7 +112,8 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
             autoComplete="new-password" required={!user} value={form.senha}
             onChange={event => setForm(value => ({ ...value, senha: event.target.value }))} />
         </label>
-        {!form.access&&<label className="grid gap-1.5 text-xs font-semibold text-slate-300">Papel
+        {user?.acessoPersonalizado&&<div className="text-xs text-slate-300">Perfil efetivo: <strong>{ROLE_LABELS[user.perfil??user.papel]}</strong></div>}
+        {!form.access&&!user?.acessoPersonalizado&&<label className="grid gap-1.5 text-xs font-semibold text-slate-300">Papel
           <select className={input} name="papel" disabled={!!user?.acessoPersonalizado} value={form.papel}
             onChange={event => setForm(value => ({ ...value, papel: event.target.value as UserForm["papel"] }))}>
             <option value="admin">Administrador</option>

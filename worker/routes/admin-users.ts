@@ -2,7 +2,7 @@ import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import { ACCESS_PROFILES, PERMISSIONS } from "../../shared/permissions.ts";
-import { accessJson, findEffectiveAccess, saveAccessConfiguration, validChange } from "../repositories/access.ts";
+import { accessJson, findEffectiveAccess, saveAccessConfiguration, validChange, type AccessChange } from "../repositories/access.ts";
 import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findStoreById } from "../repositories/stores.ts";
@@ -18,7 +18,7 @@ const AccessInput=z.object({
   profile:z.enum(ACCESS_PROFILES),
   scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}).strict(),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string().uuid()).max(50)}).strict()]),
   overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})).max(PERMISSIONS.length)
-}).refine(validChange);
+}).transform(value=>value as AccessChange).refine(validChange);
 function integralAdmin(c){
   return c.env.ACCESS_MODE==="on"&&c.get("authUser")?.papel==="admin"&&!c.get("effectiveAccess")?.customized;
 }

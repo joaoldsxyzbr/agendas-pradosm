@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeftRight, ArrowUp, ArrowUpDown, Ban, CalendarDays, CheckCircle2, Clock3, FileDown, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
@@ -44,6 +46,13 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
   canEdit?: boolean;
   onClose: () => void;
 }) {
+  const {data:user}=useSession();
+  const canEditStatus=canUse(user,"recebimento.editar",canEdit);
+  const canCreate=canUse(user,"recebimento.manual.criar",canEdit);
+  const canManualEdit=canUse(user,"recebimento.manual.editar",canEdit);
+  const canManualDelete=canUse(user,"recebimento.manual.excluir",canEdit);
+  const canReopen=canUse(user,"recebimento.reabrir",canEdit);
+  const canExport=canUse(user,"recebimento.exportar",true);
   const ref = useRef<HTMLDialogElement>(null);
   const client = useQueryClient();
   const [search, setSearch] = useState("");
@@ -143,15 +152,15 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
             <Button size="sm" variant="secondary" disabled={query.isFetching || busy} onClick={() => void refresh()}>
               <RefreshCw size={14} aria-hidden="true" />{query.isFetching ? "Atualizando…" : "Atualizar"}
             </Button>
-            <Button size="sm" variant="secondary" disabled={pdfBusy} onClick={() => void exportPdf()}>
+            {canExport&&<Button size="sm" variant="secondary" disabled={pdfBusy} onClick={() => void exportPdf()}>
               <FileDown size={14} aria-hidden="true" />{pdfBusy ? "Preparando PDF…" : "Exportar PDF"}
-            </Button>
+            </Button>}
           </div>
         </div>
         {pdfError && <p role="alert" className="rounded-lg border border-rose-500/40 p-3 text-xs text-rose-200">{pdfError}</p>}
-        {editable && completed && !reopenConfirmation && <Button size="sm" variant="secondary" disabled={busy}
+        {editable && completed && canReopen && !reopenConfirmation && <Button size="sm" variant="secondary" disabled={busy}
           onClick={() => setReopenConfirmation(true)}>Reabrir para conferente</Button>}
-        {editable && completed && reopenConfirmation && <section className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3" aria-label="Confirmar reabertura">
+        {editable && completed && canReopen && reopenConfirmation && <section className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3" aria-label="Confirmar reabertura">
           <p className="text-xs text-amber-200">Reabrir esta agenda permitirá que o conferente continue a operação. Confirme a alteração.</p>
           {reopening.isError && <p role="alert" className="text-xs text-rose-300">{operationError(reopening.error)}</p>}
           <div className="flex flex-wrap gap-2">
@@ -187,7 +196,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
                   className="h-9 w-full rounded-md border border-[#3e5874] bg-[#101e30] pr-2 pl-7 text-xs text-white sm:w-56"
                   value={search} onChange={event => setSearch(event.target.value)} />
               </label>
-              {editable && !completed && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
+              {editable && !completed && canCreate && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
                 onClick={() => setManualTarget({ mode: "create" })}><Plus size={13} />Fornecedor sem agenda</Button>}
             </div>
           </div>
@@ -215,7 +224,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
                   <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-semibold w-[220px]">Obs.</th>
                 </tr>
               </thead>
-              {sorted.map(item => <AppointmentRow key={item.id} item={item} day={agenda.date} readOnly={rowsReadOnly}
+              {sorted.map(item => <AppointmentRow key={item.id} item={item} day={agenda.date} readOnly={rowsReadOnly} canEditStatus={canEditStatus} canEditManual={canManualEdit} canDeleteManual={canManualDelete}
                 agendaQueryKey={agendaQueryKey} api={adminApi}
                 onEditManual={item2 => setManualTarget({ mode: "edit", item: item2 })}
                 onRemoveManual={item2 => setManualTarget({ mode: "edit", item: item2, confirmDelete: true })}

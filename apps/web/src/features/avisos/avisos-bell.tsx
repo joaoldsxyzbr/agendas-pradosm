@@ -12,7 +12,7 @@ import { PublishAvisoDialog } from "./publish-aviso-dialog";
 // mais recente para o mais antigo — o aviso é registro permanente, o
 // histórico é a própria lista — e "Marcar todos" para o usuário.
 // Todos os papéis autenticados veem os avisos (spec 2026-11-11, decisão 3).
-export function AvisosBell({ papel, canPublish, canMarkRead: _canMarkRead = true }: { papel: Role; canPublish?:boolean; canMarkRead?:boolean }) {
+export function AvisosBell({ papel, canPublish, canMarkRead = true }: { papel: Role; canPublish?:boolean; canMarkRead?:boolean }) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -150,7 +150,7 @@ export function AvisosBell({ papel, canPublish, canMarkRead: _canMarkRead = true
         <div className="flex flex-wrap items-center gap-1.5">
           {naoLidos > 0 && <Button size="sm" variant="secondary"
             aria-label="Marcar todos os avisos como lidos"
-            disabled={marcarTodos.isPending} onClick={() => marcarTodos.mutate()}>
+            disabled={!canMarkRead||marcarTodos.isPending} onClick={() => marcarTodos.mutate()}>
             <Check size={13} aria-hidden="true" /> Marcar todos
           </Button>}
           {isAdmin && <Button size="sm" variant="secondary" onClick={() => setPublishing(true)}>
@@ -184,7 +184,7 @@ export function AvisosBell({ papel, canPublish, canMarkRead: _canMarkRead = true
               <p className="mt-1 break-words text-xs text-slate-300">{aviso.mensagem}</p>
             </div>
             <div className="flex shrink-0 flex-col gap-1.5">
-              {!aviso.lido && <Button size="sm" variant="secondary" aria-label={`Marcar aviso como lido: ${aviso.titulo}`}
+              {canMarkRead&&!aviso.lido && <Button size="sm" variant="secondary" aria-label={`Marcar aviso como lido: ${aviso.titulo}`}
                 disabled={marcarLido.isPending && marcarLido.variables === aviso.id}
                 onClick={() => marcarLido.mutate(aviso.id)}>
                 <Check size={13} aria-hidden="true" /> Lido

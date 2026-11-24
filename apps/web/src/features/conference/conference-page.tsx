@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeftRight, ArrowUp, ArrowUpDown, Ban, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FileDown, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
@@ -205,8 +207,9 @@ export function AppointmentDetailsDialog({ appointmentId, getDetail, onClose }: 
   </dialog>;
 }
 
-export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEditManual, onRemoveManual, onOpenDetails }: {
+export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEditManual, onRemoveManual, onOpenDetails, canEditStatus=true, canEditManual=true, canDeleteManual=true }: {
   item: StoreAppointment; readOnly:boolean; day:string;
+  canEditStatus?:boolean;canEditManual?:boolean;canDeleteManual?:boolean;
   agendaQueryKey: readonly unknown[];
   api: ConferenceApi;
   onEditManual:(item:StoreAppointment)=>void; onRemoveManual:(item:StoreAppointment)=>void; onOpenDetails:(id:string)=>void;
@@ -251,7 +254,7 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
       if(context?.previous)applyUpdate(context.previous);
     },
   });
-  const inactive = readOnly || patch.isPending;
+  const inactive = readOnly || patch.isPending || !canEditStatus;
   const changeStatus=(status:"recebido"|"nao_chegou")=>{
     if(inactive)return;
     const next=item.status===status?"aguardando":status;
@@ -306,7 +309,7 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
       <td className="w-[196px] min-w-[196px] px-2.5 py-1.5">
         <div className="flex w-max flex-nowrap items-center gap-1">
           {!readOnly && <>
-            <Button size="icon" className="h-7 w-7" variant={item.status==="recebido"?"default":"secondary"} disabled={inactive}
+            {canEditStatus&&<><Button size="icon" className="h-7 w-7" variant={item.status==="recebido"?"default":"secondary"} disabled={inactive}
               aria-pressed={item.status==="recebido"} title={item.status==="recebido"?"Desmarcar recebido":"Marcar como recebido"}
               aria-label={item.status==="recebido"?"Desmarcar recebido":"Recebido"} onClick={()=>changeStatus("recebido")}>
               <Check size={15} aria-hidden="true"/>
@@ -315,17 +318,17 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
               aria-pressed={item.status==="nao_chegou"} title={item.status==="nao_chegou"?"Desmarcar não recebido":"Marcar como não recebido"}
               aria-label={item.status==="nao_chegou"?"Desmarcar não recebido":"Não recebido"} onClick={()=>changeStatus("nao_chegou")}>
               <X size={15} aria-hidden="true"/>
-            </Button>
-            {item.origin==="manual" && <Button size="icon" variant="secondary" className="h-7 w-7" disabled={inactive}
+            </Button></>}
+            {item.origin==="manual" && canEditManual && <Button size="icon" variant="secondary" className="h-7 w-7" disabled={readOnly||patch.isPending}
               title={`Editar fornecedor ${item.supplier}`} aria-label={`Editar fornecedor ${item.supplier}`} onClick={() => onEditManual(item)}>
               <Pencil size={13} aria-hidden="true" />
             </Button>}
-            {item.origin==="manual" && <Button size="icon" variant="secondary" className="h-7 w-7" disabled={inactive}
+            {item.origin==="manual" && canDeleteManual && <Button size="icon" variant="secondary" className="h-7 w-7" disabled={readOnly||patch.isPending}
               title={`Excluir fornecedor ${item.supplier}`} aria-label={`Excluir fornecedor ${item.supplier}`} onClick={() => onRemoveManual(item)}>
               <Trash2 size={13} aria-hidden="true" />
             </Button>}
           </>}
-          {readOnly && <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" aria-label={`Detalhes de ${item.supplier}`}
+          {(readOnly||!canEditStatus) && <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" aria-label={`Detalhes de ${item.supplier}`}
             onClick={() => onOpenDetails(item.id)}>Ver detalhes</Button>}
         </div>
       </td>
@@ -338,7 +341,7 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
       </td>
       <td className="w-[220px] min-w-[220px] max-w-[220px] px-2.5 py-1.5">
         {item.observation
-          ? (!readOnly
+          ? (!readOnly && canEditStatus
               ? <button type="button" disabled={inactive} onClick={openNote}
                   title={item.observation} aria-label={`Observação de ${item.supplier}`}
                   className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-[11px] text-amber-300 hover:text-amber-200">
@@ -346,7 +349,7 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
                 </button>
               : <span className="block w-[200px] max-w-full truncate whitespace-nowrap text-[11px] text-amber-300"
                   title={item.observation}>Obs.: {item.observation}</span>)
-          : (!readOnly
+          : (!readOnly && canEditStatus
               ? <button type="button" disabled={inactive} onClick={openNote}
                   title={`Adicionar observação a ${item.supplier}`} aria-label={`Observação de ${item.supplier}`}
                   className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-[11px] text-slate-500 hover:text-slate-300">
@@ -432,6 +435,14 @@ function CompleteDayDialog({ date, busy, error, onConfirm, onClose }: {
 }
 
 export function ConferencePage(){
+  const {data:user}=useSession();
+  const canEdit=canUse(user,"conferencia.editar",true);
+  const canCreate=canUse(user,"conferencia.manual.criar",true);
+  const canManualEdit=canUse(user,"conferencia.manual.editar",true);
+  const canManualDelete=canUse(user,"conferencia.manual.excluir",true);
+  const canComplete=canUse(user,"conferencia.concluir",true);
+  const canExport=canUse(user,"conferencia.exportar",true);
+  const canHistory=canUse(user,"conferencia.historico",true);
   const client=useQueryClient();
   const [today,setToday]=useState(()=>businessToday());
   const [date,setDate]=useState(today);
@@ -501,20 +512,20 @@ export function ConferencePage(){
       description="Consulte os fornecedores, atualize o recebimento e acompanhe a operação por data."
       actions={<div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex h-9 items-center rounded-md border border-[#45617c] bg-[#1b3047]">
-          <button className="grid size-9 place-items-center" aria-label="Dia anterior" onClick={()=>changeDate(shiftDay(date,-1))}><ChevronLeft size={17}/></button>
+          <button className="grid size-9 place-items-center" aria-label="Dia anterior" disabled={!canHistory} onClick={()=>changeDate(shiftDay(date,-1))}><ChevronLeft size={17}/></button>
           <label className="flex items-center gap-1 border-x border-[#45617c] px-2 text-xs text-slate-200">
             <CalendarDays size={14} aria-hidden="true"/>
-            <input aria-label="Data da conferência" type="date" className="w-[121px] bg-transparent text-xs [color-scheme:dark]" value={date}
+            <input aria-label="Data da conferência" type="date" className="w-[121px] bg-transparent text-xs [color-scheme:dark]" value={date} disabled={!canHistory}
               onChange={event=>{if(event.target.value)changeDate(event.target.value);}}/>
           </label>
-          <button className="grid size-9 place-items-center" aria-label="Dia seguinte" onClick={()=>changeDate(shiftDay(date,1))}><ChevronRight size={17}/></button>
+          <button className="grid size-9 place-items-center" aria-label="Dia seguinte" disabled={!canHistory} onClick={()=>changeDate(shiftDay(date,1))}><ChevronRight size={17}/></button>
         </div>
         {date!==today && <Button size="sm" variant="secondary" onClick={()=>changeDate(today)}>Hoje</Button>}
         <Button size="sm" variant="secondary" disabled={query.isFetching} onClick={()=>void refresh()}><RefreshCw size={14}/>{query.isFetching?"Atualizando…":"Atualizar"}</Button>
-        {agenda && <Button size="sm" variant="secondary" disabled={pdfBusy} onClick={()=>void exportPdf()}>
+        {agenda && canExport && <Button size="sm" variant="secondary" disabled={pdfBusy} onClick={()=>void exportPdf()}>
           <FileDown size={14}/>{pdfBusy?"Preparando PDF…":"Exportar PDF"}
         </Button>}
-        {!readOnly && <Button size="sm" disabled={complete.isPending} onClick={()=>setConfirmComplete(true)}>Concluir dia</Button>}
+        {!readOnly && canComplete && <Button size="sm" disabled={complete.isPending} onClick={()=>setConfirmComplete(true)}>Concluir dia</Button>}
       </div>}/>
     {pdfError && <p role="alert" className="rounded-lg border border-rose-500/40 p-3 text-xs text-rose-200">{pdfError}</p>}
     {query.isPending && <div className="space-y-4">
@@ -564,7 +575,7 @@ export function ConferencePage(){
                 className="h-9 w-full rounded-md border border-[#3e5874] bg-[#101e30] pr-2 pl-7 text-xs text-white sm:w-56"
                 value={search} onChange={event=>setSearch(event.target.value)}/>
             </label>
-            {!readOnly && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
+            {!readOnly && canCreate && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
               onClick={()=>setManualTarget({mode:"create"})}><Plus size={13}/>Fornecedor sem agenda</Button>}
           </div>
         </div>
@@ -592,7 +603,7 @@ export function ConferencePage(){
                 <th scope="col" className="whitespace-nowrap px-2.5 py-2 font-semibold w-[220px]">Obs.</th>
               </tr>
             </thead>
-            {sorted.map(item=><AppointmentRow key={item.id} item={item} day={date} readOnly={readOnly||complete.isPending}
+            {sorted.map(item=><AppointmentRow key={item.id} item={item} day={date} readOnly={readOnly||complete.isPending} canEditStatus={canEdit} canEditManual={canManualEdit} canDeleteManual={canManualDelete}
               agendaQueryKey={agendaQueryKey} api={api}
               onEditManual={item2=>setManualTarget({mode:"edit",item:item2})}
               onRemoveManual={item2=>setManualTarget({mode:"edit",item:item2,confirmDelete:true})}
@@ -601,7 +612,7 @@ export function ConferencePage(){
           </table>
         </div>
       </section>
-      {confirmComplete && !readOnly && <CompleteDayDialog date={date} busy={complete.isPending}
+      {confirmComplete && !readOnly && canComplete && <CompleteDayDialog date={date} busy={complete.isPending}
         error={complete.isError?errorText(complete.error):""}
         onConfirm={()=>complete.mutate()} onClose={()=>setConfirmComplete(false)}/>}
       {manualTarget && <ManualSupplierDialog target={manualTarget} api={{...api,create:(supplier:string)=>createManualAppointment(date,supplier)}} onClose={()=>setManualTarget(null)}
