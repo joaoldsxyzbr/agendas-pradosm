@@ -5,24 +5,25 @@ const integer = z.number().finite();
 export const reportRowSchema = z.object({
   date: z.string(), storeCode: z.string(), storeName: z.string(),
   dayStatus: z.string(), total: integer, recebido: integer, naoChegou: integer,
-  naoCompareceu: integer, aguardando: integer, recusado: integer, semAgenda: integer,
+  naoCompareceu: integer, aguardando: integer, recusado: integer, semAgenda: integer, semAgendaRecebidos: integer.default(0),
 });
 const supplierSchema = z.object({
-  supplier: z.string(), total: integer, recebido: integer, naoChegou: integer,
+  supplier: z.string(), total: integer, recebido: integer, naoChegou: integer, naoCompareceu: integer.default(0), recusado: integer.default(0),
 });
 // Fornecedores que mais entregam sem agenda no período (origem "manual").
 const semAgendaSupplierSchema = z.object({
-  supplier: z.string(), vezes: integer, ultima: z.string(),
+  supplier: z.string(), vezes: integer, ultima: z.string(), recebidos: integer.default(0),
 });
 export const reportSchema = z.object({
   start: z.string(), end: z.string(), storeCodes: z.array(z.string()),
   rows: z.array(reportRowSchema), suppliers: z.array(supplierSchema),
   semAgendaSuppliers: z.array(semAgendaSupplierSchema),
+  occurrenceSupplierCount: integer.optional(), manualSupplierCount: integer.optional(),
 });
 const occurrenceSchema = z.object({
   date: z.string(), storeCode: z.string(), storeName: z.string(),
   supplier: z.string(), protocol: z.string(), observation: z.string().nullable(),
-  origin: z.string(), occurrenceType: z.enum(["nao_compareceu", "nao_recebido"]),
+  origin: z.string(), occurrenceType: z.enum(["nao_compareceu", "nao_recebido", "recusado"]),
   classificationOrigin: z.string(),
 });
 export const occurrencesSchema = z.object({
@@ -31,6 +32,9 @@ export const occurrencesSchema = z.object({
 export type Report = z.infer<typeof reportSchema>;
 export type ReportRow = z.infer<typeof reportRowSchema>;
 export type Occurrences = z.infer<typeof occurrencesSchema>;
+export type OccurrenceType = "todos" | "nao_compareceu" | "nao_recebido" | "recusado";
+export type Supplier = z.infer<typeof supplierSchema>;
+export const occurrenceCount = (supplier: Supplier) => supplier.naoChegou + supplier.naoCompareceu + supplier.recusado;
 export type SemAgendaSupplier = z.infer<typeof semAgendaSupplierSchema>;
 export type ReportFilters = { start: string; end: string; stores: string[]; compare: boolean };
 
@@ -39,11 +43,11 @@ export const percentBR = (value: number) => value.toLocaleString("pt-BR", { maxi
 export const rate = (row: { recebido: number; total: number }) => row.total ? row.recebido / row.total * 100 : 0;
 export const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
-const METRICS = ["total", "recebido", "naoChegou", "naoCompareceu", "aguardando", "recusado", "semAgenda"] as const;
+const METRICS = ["total", "recebido", "naoChegou", "naoCompareceu", "aguardando", "recusado", "semAgenda", "semAgendaRecebidos"] as const;
 type Metric = typeof METRICS[number];
 export type Totals = Record<Metric, number> & { agendas: number; abertas: number };
 export function totals(rows: ReportRow[]): Totals {
-  const result: Totals = { total: 0, recebido: 0, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0, agendas: 0, abertas: 0 };
+  const result: Totals = { total: 0, recebido: 0, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0, semAgendaRecebidos: 0, agendas: 0, abertas: 0 };
   for (const row of rows) {
     for (const key of METRICS) result[key] += row[key];
     result.agendas++;
@@ -58,7 +62,7 @@ export function group(rows: ReportRow[], kind: "date" | "store"): Grouped[] {
     const key = kind === "date" ? row.date : row.storeCode;
     const current = map.get(key) ?? {
       key, label: kind === "date" ? row.date : row.storeCode + " · " + row.storeName,
-      total: 0, recebido: 0, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0,
+      total: 0, recebido: 0, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0, semAgendaRecebidos: 0,
     };
     for (const metric of METRICS) current[metric] += row[metric];
     map.set(key, current);

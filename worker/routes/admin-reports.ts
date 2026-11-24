@@ -54,7 +54,8 @@ adminReportRoutes.get("/", async (c) => {
     "SUM(CASE WHEN ag.status = 'recebido' THEN 1 ELSE 0 END) AS recebido,",
     "SUM(CASE WHEN ag.status = 'nao_chegou' AND COALESCE(ag.observacao, '') <> 'Não compareceu' THEN 1 ELSE 0 END) AS naoChegou,",
     "SUM(CASE WHEN ag.status = 'recusado' THEN 1 ELSE 0 END) AS recusado,",
-    "SUM(CASE WHEN ag.origem = 'manual' THEN 1 ELSE 0 END) AS semAgenda",
+    "SUM(CASE WHEN ag.origem = 'manual' THEN 1 ELSE 0 END) AS semAgenda,",
+    "SUM(CASE WHEN ag.origem = 'manual' AND ag.status = 'recebido' THEN 1 ELSE 0 END) AS semAgendaRecebidos",
     "FROM agendas a JOIN lojas l ON l.id = a.loja_id",
     "LEFT JOIN agendamentos ag ON ag.agenda_id = a.id AND ag.ativo = 1",
     "WHERE",
@@ -64,7 +65,10 @@ adminReportRoutes.get("/", async (c) => {
     c.env.DB.prepare([
     "SELECT ag.fornecedor AS supplier, COUNT(*) AS total,",
     "SUM(CASE WHEN ag.status = 'recebido' THEN 1 ELSE 0 END) AS recebido,",
-    "SUM(CASE WHEN ag.status = 'nao_chegou' AND COALESCE(ag.observacao, '') <> 'Não compareceu' THEN 1 ELSE 0 END) AS naoChegou",
+    "SUM(CASE WHEN ag.status = 'nao_chegou' AND COALESCE(ag.observacao, '') <> 'Não compareceu' THEN 1 ELSE 0 END) AS naoChegou,",
+    "SUM(CASE WHEN (ag.status = 'aguardando' AND a.status_dia = 'concluido') OR (ag.status = 'nao_chegou' AND ag.observacao = 'Não compareceu') THEN 1 ELSE 0 END) AS naoCompareceu,",
+    "SUM(CASE WHEN ag.status = 'recusado' THEN 1 ELSE 0 END) AS recusado,",
+    "COUNT(*) OVER() AS rankedSuppliers",
     "FROM agendamentos ag",
     "JOIN agendas a ON a.id = ag.agenda_id",
     "JOIN lojas l ON l.id = a.loja_id",
@@ -72,14 +76,16 @@ adminReportRoutes.get("/", async (c) => {
     where,
     "AND ag.ativo = 1",
     "GROUP BY ag.fornecedor",
-    "HAVING naoChegou > 0",
-    "ORDER BY naoChegou DESC, ag.fornecedor ASC LIMIT 12"
+    "HAVING naoChegou + naoCompareceu + recusado > 0",
+    "ORDER BY (naoChegou + naoCompareceu + recusado) DESC, ag.fornecedor ASC LIMIT 12"
   ].join(" ")).bind(...filters).all(),
     // Fornecedores que mais entregam sem agenda: agendamentos de origem
     // "manual" (registrados na hora na conferência, sem importação prévia),
     // agrupados por fornecedor — alimenta o card "Fornecedores sem agenda".
     c.env.DB.prepare([
-    "SELECT ag.fornecedor AS supplier, COUNT(*) AS vezes, MAX(a.data_agenda) AS ultima",
+    "SELECT ag.fornecedor AS supplier, COUNT(*) AS vezes, MAX(a.data_agenda) AS ultima,",
+    "SUM(CASE WHEN ag.status = 'recebido' THEN 1 ELSE 0 END) AS recebidos,",
+    "COUNT(*) OVER() AS rankedSuppliers",
     "FROM agendamentos ag",
     "JOIN agendas a ON a.id = ag.agenda_id",
     "JOIN lojas l ON l.id = a.loja_id",
@@ -103,43 +109,57 @@ adminReportRoutes.get("/", async (c) => {
       recebido: Number(row.recebido),
       naoChegou: Number(row.naoChegou),
       recusado: Number(row.recusado),
-      semAgenda: Number(row.semAgenda)
+      semAgenda: Number(row.semAgenda),
+      semAgendaRecebidos: Number(row.semAgendaRecebidos)
     })),
+    occurrenceSupplierCount: Number(suppliers.results[0]?.rankedSuppliers ?? 0),
+    manualSupplierCount: Number(semAgendaSuppliers.results[0]?.rankedSuppliers ?? 0),
     suppliers: suppliers.results.map((supplier) => ({
       ...supplier,
       total: Number(supplier.total),
       recebido: Number(supplier.recebido),
-      naoChegou: Number(supplier.naoChegou)
+      naoChegou: Number(supplier.naoChegou),
+      naoCompareceu: Number(supplier.naoCompareceu),
+      recusado: Number(supplier.recusado)
     })),
     semAgendaSuppliers: semAgendaSuppliers.results.map((supplier) => ({
       ...supplier,
-      vezes: Number(supplier.vezes)
+      vezes: Number(supplier.vezes),
+      recebidos: Number(supplier.recebidos)
     }))
   });
 });
 const occurrencesFilters = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).max(1e5).default(0),
-  q: z.string().trim().min(1).max(80).optional()
+  q: z.string().trim().min(1).max(80).optional(),
+  type: z.enum(["todos","nao_compareceu","nao_recebido","recusado"]).default("todos")
 });
 adminReportRoutes.get("/occurrences", async (c) => {
   const parsed = parseFilters(c.req);
   const paging = occurrencesFilters.safeParse({
     limit: c.req.query("limit") ?? void 0,
     offset: c.req.query("offset") ?? void 0,
-    q: (c.req.query("q") || "").trim() || void 0
+    q: (c.req.query("q") || "").trim() || void 0,
+    type: c.req.query("type") ?? void 0
   });
   if (!parsed.success || !paging.success) {
     return c.json({ error: "FILTROS_INVALIDOS", message: "Filtros ou pagina\xE7\xE3o inv\xE1lidos." }, 400);
   }
   const {where,args:filters}=storeFilter(parsed.data,scopedStoreIds(c));
+  const occurrenceCondition = {
+    todos: "(ag.status IN ('nao_chegou', 'recusado') OR (ag.status = 'aguardando' AND a.status_dia = 'concluido'))",
+    nao_compareceu: "((ag.status = 'aguardando' AND a.status_dia = 'concluido') OR (ag.status = 'nao_chegou' AND ag.observacao = 'Não compareceu'))",
+    nao_recebido: "(ag.status = 'nao_chegou' AND COALESCE(ag.observacao, '') <> 'Não compareceu')",
+    recusado: "ag.status = 'recusado'"
+  }[paging.data.type];
   const base = [
     "FROM agendamentos ag",
     "JOIN agendas a ON a.id = ag.agenda_id",
     "JOIN lojas l ON l.id = a.loja_id",
     "WHERE",
     where,
-    "AND ag.ativo = 1 AND (ag.status = 'nao_chegou' OR (ag.status = 'aguardando' AND a.status_dia = 'concluido'))"
+    "AND ag.ativo = 1 AND", occurrenceCondition
   ].join(" ");
   const hasSearch = typeof paging.data.q === "string" && paging.data.q.length > 0;
   const like = hasSearch ? "%" + paging.data.q.replace(/[\\%_]/g, (char) => "\\" + char) + "%" : null;
@@ -154,8 +174,8 @@ adminReportRoutes.get("/occurrences", async (c) => {
       "l.nome AS storeName, ag.protocolo AS protocol,",
       "ag.fornecedor AS supplier, ag.observacao AS observation,",
       "ag.origem AS origin,",
-      "CASE WHEN (ag.status = 'aguardando' AND a.status_dia = 'concluido') OR ag.observacao = 'Não compareceu' THEN 'nao_compareceu' ELSE 'nao_recebido' END AS occurrenceType,",
-      "CASE WHEN ag.status = 'aguardando' THEN 'historico' WHEN ag.observacao = 'Não compareceu' THEN 'sistema' ELSE 'manual' END AS classificationOrigin",
+      "CASE WHEN ag.status = 'recusado' THEN 'recusado' WHEN ag.status = 'aguardando' OR (ag.status = 'nao_chegou' AND ag.observacao = 'Não compareceu') THEN 'nao_compareceu' ELSE 'nao_recebido' END AS occurrenceType,",
+      "CASE WHEN ag.status = 'aguardando' THEN 'historico' WHEN ag.status = 'nao_chegou' AND ag.observacao = 'Não compareceu' THEN 'sistema' ELSE 'manual' END AS classificationOrigin",
       base,
       searchClause,
       "ORDER BY a.data_agenda DESC, l.codigo ASC, ag.horario_inicio ASC, ag.id ASC",

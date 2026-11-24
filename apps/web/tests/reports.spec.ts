@@ -7,7 +7,7 @@ const stores = [
 ];
 const rows = [
   { date: "2026-10-29", storeCode: "F01", storeName: "Loja 01", dayStatus: "concluido",
-    total: 2, recebido: 1, naoChegou: 1, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0 },
+    total: 2, recebido: 1, naoChegou: 1, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 1, semAgendaRecebidos: 1 },
   { date: "2026-10-30", storeCode: "F02", storeName: "Loja 02", dayStatus: "aberto",
     total: 1, recebido: 1, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0 },
 ];
@@ -41,7 +41,7 @@ async function mock(page, options = {}) {
     const url = new URL(route.request().url());
     const selected = url.searchParams.getAll("storeCode");
     requests.push({ path: url.pathname, stores: selected, start: url.searchParams.get("start"), end: url.searchParams.get("end"),
-      offset: url.searchParams.get("offset"), search: url.searchParams.get("q") });
+      offset: url.searchParams.get("offset"), search: url.searchParams.get("q"), type: url.searchParams.get("type") });
     if (url.pathname === "/api/admin/stores") return route.fulfill({ json: stores });
     if (url.pathname === "/api/admin/reports") {
       if (options.failOnce && !failed) {
@@ -53,6 +53,7 @@ async function mock(page, options = {}) {
         rows: selected.length ? rows.filter(row => selected.includes(row.storeCode)) : rows,
         suppliers,
         semAgendaSuppliers,
+        manualSupplierCount: 20,
       } });
     }
     if (url.pathname === "/api/admin/reports/occurrences") return route.fulfill({ json: {
@@ -75,11 +76,11 @@ test("Relatório React mostra KPIs, rankings de fornecedores, visão gerencial e
   await expect(page.getByRole("heading", { name: "Desempenho por loja" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores com ocorrências" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores sem agenda" })).toBeVisible();
-  await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("10 entrega(s) sem agenda no período");
-  await page.getByRole("button", { name: "Ver todos os fornecedores" }).nth(0).click();
+  await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("2 registro(s) sem agenda · 2 recebido(s) · 20 fornecedor(es)");
+  await page.getByRole("button", { name: "Ver ranking de fornecedores" }).nth(0).click();
   await expect(page.getByRole("table", { name: "Fornecedores com ocorrências" })).toContainText("Fornecedor Alfa");
   await page.getByRole("button", { name: "Fechar" }).click();
-  await page.getByRole("button", { name: "Ver todos os fornecedores" }).nth(1).click();
+  await page.getByRole("button", { name: "Ver ranking de fornecedores" }).nth(1).click();
   await expect(page.getByRole("table", { name: "Fornecedores sem agenda" })).toContainText("Fornecedor Gama");
   await expect(page.getByRole("table", { name: "Fornecedores sem agenda" })).toContainText("Vezes sem agenda");
   await page.getByRole("button", { name: "Fechar" }).click();
@@ -124,6 +125,9 @@ test("Relatório React oferece pesquisa, paginação e comparação sem gravaç�
   await page.goto("/admin/reports");
   await page.getByRole("button", { name: "Ver todas as ocorrências" }).click();
   await expect(page.getByRole("table", { name: "Ocorrências e observações" })).toBeVisible();
+  await page.getByLabel("Tipo de ocorrência").selectOption("recusado");
+  await expect.poll(() => requests.some(x => x.type === "recusado")).toBe(true);
+  await page.getByLabel("Tipo de ocorrência").selectOption("todos");
   await page.getByRole("searchbox", { name: "Buscar ocorrência por fornecedor ou protocolo" }).fill("Alfa");
   await page.getByRole("button", { name: "Buscar" }).click();
   await expect.poll(() => requests.some(x => x.path === "/api/admin/reports/occurrences" && x.search === "Alfa")).toBe(true);

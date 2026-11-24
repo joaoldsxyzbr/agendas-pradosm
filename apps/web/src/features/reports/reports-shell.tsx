@@ -10,13 +10,15 @@ const REPORT_HELP: Record<string, string> = {
   "Recebidos": "Agendamentos marcados como recebidos. O percentual considera o total do período.",
   "Não recebidos": "Quantidade marcada como não recebida. Os motivos aparecem em Ocorrências e observações.",
   "Não compareceu": "Pendências classificadas como não comparecimento pelo sistema ao concluir o dia. Inclui agendas antigas encerradas com pendências; não comprova ausência física do fornecedor.",
+  "Recusados": "Registros com status recusado, separados de não recebidos e não comparecimentos.",
+  "Sem agenda": "Registros manuais ativos, já incluídos no total. O subtítulo mostra quantos foram recebidos.",
   "Aguardando": "Agendamentos pendentes de recebimento em agendas que continuam abertas.",
   "Taxa de recebimento": "Recebidos ÷ total de agendamentos × 100. Os agendamentos pendentes também entram no total.",
   "Distribuição das situações": "Distribui todos os agendamentos do período por situação. As porcentagens são calculadas sobre o total e incluem entregas aguardando.",
   "Desempenho por loja": "Mostra as cinco lojas com maior taxa de recebimento no período filtrado. A barra representa recebidos ÷ total da loja × 100, não o volume de entregas.",
-  "Ocorrências recentes": "Exibe até cinco ocorrências das datas mais recentes do período: não recebidos registrados e não comparecimentos classificados pelo sistema. A lista completa abre no botão abaixo.",
-  "Fornecedores com ocorrências": "Fornecedores com mais não recebidos. A barra compara a quantidade de cada um com a do líder do ranking e mostra também a taxa de recebimento do fornecedor no período.",
-  "Fornecedores sem agenda": "Fornecedores que mais realizaram entregas sem agendamento prévio no período. A barra compara as ocorrências de cada um com a do líder do ranking e mostra a data da última ocorrência.",
+  "Ocorrências recentes": "Exibe até cinco ocorrências das datas mais recentes do período: não recebidos, recusas e não comparecimentos classificados pelo sistema. A lista completa abre no botão abaixo.",
+  "Fornecedores com ocorrências": "Fornecedores com mais ocorrências: não recebidos, não comparecimentos e recusas. A barra compara a quantidade de cada um com a do líder do ranking e mostra também a taxa de recebimento do fornecedor no período.",
+  "Fornecedores sem agenda": "Fornecedores com mais registros manuais sem agendamento no período; nem todos foram recebidos. A barra compara as ocorrências de cada um com a do líder do ranking e mostra a data da última ocorrência.",
 };
 
 export function HelpTip({ title }: { title: string }) {

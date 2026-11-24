@@ -8,9 +8,9 @@ import { formatDay } from "@/features/receiving/model";
 import { getOccurrences, getReport, getStores } from "./api";
 import { Card, Panel, ReportDialog, Failure, HelpTip } from "./reports-shell";
 import {
-  clampPercent, delta, group, initialFilters, numberBR, percentBR,
+  clampPercent, delta, group, occurrenceCount, initialFilters, numberBR, percentBR,
   presetRange, previousRange, rate, totals, validRange,
-  type Delta, type Grouped, type Occurrences, type ReportFilters, type SemAgendaSupplier, type Totals,
+  type Delta, type Grouped, type Occurrences, type OccurrenceType, type Supplier, type ReportFilters, type SemAgendaSupplier, type Totals,
 } from "./model";
 
 const panel = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4 shadow-lg md:p-5";
@@ -51,16 +51,18 @@ const kpiDefs = [
   { key: "naoChegou", label: "Não recebidos", icon: XCircle, tone: "text-rose-300", kind: "invert", description: "Registrados na conferência" },
   { key: "naoCompareceu", label: "Não compareceu", icon: Users, tone: "text-amber-300", kind: "invert", description: "Classificados no fechamento" },
   { key: "aguardando", label: "Aguardando", icon: Clock3, tone: "text-violet-300", kind: "neutral", description: "Pendentes em agendas abertas" },
+  { key: "recusado", label: "Recusados", icon: XCircle, tone: "text-orange-300", kind: "invert", description: "Status de recusa registrado" },
+  { key: "semAgenda", label: "Sem agenda", icon: CalendarDays, tone: "text-amber-300", kind: "neutral", description: "manual" },
 ] as const;
 
 function Kpis({ sum, prior }: { sum: Totals; prior: Totals | null }) {
-  return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5" aria-label="Indicadores gerenciais">
+  return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7" aria-label="Indicadores gerenciais">
     {kpiDefs.map(({ key, label, icon: Icon, tone, kind, description }) => <div key={key} className="min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4 shadow-lg">
       <div className="flex items-center gap-1.5 text-[11px] text-slate-300"><Icon size={15} className={tone} aria-hidden="true" />{label}<HelpTip title={label} /></div>
       <strong className="mt-2 block text-2xl font-bold tabular-nums text-white md:text-3xl">{numberBR(sum[key])}</strong>
       {prior && <DeltaTag delta={delta(sum[key], prior[key], kind)} />}
       <small className="mt-1 block text-[11px] text-slate-400">
-        {description === "agendas" ? numberBR(sum.agendas) + " agendas" : description === "rate" ? percentBR(rate(sum)) + " do total" : description}
+        {description === "agendas" ? numberBR(sum.agendas) + " agendas" : description === "rate" ? percentBR(rate(sum)) + " do total" : description === "manual" ? numberBR(sum.semAgendaRecebidos) + " recebidos · registros manuais" : description}
       </small>
     </div>)}
   </div>;
@@ -117,7 +119,7 @@ function StoreTop({ stores, onOpenAll }: { stores: Grouped[]; onOpenAll: () => v
 function OccurrenceBadge({ type }: { type: string }) {
   const automatic = type === "nao_compareceu";
   return <span className={"shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold " + (automatic ? "bg-amber-400/15 text-amber-300" : "bg-rose-400/15 text-rose-300")}>
-    {automatic ? "Não compareceu" : "Não recebido"}
+    {automatic ? "Não compareceu" : type === "recusado" ? "Recusado" : "Não recebido"}
   </span>;
 }
 
@@ -146,33 +148,32 @@ function OccurrenceItems({ rows }: { rows: Occurrences["rows"] }) {
 // Ranking de fornecedores por não recebidos: barra proporcional ao líder
 // (não ao total) + taxa de recebimento de cada um no rodapé. Com `limit`,
 // mostra só os N primeiros e um atalho para o diálogo com a lista completa.
-function SupplierRanking({ suppliers, limit, onOpenAll }: { suppliers: { supplier: string; total: number; recebido: number; naoChegou: number }[]; limit?: number; onOpenAll?: () => void }) {
+function SupplierRanking({ suppliers, limit, onOpenAll }: { suppliers: Supplier[]; limit?: number; onOpenAll?: () => void }) {
   if (!suppliers.length) return <Empty text="Sem ocorrências." />;
-  const highest = Math.max(1, ...suppliers.map(supplier => supplier.naoChegou));
+  const highest = Math.max(1, ...suppliers.map(occurrenceCount));
   const shown = limit ? suppliers.slice(0, limit) : suppliers;
   return <div className="space-y-4">
     {shown.map((supplier, index) => <Meter key={supplier.supplier}
-      title={(index + 1) + ". " + supplier.supplier} strong={numberBR(supplier.naoChegou)}
-      width={supplier.naoChegou / highest * 100} tone="#f0525f"
-      footnote={"Taxa de recebimento no período: " + percentBR(supplier.total ? supplier.recebido / supplier.total * 100 : 0)
+      title={(index + 1) + ". " + supplier.supplier} strong={numberBR(occurrenceCount(supplier))}
+      width={occurrenceCount(supplier) / highest * 100} tone="#f0525f"
+      footnote={numberBR(supplier.naoChegou) + " não recebidos · " + numberBR(supplier.naoCompareceu) + " não comparecimentos · " + numberBR(supplier.recusado) + " recusados. Taxa: " + percentBR(supplier.total ? supplier.recebido / supplier.total * 100 : 0)
         + " (" + numberBR(supplier.recebido) + " de " + numberBR(supplier.total) + ")"} />)}
-    {onOpenAll && suppliers.length > shown.length && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver todos os fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
+    {onOpenAll && suppliers.length > shown.length && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver ranking de fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
   </div>;
 }
 
 // Ranking de fornecedores que entregam sem agenda: barra proporcional ao
 // líder, "N vez(es)" em destaque e a última ocorrência no rodapé. O card
 // mostra o top 5; a lista completa fica no diálogo de detalhamento.
-function SupplierWithoutAgenda({ suppliers, onOpenAll }: { suppliers: SemAgendaSupplier[]; onOpenAll: () => void }) {
-  const total = suppliers.reduce((sum, supplier) => sum + supplier.vezes, 0);
-  if (!suppliers.length) return <Empty text="Nenhuma entrega sem agenda no período." />;
+function SupplierWithoutAgenda({ suppliers, total, received, supplierCount, onOpenAll }: { suppliers: SemAgendaSupplier[]; total: number; received: number; supplierCount?: number; onOpenAll: () => void }) {
+  if (!suppliers.length) return <Empty text="Nenhum registro sem agenda no período." />;
   const highest = Math.max(...suppliers.map(supplier => supplier.vezes));
   return <div className="space-y-4">
-    <p className="text-xs text-slate-400">{numberBR(total)} entrega(s) sem agenda no período, envolvendo {numberBR(suppliers.length)} fornecedor(es).</p>
+    <p className="text-xs text-slate-400">{numberBR(total)} registro(s) sem agenda · {numberBR(received)} recebido(s){supplierCount !== undefined && " · " + numberBR(supplierCount) + " fornecedor(es)"}.</p>
     {suppliers.slice(0, 5).map((supplier, index) => <Meter key={supplier.supplier} title={(index + 1) + ". " + supplier.supplier}
       strong={numberBR(supplier.vezes) + (supplier.vezes === 1 ? " vez" : " vezes")}
       width={supplier.vezes / highest * 100} tone="#ffbf40"
-      footnote={"Última ocorrência: " + formatDay(supplier.ultima)} />)}
+      footnote={numberBR(supplier.recebidos) + " recebidos · Último registro: " + formatDay(supplier.ultima)} />)}
     {suppliers.length > 5 && <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver todos os fornecedores <ArrowRight size={13} aria-hidden="true" /></Button>}
   </div>;
 }
@@ -238,6 +239,7 @@ export function ReportsPage() {
   const [occurrenceInput, setOccurrenceInput] = useState("");
   const [occurrenceQuery, setOccurrenceQuery] = useState("");
   const [occurrenceOffset, setOccurrenceOffset] = useState(0);
+  const [occurrenceType, setOccurrenceType] = useState<OccurrenceType>("todos");
   const [dialog, setDialog] = useState<DialogName | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const stores = useQuery({ queryKey: ["manager-report", "stores"], queryFn: getStores, staleTime: 60_000 });
@@ -247,15 +249,17 @@ export function ReportsPage() {
     queryKey: ["manager-report", "previous", applied], queryFn: () => getReport({ ...previous, stores: applied.stores }),
     enabled: applied.compare,
   });
+  const recent = useQuery({ queryKey: ["manager-report", "recent", applied], queryFn: () => getOccurrences(applied, 0, "") });
   const occurrences = useQuery({
-    queryKey: ["manager-report", "occurrences", applied, occurrenceOffset, occurrenceQuery],
-    queryFn: () => getOccurrences(applied, occurrenceOffset, occurrenceQuery),
+    queryKey: ["manager-report", "occurrences", applied, occurrenceOffset, occurrenceQuery, occurrenceType],
+    queryFn: () => getOccurrences(applied, occurrenceOffset, occurrenceQuery, occurrenceType),
+    enabled: dialog === "occurrences",
   });
   const summary = useMemo(() => totals(report.data?.rows ?? []), [report.data]);
   const priorSummary = useMemo(() => applied.compare && previousReport.data ? totals(previousReport.data.rows) : null, [applied.compare, previousReport.data]);
   const units = useMemo(() => group(report.data?.rows ?? [], "store"), [report.data]);
   const rateDifference = priorSummary && priorSummary.total > 0 ? rate(summary) - rate(priorSummary) : null;
-  const working = report.isFetching || occurrences.isFetching;
+  const working = report.isFetching || recent.isFetching || occurrences.isFetching;
   const apply = (event: FormEvent) => {
     event.preventDefault();
     if (!validRange(draft.start, draft.end)) {
@@ -405,7 +409,7 @@ export function ReportsPage() {
             <SupplierRanking suppliers={report.data.suppliers} limit={5} onOpenAll={() => setDialog("suppliers")} />
           </Card>
           <Card title="Fornecedores sem agenda">
-            <SupplierWithoutAgenda suppliers={report.data.semAgendaSuppliers} onOpenAll={() => setDialog("withoutAgenda")} />
+            <SupplierWithoutAgenda suppliers={report.data.semAgendaSuppliers} total={summary.semAgenda} received={summary.semAgendaRecebidos} supplierCount={report.data.manualSupplierCount} onOpenAll={() => setDialog("withoutAgenda")} />
           </Card>
         </div>
         {/* Lista completa de ocorrências fica no diálogo; o card resume os 5
@@ -413,8 +417,8 @@ export function ReportsPage() {
         <div className="grid grid-cols-1 gap-4">
           <Card title="Ocorrências recentes"
             action={<Button variant="ghost" size="sm" className="text-sky-300" onClick={() => setDialog("occurrences")}>Ver todas as ocorrências <ArrowRight size={13} aria-hidden="true" /></Button>}>
-            {occurrences.isPending ? <Empty text="Carregando ocorrências…" /> : occurrences.isError
-              ? <Empty text="Ocorrências indisponíveis." /> : <OccurrenceItems rows={occurrences.data?.rows.slice(0, 5) ?? []} />}
+            {recent.isPending ? <Empty text="Carregando ocorrências…" /> : recent.isError
+              ? <Empty text="Ocorrências indisponíveis." /> : <OccurrenceItems rows={recent.data?.rows.slice(0, 5) ?? []} />}
           </Card>
         </div>
       </div>
@@ -434,10 +438,13 @@ export function ReportsPage() {
       </Panel>
     </ReportDialog>}
     {dialog === "occurrences" && <ReportDialog title="Todas as ocorrências" description="Registros, motivos e origem da classificação." onClose={() => setDialog(null)}>
-      <Panel title="Ocorrências e observações" hint="Não recebidos registrados e não comparecimentos por fechamento">
+      <Panel title="Ocorrências e observações" hint="Não recebidos, não comparecimentos e recusas">
         <form className="mb-4 flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); setOccurrenceQuery(occurrenceInput.trim()); setOccurrenceOffset(0); }}>
           <input type="search" aria-label="Buscar ocorrência por fornecedor ou protocolo" maxLength={80} value={occurrenceInput}
             onChange={event => setOccurrenceInput(event.target.value)} className={input + " max-w-sm"} placeholder="Fornecedor ou protocolo" />
+          <select aria-label="Tipo de ocorrência" className={input + " max-w-[190px]"} value={occurrenceType} onChange={event => { setOccurrenceType(event.target.value as OccurrenceType); setOccurrenceOffset(0); }}>
+            <option value="todos">Todas as situações</option><option value="nao_recebido">Não recebido</option><option value="nao_compareceu">Não compareceu</option><option value="recusado">Recusado</option>
+          </select>
           <Button type="submit" size="sm">Buscar</Button>
           {occurrenceQuery && <Button size="sm" variant="secondary" onClick={() => { setOccurrenceInput(""); setOccurrenceQuery(""); setOccurrenceOffset(0); }}>Limpar</Button>}
         </form>
@@ -458,31 +465,33 @@ export function ReportsPage() {
         </>}
       </Panel>
     </ReportDialog>}
-    {dialog === "withoutAgenda" && <ReportDialog title="Fornecedores sem agenda" description="Fornecedores que entregaram sem agendamento no período, ordenados pelo número de ocorrências." onClose={() => setDialog(null)}>
-      <Panel title="Entregas sem agenda" hint="Quantas vezes cada fornecedor chegou sem agendamento e a data da última ocorrência.">
-        <ReportTable label="Fornecedores sem agenda" headings={["#", "Fornecedor", "Vezes sem agenda", "Última ocorrência"]}>
+    {dialog === "withoutAgenda" && <ReportDialog title="Fornecedores sem agenda" description="Até 12 fornecedores com mais registros manuais, conforme os filtros." onClose={() => setDialog(null)}>
+      <Panel title="Entregas sem agenda" hint="Registros sem agenda, recebidos e data do último registro.">
+        <ReportTable label="Fornecedores sem agenda" headings={["#", "Fornecedor", "Vezes sem agenda", "Recebidos", "Última ocorrência"]}>
           {(report.data?.semAgendaSuppliers ?? []).map((supplier, index) => <tr key={supplier.supplier}>
             <td className={cells + " tabular-nums text-slate-400"}>{index + 1}</td>
             <td className={cells}>{supplier.supplier}</td>
             <td className={cells + " font-semibold tabular-nums text-amber-300"}>{numberBR(supplier.vezes)}</td>
+            <td className={cells + " tabular-nums"}>{numberBR(supplier.recebidos)}</td>
             <td className={cells + " tabular-nums"}>{formatDay(supplier.ultima)}</td>
           </tr>)}
           {!(report.data?.semAgendaSuppliers ?? []).length && <tr><td colSpan={4} className={cells}>Nenhuma entrega sem agenda no período.</td></tr>}
         </ReportTable>
       </Panel>
     </ReportDialog>}
-    {dialog === "suppliers" && <ReportDialog title="Fornecedores com ocorrências" description="Fornecedores com mais não recebidos no período, com a taxa de recebimento de cada um." onClose={() => setDialog(null)}>
-      <Panel title="Não recebidos por fornecedor" hint="Ranking limitado aos fornecedores com ocorrências no período.">
-        <ReportTable label="Fornecedores com ocorrências" headings={["#", "Fornecedor", "Não recebidos", "Agendamentos", "Recebidos", "Taxa de recebimento"]}>
+    {dialog === "suppliers" && <ReportDialog title="Fornecedores com ocorrências" description="Até 12 fornecedores com mais ocorrências no período, com a taxa de recebimento de cada um." onClose={() => setDialog(null)}>
+      <Panel title="Ocorrências por fornecedor" hint="Não recebidos, não comparecimentos e recusas; ordenado pela soma.">
+        <ReportTable label="Fornecedores com ocorrências" headings={["#", "Fornecedor", "Ocorrências", "Não recebidos", "Não compareceu", "Recusados", "Agendamentos", "Recebidos", "Taxa de recebimento"]}>
           {(report.data?.suppliers ?? []).map((supplier, index) => <tr key={supplier.supplier}>
             <td className={cells + " tabular-nums text-slate-400"}>{index + 1}</td>
             <td className={cells}>{supplier.supplier}</td>
-            <td className={cells + " font-semibold tabular-nums text-rose-300"}>{numberBR(supplier.naoChegou)}</td>
+            <td className={cells + " font-semibold tabular-nums text-rose-300"}>{numberBR(occurrenceCount(supplier))}</td>
+            <td className={cells}>{numberBR(supplier.naoChegou)}</td><td className={cells}>{numberBR(supplier.naoCompareceu)}</td><td className={cells}>{numberBR(supplier.recusado)}</td>
             <td className={cells + " tabular-nums"}>{numberBR(supplier.total)}</td>
             <td className={cells + " tabular-nums"}>{numberBR(supplier.recebido)}</td>
             <td className={cells + " font-semibold text-sky-200"}>{percentBR(supplier.total ? supplier.recebido / supplier.total * 100 : 0)}</td>
           </tr>)}
-          {!(report.data?.suppliers ?? []).length && <tr><td colSpan={6} className={cells}>Nenhum fornecedor com ocorrências no período.</td></tr>}
+          {!(report.data?.suppliers ?? []).length && <tr><td colSpan={9} className={cells}>Nenhum fornecedor com ocorrências no período.</td></tr>}
         </ReportTable>
       </Panel>
     </ReportDialog>}
