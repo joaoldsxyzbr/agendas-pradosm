@@ -39,3 +39,29 @@ export async function login(login: string, senha: string): Promise<SessionUser> 
 export async function logout(): Promise<void> {
   await apiFetch("/api/auth/logout", { method: "POST" });
 }
+
+const quickAccountsSchema = z.object({
+  accounts: z.array(z.object({ login: z.string(), label: z.string() })),
+});
+export function isLocalMockOrigin(): boolean {
+  return window.location.origin === "http://127.0.0.1:8787";
+}
+export async function loadQuickAccounts() {
+  if (!isLocalMockOrigin()) return [];
+  try {
+    const raw = await apiFetch<unknown>("/api/local-mock/accounts");
+    return quickAccountsSchema.parse(raw).accounts;
+  } catch {
+    // Wrangler local e servidor publicado não oferecem esse endpoint.
+    return [];
+  }
+}
+export async function quickLogin(login: string): Promise<SessionUser> {
+  if (!isLocalMockOrigin()) throw new Error("Acesso rápido indisponível.");
+  const raw = await apiFetch<unknown>("/api/local-mock/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login }),
+  });
+  return userSchema.parse(raw);
+}

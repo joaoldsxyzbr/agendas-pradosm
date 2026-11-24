@@ -60,7 +60,30 @@ try {
   assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:viewer.cookie}})).status,403);
   assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:admin.cookie}})).status,200);
   assert.equal((await fetch(base+"/login")).status,200);
-  console.log("Smoke local: D1, login, isolamento e SPA verificados.");
+  const quickList=await fetch(base+"/api/local-mock/accounts");
+  if(native){
+    assert.equal(quickList.status,200);
+    const list=await quickList.json();
+    assert.equal(list.accounts.length,5);
+    assert.ok(list.accounts.every(a=>Object.keys(a).sort().join(",")==="label,login"));
+    const fast=(login,origin=base)=>fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login})});
+    assert.equal((await fast("admin.mock","https://example.invalid")).status,403);
+    assert.equal((await fast("unknown.mock")).status,400);
+    for(const [name,role] of [["admin.mock","admin"],["gerente.mock","visualizador"],["conferente01.mock","conferente"]]){
+      const response=await fast(name);
+      assert.equal(response.status,200);
+      assert.equal((await response.json()).papel,role);
+      const cookie=response.headers.get("set-cookie")?.split(";")[0];
+      assert.ok(cookie);
+      const me=await fetch(base+"/api/auth/me",{headers:{Cookie:cookie}});
+      assert.equal(me.status,200);
+      assert.equal((await me.json()).papel,role);
+    }
+  }else{
+    assert.equal(quickList.status,404);
+    assert.equal((await fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:base},body:JSON.stringify({login:"admin.mock"})})).status,404);
+  }
+  console.log("Smoke local: D1, login, isolamento, acesso rápido e SPA verificados.");
 } finally {
   if(!exited)child.kill();
   await Promise.race([done,delay(3000)]);

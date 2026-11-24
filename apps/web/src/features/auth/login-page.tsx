@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
 import { LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import { homeForRole, login } from "./session";
+import { homeForRole, login, isLocalMockOrigin, loadQuickAccounts, quickLogin } from "./session";
 import { useSession } from "@/app/session-query";
 
 export function LoginPage() {
@@ -14,8 +14,14 @@ export function LoginPage() {
   const [loginValue, setLoginValue] = useState("");
   const [senha, setSenha] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const { data: quickAccounts = [] } = useQuery({
+    queryKey: ["local-mock-accounts"],
+    queryFn: loadQuickAccounts,
+    enabled: isLocalMockOrigin() && !user && !isPending && !isError,
+    retry: false,
+  });
   const signin = useMutation({
-    mutationFn: () => login(loginValue.trim(), senha),
+    mutationFn: (account?: string) => account ? quickLogin(account) : login(loginValue.trim(), senha),
     onSuccess: (person) => {
       // Troca de conta não pode herdar o cache do usuário anterior: o sino
       // abriria com lidos e eventos de outra sessão (bug de 12/11/2026).
@@ -56,6 +62,15 @@ export function LoginPage() {
         {errorMessage && <p role="alert" className="text-xs text-rose-300">{errorMessage}</p>}
         <Button type="submit" disabled={signin.isPending} className="mt-1 w-full">{signin.isPending ? "Entrando…" : "Entrar"}</Button>
       </form>
+      {quickAccounts.length > 0 && <section aria-label="Acesso rápido local" className="mt-5 grid gap-2 border-t border-slate-700 pt-4">
+        <h2 className="text-xs font-bold text-sky-300">Acesso rápido · ambiente local</h2>
+        <p className="text-xs text-slate-400">Escolha uma conta fictícia para entrar sem digitar a senha.</p>
+        {quickAccounts.map(account => <Button key={account.login} type="button" variant="outline" disabled={signin.isPending}
+          className="w-full justify-start"
+          onClick={() => { setErrorMessage(""); signin.mutate(account.login); }}>
+          {account.label}
+        </Button>)}
+      </section>}
       <p className="mt-5 text-center text-[11px] text-slate-500">Agenda Prado · Gestão de recebimentos</p>
     </section>
   </main>;

@@ -63,7 +63,7 @@ npm ci --legacy-peer-deps
 npm run dev:mock
 ```
 
-Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations em SQLite local e popula dados sintéticos. O modo padrão não usa Workerd/Wrangler. Para testar o runtime Cloudflare e o D1 emulado, use `npm run dev:mock:wrangler` (estado separado). Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
+Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations em SQLite local e popula dados sintéticos. O modo padrão não usa Workerd/Wrangler. A tela de login oferece acesso rápido às cinco contas fictícias (sem digitar senha). O servidor Node encaminha o pedido ao login real; as rotas de acesso rápido não existem no Worker publicado. Se a senha de uma conta for alterada, use o formulário manual. Para testar o runtime Cloudflare e o D1 emulado, use `npm run dev:mock:wrangler` (estado separado). Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
 
 | Login fictício | Perfil |
 | --- | --- |

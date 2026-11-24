@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { app } from "../worker/app.ts";
 import { openLocalDatabase } from "./local-sqlite.mjs";
 import { mockStatePath } from "./mock-state.mjs";
-import { buildMockSql, MOCK_ACCOUNTS, mockImportCsv } from "./mock-data.mjs";
+import { buildMockSql, MOCK_ACCOUNTS, mockId, mockImportCsv } from "./mock-data.mjs";
 
 const root=fileURLToPath(new URL("../",import.meta.url));
 const state=join(mockStatePath(root),"node");
@@ -57,6 +57,32 @@ else{
     }},
     REALTIME_HUB:{idFromName(){return "local";},get(){return {fetch:async()=>new Response("Realtime desativado no modo local",{status:503})};}}
   };
+  // Somente este servidor Node (loopback) possui estes endpoints. Não fazem parte do Worker.
+  const quickAccounts=MOCK_ACCOUNTS.map(account=>({
+    login:account.login,
+    label:account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
+  }));
+  function quickJson(value,status=200){
+    return Response.json(value,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
+  }
+  async function quickLogin(request){
+    if(request.headers.get("origin")!==base || request.headers.get("sec-fetch-site")==="cross-site")
+      return quickJson({error:"ORIGEM_INVALIDA",message:"Acesso rápido permitido apenas no ambiente local."},403);
+    if(!request.headers.get("content-type")?.startsWith("application/json"))
+      return quickJson({error:"REQUISICAO_INVALIDA",message:"Requisição inválida."},400);
+    const body=await request.json().catch(()=>null);
+    const account=MOCK_ACCOUNTS.find(a=>a.login===body?.login);
+    if(!account)return quickJson({error:"CONTA_INVALIDA",message:"Conta fictícia inválida."},400);
+    const fixture=await local.DB.prepare("SELECT id FROM usuarios WHERE id=? AND login=? AND ativo=1 AND excluido_em IS NULL")
+      .bind(mockId("user:"+account.login),account.login).first();
+    if(!fixture)return quickJson({error:"CONTA_INDISPONIVEL",message:"Conta fictícia indisponível. Use o login manual."},401);
+    // Usa a autenticação verdadeira: senha, situação da conta, sessão e rate limit.
+    // A senha permanece no servidor; não é enviada ao navegador.
+    return app.fetch(new Request(base+"/api/auth/login",{
+      method:"POST",headers:{"Content-Type":"application/json",Origin:base},
+      body:JSON.stringify({login:account.login,senha:password})
+    }),env);
+  }
   function staticResponse(path){
     const asset=files.get(path)||(path.startsWith("/assets/")?null:files.get("/index.html"));
     if(!asset)return new Response("Not found",{status:404});
@@ -79,7 +105,10 @@ else{
           chunks.push(chunk);
         }
         const body=method==="GET"||method==="HEAD"?undefined:Buffer.concat(chunks);
-        response=await app.fetch(new Request(url,{method,headers,body}),env);
+        const request=new Request(url,{method,headers,body});
+        if(url.pathname==="/api/local-mock/accounts"&&method==="GET")response=quickJson({accounts:quickAccounts});
+        else if(url.pathname==="/api/local-mock/login"&&method==="POST")response=await quickLogin(request);
+        else response=await app.fetch(request,env);
       }else if(method==="GET"||method==="HEAD"){response=staticResponse(url.pathname);}
       else{response=new Response("Method not allowed",{status:405});}
       for(const [key,value] of response.headers)if(key!=="set-cookie")res.setHeader(key,value);
