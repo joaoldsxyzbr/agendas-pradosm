@@ -50,6 +50,31 @@ As branches `main` (produção) e `preview` (homologação) utilizam a interface
 
 Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/README.md) e [Publicação segura](docs/operations/production-release.md). Ambas as branches usam React; cada ambiente mantém suas próprias configurações e recursos Cloudflare.
 
+## Desenvolvimento local com dados fictícios (mock)
+
+Para testar a aplicação completa (React, Worker, autenticação e D1 local), sem conta Cloudflare e sem dados reais, use Node.js 22.18+ e, na raiz do projeto:
+
+```bash
+npm ci --legacy-peer-deps
+npm run dev:mock
+```
+
+Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migrations no D1 local e popula dados sintéticos. Ele mostra a senha inicial gerada no terminal. Não é necessário criar `.dev.vars` para esse modo: o segredo local é gerado separadamente.
+
+| Login fictício | Perfil |
+| --- | --- |
+| `admin.mock` | Administrador |
+| `gerente.mock` | Visualizador |
+| `conferente01.mock` | Conferente da MOCK01 |
+| `conferente02.mock` | Conferente da MOCK02 |
+| `conferente03.mock` | Conferente da MOCK03 |
+
+A base inclui três lojas, agendas dos últimos seis dias e de hoje (data operacional de São Paulo), fornecedores recebidos, não recebidos, pendentes e sem agenda, históricos, auditoria e um aviso. O CSV `.wrangler/mock-state/importacao-mock.csv` permite testar a importação de amanhã nas três lojas. O perfil Agendador será incluído quando a issue #248 integrar esse papel à autenticação; não simular permissões no cliente.
+
+Tudo fica em `.wrangler/mock-state/` (ignorado pelo Git), separado do estado do modo `npm run dev`. O servidor é restrito ao loopback e usa `--local`, o UUID sintético de `wrangler.local.jsonc` e WebSocket desligado (fallback HTTP). Não usa D1 de preview ou produção, bootstrap remoto, R2 ou deploy.
+
+Reexecutar `npm run dev:mock` preserva alterações em registros existentes; cria apenas os fixtures ausentes e novas datas. Senha inicial e segredo ficam em `.wrangler/mock-state/credentials.json`, exclusivamente local. Se alterar uma senha na interface, o seed não a redefine. Para apenas preparar/atualizar o banco e o CSV, com o servidor parado, use `npm run mock:seed`. Para iniciar um ambiente totalmente novo, pare o servidor e **renomeie** o diretório `.wrangler/mock-state` para um backup local antes de executar o comando novamente.
+
 ## Desenvolvimento local
 
 Pré-requisitos:
