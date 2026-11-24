@@ -1,24 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Check, Megaphone, Trash2 } from "lucide-react";
+import { Bell, Check, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Role } from "@/features/auth/session";
-import { getAvisos, inativarAviso, markAvisoLido } from "./api";
-import { formatAvisoStamp, type AvisosResponse } from "./model";
+import { getAvisos, markAvisoLido, marcarTodosLidos } from "./api";
+import { formatAvisoStamp, rotuloLojasAviso, type AvisosResponse } from "./model";
 import { PublishAvisoDialog } from "./publish-aviso-dialog";
 
-// Sino de avisos/notificações in-app do cabeçalho: badge de não lidos,
-// lista com marcar-como-lido otimista e, para admin, publicar/inativar.
+// Sino de avisos/notificações in-app do cabeçalho: badge de não lidos
+// (pulsando em vermelho enquanto houver urgente não lido), lista única do
+// mais recente para o mais antigo — o aviso é registro permanente, o
+// histórico é a própria lista — e "Marcar todos" para o usuário.
 // Todos os papéis autenticados veem os avisos (spec 2026-11-11, decisão 3).
 export function AvisosBell({ papel }: { papel: Role }) {
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [olderError, setOlderError] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const isAdmin = papel === "admin";
   const avisos = useQuery({
     queryKey: ["avisos"],
-    queryFn: getAvisos,
+    queryFn: () => getAvisos(),
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
@@ -40,6 +45,30 @@ export function AvisosBell({ papel }: { papel: Role }) {
     };
   }, [open]);
 
+  // Carregar páginas antigas é opt-in: o polling continua consultando apenas
+  // os 50 avisos mais recentes, sem multiplicar leituras no D1.
+  useEffect(() => {
+    if (!open) {
+      setOlderPages([]);
+      setOlderError(false);
+    }
+  }, [open]);
+
+  const loadMore = async () => {
+    const nextCursor = (olderPages.at(-1) ?? avisos.data)?.nextCursor;
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setOlderError(false);
+    try {
+      const page = await getAvisos(nextCursor);
+      setOlderPages(current => [...current, page]);
+    } catch {
+      setOlderError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const patchQuery = (patch: (current: AvisosResponse) => AvisosResponse) => {
     client.setQueryData<AvisosResponse>(["avisos"], current => (current ? patch(current) : current));
   };
@@ -49,41 +78,57 @@ export function AvisosBell({ papel }: { papel: Role }) {
     onMutate: async id => {
       await client.cancelQueries({ queryKey: ["avisos"] });
       const previous = client.getQueryData<AvisosResponse>(["avisos"]) ?? null;
+      const previousOlder = olderPages;
+      const found = [ ...(previous?.avisos ?? []), ...olderPages.flatMap(page => page.avisos) ]
+        .find(aviso => aviso.id === id);
+      const decrement = found && !found.lido ? 1 : 0;
+      setOlderPages(pages => pages.map(page => ({
+        ...page, avisos: page.avisos.map(aviso => aviso.id === id ? { ...aviso, lido: true } : aviso),
+      })));
       patchQuery(current => ({
-        naoLidos: Math.max(0, current.naoLidos - (current.avisos.find(a => a.id === id)?.lido ? 0 : 1)),
+        ...current,
+        naoLidos: Math.max(0, current.naoLidos - decrement),
         avisos: current.avisos.map(a => (a.id === id ? { ...a, lido: true } : a)),
       }));
-      return { previous };
+      return { previous, previousOlder };
     },
     onError: (_error, _id, context) => {
       if (context?.previous) client.setQueryData(["avisos"], context.previous);
+      if (context?.previousOlder) setOlderPages(context.previousOlder);
     },
     onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
   });
 
-  const inativar = useMutation({
-    mutationFn: inativarAviso,
-    onMutate: async id => {
+  const marcarTodos = useMutation({
+    mutationFn: marcarTodosLidos,
+    onMutate: async () => {
       await client.cancelQueries({ queryKey: ["avisos"] });
       const previous = client.getQueryData<AvisosResponse>(["avisos"]) ?? null;
-      patchQuery(current => {
-        const alvo = current.avisos.find(a => a.id === id);
-        return {
-          naoLidos: Math.max(0, current.naoLidos - (alvo && !alvo.lido ? 1 : 0)),
-          avisos: current.avisos.filter(a => a.id !== id),
-        };
-      });
-      return { previous };
+      const previousOlder = olderPages;
+      setOlderPages(pages => pages.map(page => ({
+        ...page, avisos: page.avisos.map(aviso => ({ ...aviso, lido: true })),
+      })));
+      patchQuery(current => ({
+        ...current,
+        naoLidos: 0,
+        avisos: current.avisos.map(a => ({ ...a, lido: true })),
+      }));
+      return { previous, previousOlder };
     },
-    onError: (_error, _id, context) => {
+    onError: (_error, _void, context) => {
       if (context?.previous) client.setQueryData(["avisos"], context.previous);
+      if (context?.previousOlder) setOlderPages(context.previousOlder);
     },
     onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
   });
 
   const data = avisos.data;
   const naoLidos = data?.naoLidos ?? 0;
-  const lista = data?.avisos ?? [];
+  const lista = [...new Map([...(data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)]
+    .map(aviso => [aviso.id, aviso] as const)).values()];
+  const lastPage = olderPages.at(-1) ?? data;
+  const hasMore = Boolean(lastPage?.hasMore && lastPage.nextCursor);
+  const urgenteNaoLido = lista.some(a => a.urgente && !a.lido);
   const ariaLabel = naoLidos > 0 ? `Avisos, ${naoLidos} não lidos` : "Avisos";
 
   return <div ref={root} className="relative">
@@ -93,17 +138,25 @@ export function AvisosBell({ papel }: { papel: Role }) {
       <Bell size={16} aria-hidden="true" />
       {naoLidos > 0 && <span data-testid="avisos-badge"
         aria-hidden="true"
-        className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-4 text-white">
+        className={`absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold leading-4 text-white ${
+          urgenteNaoLido ? "animate-pulse bg-red-500" : "bg-rose-500"}`}>
         {naoLidos > 99 ? "99+" : naoLidos}
       </span>}
     </Button>
     {open && <div data-testid="avisos-panel" role="dialog" aria-label="Avisos"
       className="absolute right-0 top-11 z-40 w-[min(92vw,420px)] overflow-hidden rounded-xl border border-[#45617c] bg-[#162538] text-slate-100 shadow-2xl">
-      <div className="flex items-center justify-between gap-2 border-b border-[#34516d] bg-[#1a2b40] px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#34516d] bg-[#1a2b40] px-4 py-2.5">
         <strong className="text-sm">Avisos</strong>
-        {isAdmin && <Button size="sm" variant="secondary" onClick={() => setPublishing(true)}>
-          <Megaphone size={14} aria-hidden="true" /> Novo aviso
-        </Button>}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {naoLidos > 0 && <Button size="sm" variant="secondary"
+            aria-label="Marcar todos os avisos como lidos"
+            disabled={marcarTodos.isPending} onClick={() => marcarTodos.mutate()}>
+            <Check size={13} aria-hidden="true" /> Marcar todos
+          </Button>}
+          {isAdmin && <Button size="sm" variant="secondary" onClick={() => setPublishing(true)}>
+            <Megaphone size={14} aria-hidden="true" /> Novo aviso
+          </Button>}
+        </div>
       </div>
       <div className="max-h-[min(60dvh,420px)] divide-y divide-[#304865] overflow-y-auto">
         {avisos.isError && <p role="alert" className="p-4 text-xs text-rose-300">Não foi possível carregar os avisos.</p>}
@@ -112,33 +165,39 @@ export function AvisosBell({ papel }: { papel: Role }) {
         )}
         {lista.map(aviso => <article key={aviso.id}
           aria-label={aviso.titulo}
-          className={aviso.lido ? "bg-[#162538] p-3.5" : "bg-sky-500/5 p-3.5"}>
+          className={`p-3.5 ${aviso.lido ? "" : aviso.urgente ? "border-l-2 border-rose-500/70 bg-rose-500/10" : "bg-sky-500/5"}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                 <span className={aviso.tipo === "evento"
                   ? "rounded bg-sky-500/15 px-1.5 py-0.5 font-semibold text-sky-300"
                   : "rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300"}>
                   {aviso.tipo === "evento" ? "Evento" : "Aviso"}
                 </span>
-                {formatAvisoStamp(aviso.criadoEm)}
+                {aviso.urgente && (
+                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-semibold text-rose-200">Urgente</span>
+                )}
+                <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-slate-300">{rotuloLojasAviso(aviso.lojas)}</span>
+                {formatAvisoStamp(aviso.criadoEm)} · por {aviso.autor}
               </p>
               <h3 className="mt-1 text-sm font-bold text-slate-100">{aviso.titulo}</h3>
               <p className="mt-1 break-words text-xs text-slate-300">{aviso.mensagem}</p>
-              {aviso.expiraEm && <p className="mt-1 text-[11px] text-slate-500">Expira em {formatAvisoStamp(aviso.expiraEm)}</p>}
             </div>
             <div className="flex shrink-0 flex-col gap-1.5">
               {!aviso.lido && <Button size="sm" variant="secondary" aria-label={`Marcar aviso como lido: ${aviso.titulo}`}
-                disabled={marcarLido.isPending} onClick={() => marcarLido.mutate(aviso.id)}>
+                disabled={marcarLido.isPending && marcarLido.variables === aviso.id}
+                onClick={() => marcarLido.mutate(aviso.id)}>
                 <Check size={13} aria-hidden="true" /> Lido
-              </Button>}
-              {isAdmin && <Button size="sm" variant="danger" aria-label={`Inativar aviso: ${aviso.titulo}`}
-                disabled={inativar.isPending} onClick={() => inativar.mutate(aviso.id)}>
-                <Trash2 size={13} aria-hidden="true" /> Inativar
               </Button>}
             </div>
           </div>
         </article>)}
+        {olderError && <p role="alert" className="p-3 text-xs text-rose-300">Não foi possível carregar avisos antigos.</p>}
+        {hasMore && <div className="p-3 text-center">
+          <Button size="sm" variant="secondary" disabled={loadingMore} onClick={() => { void loadMore(); }}>
+            {loadingMore ? "Carregando..." : "Carregar avisos anteriores"}
+          </Button>
+        </div>}
       </div>
     </div>}
     {publishing && <PublishAvisoDialog onClose={() => setPublishing(false)} />}

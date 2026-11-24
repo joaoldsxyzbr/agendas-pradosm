@@ -4,39 +4,86 @@ import { auditStatement } from "../repositories/audit.ts";
 import { publicarAvisoSchema } from "../../shared/avisos.ts";
 import {
   avisoJson,
-  inativarAvisoStatement,
-  listActiveAvisos,
+  listAvisos,
   markAvisoLido,
-  publishAvisoStatement
+  markTodosAvisosLidos,
+  publishAvisoStatements
 } from "../repositories/avisos.ts";
 
-// Rotas de avisos/notificações in-app (spec 2026-11-11).
+// Rotas de avisos/notificações in-app (spec 2026-11-11, melhorias de 12/11).
 // - /api/avisos: qualquer papel autenticado lê e marca os próprios avisos
-//   como lidos. O visualizador (dashboard) usa só estas rotas.
-// - /api/admin/avisos: publicação e inativação, exclusivas do admin
-//   (a cadeia /api/admin/* já exige requireAuth + requireAdmin).
+//   como lidos. O visualizador (dashboard) usa só estas rotas. Avisos são
+//   registro permanente: a lista é o histórico completo (mais recentes
+//   primeiro) e ninguém publica/exclui por aqui.
+// - /api/admin/avisos: publicação exclusiva do admin (a cadeia /api/admin/*
+//   já exige requireAuth + requireAdmin). Não existe inativação/exclusão.
+// - Visibilidade (decisão de 12/11/2026): o conferente recebe apenas os
+//   avisos publicados pelo admin; eventos automáticos do sistema são do
+//   admin/gerente (visualizador).
 
 const avisoRoutes = new Hono<AppEnv>();
 const adminAvisoRoutes = new Hono<AppEnv>();
 
+// Conferente vê os avisos da sua loja (e os de todas) e nenhum evento; os
+// demais papéis, sem loja, veem tudo (avisos e eventos).
+function lojaDoUsuario(user) {
+  return user.papel === "conferente" ? user.lojaCodigo : null;
+}
+
+function verEventosDoUsuario(user) {
+  return user.papel !== "conferente";
+}
+
 avisoRoutes.get("/", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
-  const { avisos, naoLidos } = await listActiveAvisos(c.env.DB, user.id, new Date().toISOString());
-  return c.json({ avisos: avisos.map(avisoJson), naoLidos });
+  const before = c.req.query("before");
+  const beforeId = c.req.query("beforeId");
+  if ((before && !beforeId) || (!before && beforeId) ||
+      (before && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before) || Number.isNaN(Date.parse(before)))) ||
+      (beforeId && (beforeId.length > 128 || beforeId.length === 0))) {
+    return c.json({ error: "REQUISICAO_INVALIDA", message: "Cursor de avisos inválido." }, 400);
+  }
+  const cursor = before && beforeId ? { criadoEm: before, id: beforeId } : null;
+  const { avisos, naoLidos, hasMore, nextCursor } = await listAvisos(
+    c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor
+  );
+  return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
 });
 
 avisoRoutes.post("/:id/lido", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
   const id = c.req.param("id");
-  const inserted = await markAvisoLido(c.env.DB, id, user.id, new Date().toISOString());
+  const inserted = await markAvisoLido(
+    c.env.DB,
+    id,
+    user.id,
+    new Date().toISOString(),
+    lojaDoUsuario(user),
+    verEventosDoUsuario(user)
+  );
   if (!inserted) {
-    // Idempotente: já lido OU aviso inexistente/inativo. A resposta é a
-    // mesma para não vazar existência de aviso fora da lista ativa.
+    // Idempotente: já lido OU aviso invisível ao usuário (fora do filtro de
+    // loja/tipo) OU inexistente. A resposta é a mesma para não vazar
+    // existência de aviso fora do que o usuário enxerga.
     return c.json({ ok: true, jaLido: true });
   }
   return c.json({ ok: true, jaLido: false });
+});
+
+// "Marcar todos": grava a leitura de todos os avisos visíveis ao usuário.
+avisoRoutes.post("/marcar-todos", async (c) => {
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
+  const marcados = await markTodosAvisosLidos(
+    c.env.DB,
+    user.id,
+    new Date().toISOString(),
+    lojaDoUsuario(user),
+    verEventosDoUsuario(user)
+  );
+  return c.json({ ok: true, marcados });
 });
 
 adminAvisoRoutes.post("/", async (c) => {
@@ -49,28 +96,43 @@ adminAvisoRoutes.post("/", async (c) => {
       400
     );
   }
+  const { titulo, mensagem, urgente } = parsed.data;
+  const lojas = parsed.data.lojas ? [...new Set(parsed.data.lojas)] : null;
+  // Direcionamento só para lojas ativas e existentes.
+  if (lojas) {
+    const rows = await c.env.DB.prepare(
+      "SELECT codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
+    ).all();
+    const validas = new Set((rows.results ?? []).map((row) => row.codigo));
+    if (lojas.some((loja) => !validas.has(loja))) {
+      return c.json(
+        { error: "LOJAS_INVALIDAS", message: "Alguma loja escolhida não existe ou está inativa." },
+        400
+      );
+    }
+  }
   const now = new Date().toISOString();
   const avisoId = crypto.randomUUID();
   const statements = [
-    publishAvisoStatement(c.env.DB, {
+    ...publishAvisoStatements(c.env.DB, {
       id: avisoId,
-      titulo: parsed.data.titulo,
-      mensagem: parsed.data.mensagem,
+      titulo,
+      mensagem,
       criadoPor: user.id,
+      autor: user.nome,
       criadoEm: now,
-      expiraEm: parsed.data.expiraEm ?? null
+      urgente,
+      lojas
     }),
     auditStatement(c.env.DB, {
       userId: user.id,
       action: "aviso_publicado",
       entity: "aviso",
       entityId: avisoId,
-      after: {
-        titulo: parsed.data.titulo,
-        mensagem: parsed.data.mensagem,
-        expiraEm: parsed.data.expiraEm ?? null
-      },
-      details: "Aviso publicado para os usuários do sistema.",
+      after: { titulo, mensagem, urgente, lojas },
+      details: lojas
+        ? `Aviso publicado para as lojas ${lojas.join(", ")}.`
+        : "Aviso publicado para todas as lojas.",
       createdAt: now
     })
   ];
@@ -82,43 +144,18 @@ adminAvisoRoutes.post("/", async (c) => {
     avisoJson({
       id: avisoId,
       tipo: "aviso",
-      titulo: parsed.data.titulo,
-      mensagem: parsed.data.mensagem,
+      titulo,
+      mensagem,
       criado_em: now,
-      expira_em: parsed.data.expiraEm ?? null,
+      urgente: urgente ? 1 : 0,
+      autor: user.nome,
+      // char(31) é o separador do GROUP_CONCAT em repositories/avisos.ts:
+      // código de loja com vírgula não pode quebrar o parse de avisoJson.
+      lojas: lojas ? lojas.join("\u001f") : null,
       lido: 0
     }),
     201
   );
-});
-
-adminAvisoRoutes.post("/:id/inativar", async (c) => {
-  const user = c.get("authUser");
-  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
-  const id = c.req.param("id");
-  const now = new Date().toISOString();
-  const auditId = crypto.randomUUID();
-  const result = await c.env.DB.batch([
-    inativarAvisoStatement(c.env.DB, { avisoId: id, now }),
-    auditStatement(c.env.DB, {
-      id: auditId,
-      onlyIfPreviousWrite: true,
-      userId: user.id,
-      action: "aviso_inativado",
-      entity: "aviso",
-      entityId: id,
-      details: "Aviso removido da lista de avisos ativos.",
-      createdAt: now
-    })
-  ]);
-  const inativou = result[0]?.meta?.changes === 1;
-  if (!inativou) {
-    return c.json(
-      { error: "AVISO_NAO_ENCONTRADO", message: "Aviso não encontrado ou já inativado." },
-      404
-    );
-  }
-  return c.json({ ok: true });
 });
 
 export { avisoRoutes, adminAvisoRoutes };

@@ -10,8 +10,9 @@ import {
 } from "../../shared/avisos.ts";
 import {
   avisoEventoStatement,
-  inativarAvisoStatement,
-  publishAvisoStatement
+  markAvisoLido,
+  markTodosAvisosLidos,
+  publishAvisoStatements
 } from "../../worker/repositories/avisos.ts";
 import { importAgendaBatchAtomic } from "../../worker/repositories/agendas.ts";
 
@@ -22,25 +23,30 @@ const SECRET = "somente-testes-sinteticos-de-avisos-sem-credencial-real";
 // ---------------------------------------------------------------------------
 
 describe("Contratos de avisos (shared/avisos.ts)", () => {
-  it("publicarAvisoSchema aceita aviso válido com e sem expiração", () => {
+  it("publicarAvisoSchema aceita aviso válido com urgência e lojas opcionais", () => {
     const basico = publicarAvisoSchema.safeParse({
       titulo: " Mudança de doca ",
       mensagem: "A partir de amanhã a doca 3 fica fechada."
     });
     assert.equal(basico.success, true);
     assert.equal(basico.success && basico.data.titulo, "Mudança de doca");
-    const comExpiracao = publicarAvisoSchema.safeParse({
-      titulo: "Aviso rápido",
-      mensagem: "Hoje o expediente termina às 16h.",
-      expiraEm: "2026-11-12T23:59:59.000Z"
+    assert.equal(basico.success && basico.data.urgente, false, "urgência padrão é false");
+    assert.equal(basico.success && basico.data.lojas, null, "sem lojas = todas as lojas");
+    const direcionado = publicarAvisoSchema.safeParse({
+      titulo: "Inventário",
+      mensagem: "Amanhã às 7h.",
+      urgente: true,
+      lojas: ["01", "02"]
     });
-    assert.equal(comExpiracao.success, true);
-    const expiracaoExplicitaNula = publicarAvisoSchema.safeParse({
-      titulo: "Aviso permanente",
+    assert.equal(direcionado.success, true);
+    assert.equal(direcionado.success && direcionado.data.urgente, true);
+    assert.deepEqual(direcionado.success && direcionado.data.lojas, ["01", "02"]);
+    const lojasExplicitaNulas = publicarAvisoSchema.safeParse({
+      titulo: "Aviso geral",
       mensagem: "Novo fluxo de recebimento em vigor.",
-      expiraEm: null
+      lojas: null
     });
-    assert.equal(expiracaoExplicitaNula.success, true);
+    assert.equal(lojasExplicitaNulas.success, true);
   });
 
   it("publicarAvisoSchema rejeita limites e formatos inválidos", () => {
@@ -55,7 +61,19 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
       false
     );
     assert.equal(
-      publicarAvisoSchema.safeParse({ titulo: "ok", mensagem: "ok", expiraEm: "amanha" }).success,
+      publicarAvisoSchema.safeParse({ titulo: "ok", mensagem: "ok", urgente: "sim" }).success,
+      false
+    );
+    assert.equal(
+      publicarAvisoSchema.safeParse({ titulo: "ok", mensagem: "ok", lojas: "01" }).success,
+      false
+    );
+    assert.equal(
+      publicarAvisoSchema.safeParse({ titulo: "ok", mensagem: "ok", lojas: [""] }).success,
+      false
+    );
+    assert.equal(
+      publicarAvisoSchema.safeParse({ titulo: "ok", mensagem: "ok", lojas: ["01", ""] }).success,
       false
     );
   });
@@ -63,12 +81,19 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
   it("avisosResponseSchema valida o contrato da listagem", () => {
     const parsed = avisosResponseSchema.parse({
       avisos: [
-        { id: "a1", tipo: "aviso", titulo: "T", mensagem: "M", criadoEm: "2026-11-11T10:00:00.000Z", expiraEm: null, lido: false }
+        { id: "a1", tipo: "aviso", titulo: "T", mensagem: "M", criadoEm: "2026-11-11T10:00:00.000Z",
+          lido: false, urgente: true, autor: "Administrador", lojas: ["01", "07"] },
+        { id: "a2", tipo: "evento", titulo: "T2", mensagem: "M2", criadoEm: "2026-11-11T11:00:00.000Z",
+          lido: true, urgente: false, autor: "Sistema", lojas: null }
       ],
       naoLidos: 1
     });
     assert.equal(parsed.naoLidos, 1);
     assert.equal(parsed.avisos[0].tipo, "aviso");
+    assert.equal(parsed.avisos[0].urgente, true);
+    assert.equal(parsed.avisos[0].autor, "Administrador");
+    assert.deepEqual(parsed.avisos[0].lojas, ["01", "07"]);
+    assert.equal(parsed.avisos[1].lojas, null);
   });
 });
 
@@ -113,11 +138,48 @@ function arityDb() {
 }
 
 describe("Statements de avisos: bind igual aos placeholders", () => {
-  it("publishAvisoStatement e inativarAvisoStatement têm arity exata", () => {
+  it("publishAvisoStatements têm arity exata com e sem lojas", () => {
     const db = arityDb();
-    publishAvisoStatement(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", criadoEm: "t0", expiraEm: null });
-    inativarAvisoStatement(db, { avisoId: "a1", now: "t0" });
+    publishAvisoStatements(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: true, lojas: null });
+    publishAvisoStatements(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: false, lojas: ["01", "02"] });
+    // 1 INSERT do aviso + 2 INSERTs de direcionamento + 1 INSERT + 0.
+    assert.equal(db.statements.length, 4);
+    assert.match(db.statements[0].sql, /INSERT INTO avisos/);
+    assert.match(db.statements[2].sql, /INSERT INTO avisos_lojas/);
+    assert.equal(db.statements[2].values[1], "01");
+    assert.equal(db.statements[3].values[1], "02");
+    const semLojas = arityDb();
+    publishAvisoStatements(semLojas, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: false, lojas: null });
+    assert.equal(semLojas.statements.length, 1);
+  });
+
+  it("markTodosAvisosLidos tem arity exata com e sem filtro de loja/tipo", async () => {
+    const db = arityDb();
+    await markTodosAvisosLidos(db, "conf1", "t0", "01");
+    await markTodosAvisosLidos(db, "adm1", "t0", null);
+    await markTodosAvisosLidos(db, "conf1", "t0", "01", false);
+    await markTodosAvisosLidos(db, "view1", "t0", null, true);
+    assert.equal(db.statements.length, 4);
+    assert.match(db.statements[0].sql, /INSERT OR IGNORE INTO avisos_lidos/);
+    assert.match(db.statements[0].sql, /avisos_lojas/);
+    assert.doesNotMatch(db.statements[1].sql, /avisos_lojas x WHERE x.aviso_id = a.id AND x.loja/);
+    // Sem eventos: o filtro por tipo entra na cláusula WHERE.
+    assert.match(db.statements[2].sql, /a\.tipo = 'aviso'/);
+    assert.doesNotMatch(db.statements[3].sql, /a\.tipo = 'aviso'/);
+  });
+
+  it("markAvisoLido tem arity exata com e sem filtro de loja/tipo", async () => {
+    const db = arityDb();
+    await markAvisoLido(db, "a1", "conf1", "t0", "01", false);
+    await markAvisoLido(db, "a1", "adm1", "t0", null, true);
     assert.equal(db.statements.length, 2);
+    assert.match(db.statements[0].sql, /INSERT OR IGNORE INTO avisos_lidos/);
+    // Conferente: filtro por tipo e por loja dentro do EXISTS de visibilidade.
+    assert.match(db.statements[0].sql, /a\.tipo = 'aviso'/);
+    assert.match(db.statements[0].sql, /avisos_lojas/);
+    // Admin/visualizador: enxerga tudo, só exige que o aviso exista.
+    assert.doesNotMatch(db.statements[1].sql, /a\.tipo = 'aviso'/);
+    assert.doesNotMatch(db.statements[1].sql, /avisos_lojas/);
   });
 
   it("avisoEventoStatement com e sem guard têm arity exata", () => {
@@ -169,6 +231,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT, nome TEXT, ativo INTEGER, excluido_em TEXT, criado_em TEXT, atualizado_em TEXT)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, loja_id TEXT, nome TEXT, login TEXT, senha_hash TEXT, papel TEXT, ativo INTEGER, session_version INTEGER, excluido_em TEXT, criado_em TEXT, atualizado_em TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT, arquivo_original TEXT, criado_por TEXT, status_dia TEXT, concluido_em TEXT, concluido_por TEXT, digitado_em TEXT, digitado_por TEXT, criado_em TEXT, atualizado_em TEXT)",
@@ -176,13 +239,17 @@ function fixture() {
     "CREATE TABLE historico_status (id TEXT PRIMARY KEY, agendamento_id TEXT, usuario_id TEXT, status_anterior TEXT, status_novo TEXT, observacao TEXT, alterado_em TEXT)",
     "CREATE TABLE historico_agenda (id TEXT PRIMARY KEY, agenda_id TEXT, usuario_id TEXT, acao TEXT, detalhes TEXT, alterado_em TEXT)",
     "CREATE TABLE auditoria (id TEXT PRIMARY KEY, usuario_id TEXT, acao TEXT, entidade TEXT, entidade_id TEXT, loja_id TEXT, agenda_id TEXT, agendamento_id TEXT, antes TEXT, depois TEXT, detalhes TEXT, criado_em TEXT)",
-    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento')), titulo TEXT NOT NULL, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT)",
-    "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))"
+    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento')), titulo TEXT NOT NULL, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0 CHECK (urgente IN (0,1)), autor TEXT NOT NULL DEFAULT 'Sistema')",
+    "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))",
+    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))"
   ].join(";\n") + ";");
   const now = "2026-11-11T12:00:00.000Z";
-  sqlite.prepare("INSERT INTO lojas (id,codigo,nome,ativo) VALUES (?,?,?,1)").run("loja1", "01", "Loja sintética 1");
+  const addLoja = sqlite.prepare("INSERT INTO lojas (id,codigo,nome,ativo) VALUES (?,?,?,1)");
+  addLoja.run("loja1", "01", "Loja sintética 1");
+  addLoja.run("loja2", "02", "Loja sintética 2");
   const addUser = sqlite.prepare("INSERT INTO usuarios (id,loja_id,nome,login,senha_hash,papel,ativo,session_version) VALUES (?,?,?,?,?,?,1,1)");
   addUser.run("conf1", "loja1", "Conferente 1", "conf1", "sintetico", "conferente");
+  addUser.run("conf2", "loja2", "Conferente 2", "conf2", "sintetico", "conferente");
   addUser.run("adm1", null, "Administrador", "adm1", "sintetico", "admin");
   addUser.run("view1", null, "Visualizador", "view1", "sintetico", "visualizador");
   sqlite.prepare("INSERT INTO agendas (id,loja_id,data_agenda,arquivo_original,criado_por,status_dia,criado_em,atualizado_em) VALUES (?,?,?,?,?,?,?,?)")
@@ -218,12 +285,6 @@ function fixture() {
     }
   };
   const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-  const headers = (userId, extra = {}) => ({
-    "Content-Type": "application/json",
-    Origin: "http://localhost",
-    Cookie: "agenda_session=" + (async () => await createSessionToken(userId, 1, SECRET))(),
-    ...extra
-  });
   async function call(userId, path, { method = "GET", body } = {}) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
@@ -237,7 +298,7 @@ function fixture() {
       ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
     }, env);
   }
-  const avisosCount = () => sqlite.prepare("SELECT count(*) AS n FROM avisos WHERE inativo_em IS NULL").get().n;
+  const avisosCount = () => sqlite.prepare("SELECT count(*) AS n FROM avisos").get().n;
   const auditCount = (acao) => sqlite.prepare("SELECT count(*) AS n FROM auditoria WHERE acao = ?").get(acao).n;
   return { sqlite, call, avisosCount, auditCount };
 }
@@ -257,13 +318,18 @@ describe("Rotas de avisos integradas", () => {
       // divergência entre rota real e schema).
       const contrato = avisoSchema.safeParse(publicado);
       assert.equal(contrato.success, true);
-
+      assert.equal(contrato.success && contrato.data.autor, "Administrador");
+      assert.equal(contrato.success && contrato.data.urgente, false);
+      assert.equal(contrato.success && contrato.data.lojas, null);
       const resposta = await (await f.call("conf1", "/api/avisos")).json();
       assert.equal(resposta.naoLidos, 1);
       assert.equal(resposta.avisos.length, 1);
       assert.equal(resposta.avisos[0].titulo, "Doca 3 fechada");
       assert.equal(resposta.avisos[0].tipo, "aviso");
       assert.equal(resposta.avisos[0].lido, false);
+      assert.equal(resposta.avisos[0].autor, "Administrador");
+      assert.equal(resposta.avisos[0].urgente, false);
+      assert.equal(resposta.avisos[0].lojas, null);
       assert.equal(f.auditCount("aviso_publicado"), 1);
 
       const lido = await f.call("conf1", `/api/avisos/${publicado.id}/lido`, { method: "POST" });
@@ -283,7 +349,172 @@ describe("Rotas de avisos integradas", () => {
     }
   });
 
-  it("sem sessão é 401; conferente e visualizador não publicam nem inativam", async () => {
+  it("aviso urgente e direcionado: só as lojas destinatárias veem", async () => {
+    const f = fixture();
+    try {
+      const publicacao = await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Inventário loja 01", mensagem: "Amanhã às 7h.", urgente: true, lojas: ["01"] }
+      });
+      assert.equal(publicacao.status, 201);
+      const publicado = await publicacao.json();
+      assert.equal(publicado.urgente, true);
+      assert.deepEqual(publicado.lojas, ["01"]);
+
+      const visaoConf1 = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(visaoConf1.naoLidos, 1);
+      assert.equal(visaoConf1.avisos[0].urgente, true);
+      assert.deepEqual(visaoConf1.avisos[0].lojas, ["01"]);
+      // Conferente de outra loja não vê o aviso direcionado.
+      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      assert.equal(visaoConf2.naoLidos, 0);
+      assert.equal(visaoConf2.avisos.length, 0);
+      // Admin vê tudo (inclusive direcionado).
+      const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(visaoAdmin.avisos.length, 1);
+      // Visualizador também vê tudo.
+      const visaoView = await (await f.call("view1", "/api/avisos")).json();
+      assert.equal(visaoView.avisos.length, 1);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("eventos do sistema não chegam ao conferente; ficam com admin e visualizador", async () => {
+    const f = fixture();
+    try {
+      // Evento automático no mesmo formato dos statements de agendas.ts:
+      // sem direcionamento, criado pelo sistema, autor "Sistema".
+      f.sqlite.prepare(
+        "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_em) " +
+        "VALUES ('ev1', 'evento', 'Agenda importada', '10 agendas e 216 agendamentos importados.', '2026-11-12T12:00:00.000Z')"
+      ).run();
+      await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Aviso do admin", mensagem: "Somente recados do admin chegam ao conferente." }
+      });
+      // Conferente: só o aviso — o evento não entra na lista nem no badge
+      // (decisão de 12/11/2026: o conferente recebe apenas avisos do admin).
+      const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(visaoConf.avisos.length, 1);
+      assert.equal(visaoConf.avisos.every((aviso) => aviso.tipo === "aviso"), true, "nenhum evento na lista do conferente");
+      assert.equal(visaoConf.naoLidos, 1, "o evento não conta no badge do conferente");
+      // Marcar-todos do conferente só grava o que ele enxerga.
+      const marcar = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      assert.equal((await marcar.json()).marcados, 1);
+      // Admin vê evento E aviso; nada foi lido por ele.
+      const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(visaoAdmin.avisos.length, 2);
+      assert.equal(visaoAdmin.naoLidos, 2);
+      assert.equal(visaoAdmin.avisos.some((aviso) => aviso.tipo === "evento"), true);
+      // Visualizador (gerente) também vê o evento.
+      const visaoView = await (await f.call("view1", "/api/avisos")).json();
+      assert.equal(visaoView.avisos.length, 2);
+      assert.equal(visaoView.avisos.some((aviso) => aviso.tipo === "evento"), true);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("marcar lido respeita a visibilidade: evento e aviso de outra loja não são gravados", async () => {
+    const f = fixture();
+    try {
+      // Evento do sistema (só admin/gerente enxerga) + aviso direcionado à loja 02.
+      f.sqlite.prepare(
+        "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_em) " +
+        "VALUES ('ev1', 'evento', 'Agenda importada', '10 agendas importadas.', '2026-11-12T12:00:00.000Z')"
+      ).run();
+      const publicacao = await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Só loja 02", mensagem: "Recado interno da loja 02.", lojas: ["02"] }
+      });
+      const aviso02 = (await publicacao.json()).id;
+
+      // Conferente da loja 01 tenta marcar os dois: resposta genérica (não
+      // vaza existência), nenhuma leitura gravada, badge segue em 0.
+      const evResp = await f.call("conf1", "/api/avisos/ev1/lido", { method: "POST" });
+      assert.equal(evResp.status, 200);
+      assert.equal((await evResp.json()).jaLido, true);
+      const outroResp = await f.call("conf1", `/api/avisos/${aviso02}/lido`, { method: "POST" });
+      assert.equal((await outroResp.json()).jaLido, true);
+      const leiturasConf1 = f.sqlite
+        .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'conf1'")
+        .get().n;
+      assert.equal(leiturasConf1, 0, "conferente não grava leitura do que não enxerga");
+      const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(visaoConf.naoLidos, 0);
+
+      // Admin marca o evento normalmente (enxerga tudo).
+      const admResp = await f.call("adm1", "/api/avisos/ev1/lido", { method: "POST" });
+      assert.equal((await admResp.json()).jaLido, false);
+      const leiturasAdm = f.sqlite
+        .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'adm1' AND aviso_id = 'ev1'")
+        .get().n;
+      assert.equal(leiturasAdm, 1);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("código de loja com vírgula não quebra o direcionamento nem a lista", async () => {
+    const f = fixture();
+    try {
+      f.sqlite.prepare(
+        "INSERT INTO lojas (id, codigo, nome, ativo) VALUES ('loja3', 'A,B', 'Loja com vírgula', 1)"
+      ).run();
+      const publicacao = await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Loja com vírgula", mensagem: "Recado.", lojas: ["A,B"] }
+      });
+      assert.equal(publicacao.status, 201);
+      const publicado = await publicacao.json();
+      assert.deepEqual(publicado.lojas, ["A,B"]);
+      const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
+      const alvo = visaoAdm.avisos.find((aviso) => aviso.titulo === "Loja com vírgula");
+      assert.deepEqual(alvo.lojas, ["A,B"], "o código inteiro chega como um único elemento");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("marcar-todos grava a leitura dos avisos visíveis e zera o badge", async () => {
+    const f = fixture();
+    try {
+      await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Aviso 1", mensagem: "Um." }
+      });
+      await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Aviso 2", mensagem: "Dois.", urgente: true }
+      });
+      await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Só loja 02", mensagem: "Três.", lojas: ["02"] }
+      });
+      const antes = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(antes.naoLidos, 2, "o direcionado à loja 02 não conta para o conferente da 01");
+      const marcar = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      assert.equal(marcar.status, 200);
+      const corpo = await marcar.json();
+      assert.equal(corpo.ok, true);
+      assert.equal(corpo.marcados, 2);
+      const depois = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(depois.naoLidos, 0);
+      assert.equal(depois.avisos.filter((aviso) => aviso.lido).length, 2);
+      // Idempotente: de novo não regrava nada.
+      const deNovo = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      assert.equal((await deNovo.json()).marcados, 0);
+      // A leitura é por usuário: marcar-todos do conferente da 01 não toca
+      // o estado do conferente da 02 (que ainda vê 3 não lidos).
+      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      assert.equal(visaoConf2.naoLidos, 3, "marcar-todos de um usuário não marca por outro");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("sem sessão é 401; conferente e visualizador não publicam", async () => {
     const f = fixture();
     try {
       assert.equal((await app.request("http://localhost/api/avisos")).status, 401);
@@ -302,48 +533,37 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(invalido.status, 400);
       assert.match((await invalido.json()).message, /título do aviso/i);
       assert.equal(f.avisosCount(), 0);
-    } finally {
-      f.sqlite.close();
-    }
-  });
-
-  it("inativar remove da lista e grava auditoria; id inexistente é 404", async () => {
-    const f = fixture();
-    try {
-      const { id } = await (await f.call("adm1", "/api/admin/avisos", {
+      // Loja inexistente no direcionamento é 400, sem gravar nada.
+      const lojaInvalida = await f.call("adm1", "/api/admin/avisos", {
         method: "POST",
-        body: { titulo: "Aviso velho", mensagem: "Será inativado." }
-      })).json();
-      const inativacao = await f.call("adm1", `/api/admin/avisos/${id}/inativar`, { method: "POST" });
-      assert.equal(inativacao.status, 200);
-      assert.equal(f.auditCount("aviso_inativado"), 1);
+        body: { titulo: "T", mensagem: "M", lojas: ["99"] }
+      });
+      assert.equal(lojaInvalida.status, 400);
+      assert.equal((await lojaInvalida.json()).error, "LOJAS_INVALIDAS");
       assert.equal(f.avisosCount(), 0);
-      // Inativar de novo não regrava auditoria e responde 404.
-      const deNovo = await f.call("adm1", `/api/admin/avisos/${id}/inativar`, { method: "POST" });
-      assert.equal(deNovo.status, 404);
-      assert.equal(f.auditCount("aviso_inativado"), 1);
-      const inexistente = await f.call("adm1", "/api/admin/avisos/nao-existe/inativar", { method: "POST" });
-      assert.equal(inexistente.status, 404);
     } finally {
       f.sqlite.close();
     }
   });
 
-  it("aviso expirado some da lista sem precisar de inativação", async () => {
+  it("avisos publicados permanecem para sempre: nada de expiração ou inativação", async () => {
     const f = fixture();
     try {
       await f.call("adm1", "/api/admin/avisos", {
         method: "POST",
-        body: { titulo: "Aviso antigo", mensagem: "Já venceu.", expiraEm: "2026-11-10T00:00:00.000Z" }
+        body: { titulo: "Aviso antigo", mensagem: "Ainda está na lista." }
       });
       await f.call("adm1", "/api/admin/avisos", {
         method: "POST",
-        body: { titulo: "Aviso vigente", mensagem: "Ainda vale." }
+        body: { titulo: "Aviso vigente", mensagem: "Também está." }
       });
       const resposta = await (await f.call("conf1", "/api/avisos")).json();
-      assert.equal(resposta.avisos.length, 1);
-      assert.equal(resposta.avisos[0].titulo, "Aviso vigente");
-      assert.equal(resposta.naoLidos, 1);
+      assert.equal(resposta.avisos.length, 2, "nenhum aviso sai da lista");
+      assert.equal(resposta.naoLidos, 2);
+      // Rota de inativação não existe mais.
+      const inativar = await f.call("adm1", "/api/admin/avisos/nao-existe/inativar", { method: "POST" });
+      assert.equal(inativar.status, 404);
+      assert.equal(f.auditCount("aviso_inativado"), 0);
     } finally {
       f.sqlite.close();
     }
@@ -357,6 +577,8 @@ describe("Rotas de avisos integradas", () => {
       let resposta = await (await f.call("adm1", "/api/avisos")).json();
       assert.equal(resposta.naoLidos, 1);
       assert.equal(resposta.avisos[0].tipo, "evento");
+      assert.equal(resposta.avisos[0].autor, "Sistema", "eventos automáticos têm autor Sistema");
+      assert.equal(resposta.avisos[0].urgente, false);
       assert.match(resposta.avisos[0].titulo, /Dia conclu\u00eddo/);
       assert.match(resposta.avisos[0].mensagem, /Loja sint\u00e9tica 1 em 11\/11\/2026/);
 
@@ -373,4 +595,49 @@ describe("Rotas de avisos integradas", () => {
       f.sqlite.close();
     }
   });
+  it("pagina avisos antigos por cursor estável, respeitando a loja e o total de não lidos", async () => {
+    const f = fixture();
+    try {
+      const insert = f.sqlite.prepare(
+        "INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES (?,'aviso',?,'Sintético','2026-11-20T10:00:00.000Z')"
+      );
+      for (let i = 0; i < 62; i++) {
+        const id = "global-" + String(i).padStart(3, "0");
+        insert.run(id, "Aviso " + i);
+      }
+      f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('evento','evento','Evento','Sintético','2026-11-20T10:00:00.000Z')").run();
+      f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('so-loja-02','aviso','Direcionado','Sintético','2026-11-20T10:00:00.000Z')").run();
+      f.sqlite.prepare("INSERT INTO avisos_lojas VALUES ('so-loja-02','02')").run();
+      const primeira = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(primeira.avisos.length, 50);
+      assert.equal(primeira.naoLidos, 62);
+      assert.equal(primeira.hasMore, true);
+      assert.ok(primeira.nextCursor);
+      assert.equal(primeira.avisos.every(a => a.tipo === "aviso"), true);
+      f.sqlite.prepare(
+        "INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('novo','aviso','Publicado depois','Sintético','2026-11-21T10:00:00.000Z')"
+      ).run();
+      const query = new URLSearchParams({
+        before: primeira.nextCursor.criadoEm, beforeId: primeira.nextCursor.id
+      });
+      const segunda = await (await f.call("conf1", "/api/avisos?" + query)).json();
+      assert.equal(segunda.avisos.length, 12);
+      assert.equal(segunda.hasMore, false);
+      assert.equal(segunda.nextCursor, null);
+      assert.equal(segunda.naoLidos, 63, "a contagem independe da página");
+      const ids = [...primeira.avisos, ...segunda.avisos].map(a => a.id);
+      assert.equal(new Set(ids).size, 62, "sem duplicação com novos avisos");
+      assert.ok(ids.every(id => id.startsWith("global-")));
+      assert.equal((await f.call("conf1", "/api/avisos?before=2026-11-20")).status, 400);
+      assert.equal((await f.call("conf1", "/api/avisos?beforeId=qualquer")).status, 400);
+      assert.equal((await f.call("conf1", "/api/avisos?before=invalido&beforeId=id")).status, 400);
+      const adm = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(adm.naoLidos, 65, "administrador também vê evento e direcionado");
+      await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      assert.equal((await (await f.call("conf1", "/api/avisos")).json()).naoLidos, 0);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
 });

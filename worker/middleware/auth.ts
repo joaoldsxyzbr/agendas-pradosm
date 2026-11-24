@@ -3,12 +3,13 @@ import { getCookie, setCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import {
   createSessionToken,
+  sessionKey,
   SESSION_MAX_AGE,
   shouldRenewSession,
   verifySessionToken
 } from "../lib/session.ts";
 import { findActiveStoreById } from "../repositories/stores.ts";
-import { findUserById } from "../repositories/users.ts";
+import { findUserForSession } from "../repositories/users.ts";
 const COOKIE_NAME = "agenda_session";
 function unauthorized() {
   return {
@@ -27,7 +28,8 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (!token) return c.json(unauthorized(), 401);
   const payload = await verifySessionToken(token, c.env.SESSION_SECRET);
   if (!payload) return c.json(unauthorized(), 401);
-  const user = await findUserById(c.env.DB, payload.userId);
+  const key = await sessionKey(token, payload);
+  const user = await findUserForSession(c.env.DB, payload.userId, key);
   if (!user || user.ativo !== 1 || user.session_version !== payload.sessionVersion) {
     return c.json(unauthorized(), 401);
   }
@@ -47,7 +49,9 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
     const refreshedToken = await createSessionToken(
       user.id,
       user.session_version,
-      c.env.SESSION_SECRET
+      c.env.SESSION_SECRET,
+      Date.now(),
+      payload.sessionId ?? undefined
     );
     setCookie(c, COOKIE_NAME, refreshedToken, {
       httpOnly: true,
@@ -81,7 +85,7 @@ const restrictDashboardViewer = createMiddleware<AppEnv>(
       return c.json(forbidden(), 403);
     }
     const path = c.req.path;
-    const allowed = path === "/api/admin/stores" || path === "/api/admin/agendas" || path === "/api/admin/presence" || path === "/api/admin/reports" || path === "/api/admin/reports/occurrences" || path === "/api/admin/reports/latest" || /^\/api\/admin\/agendas\/[^/]+$/.test(path) || /^\/api\/admin\/appointments\/[^/]+$/.test(path);
+    const allowed = path === "/api/admin/stores" || path === "/api/admin/agendas" || path === "/api/admin/presence" || path === "/api/admin/reports" || path === "/api/admin/reports/occurrences" || /^\/api\/admin\/agendas\/[^/]+$/.test(path) || /^\/api\/admin\/appointments\/[^/]+$/.test(path);
     if (!allowed) {
       return c.json(forbidden(), 403);
     }

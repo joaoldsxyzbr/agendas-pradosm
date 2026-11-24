@@ -11,6 +11,7 @@ import {
 function fixture() {
   const sql = new DatabaseSync(":memory:");
   sql.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT, nome TEXT)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, nome TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT, arquivo_original TEXT, criado_por TEXT, status_dia TEXT, concluido_em TEXT, concluido_por TEXT, digitado_em TEXT, digitado_por TEXT, criado_em TEXT, atualizado_em TEXT)",
@@ -18,7 +19,8 @@ function fixture() {
     "CREATE TABLE historico_status (id TEXT PRIMARY KEY, agendamento_id TEXT NOT NULL, usuario_id TEXT NOT NULL, status_anterior TEXT NOT NULL, status_novo TEXT NOT NULL, observacao TEXT, alterado_em TEXT NOT NULL)",
     "CREATE TABLE historico_agenda (id TEXT PRIMARY KEY, agenda_id TEXT, usuario_id TEXT, acao TEXT, detalhes TEXT, alterado_em TEXT)",
     "CREATE TABLE auditoria (id TEXT PRIMARY KEY, usuario_id TEXT, acao TEXT, entidade TEXT, entidade_id TEXT, loja_id TEXT, agenda_id TEXT, agendamento_id TEXT, antes TEXT, depois TEXT, detalhes TEXT, criado_em TEXT)",
-    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT, titulo TEXT, mensagem TEXT, criado_por TEXT, criado_em TEXT, expira_em TEXT, inativo_em TEXT)",
+    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT, titulo TEXT, mensagem TEXT, criado_por TEXT, criado_em TEXT, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0, autor TEXT NOT NULL DEFAULT 'Sistema')",
+    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))",
     "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))"
   ].join(";\n") + ";");
   sql.prepare("INSERT INTO lojas VALUES ('loja1','01','Loja sintética')").run();

@@ -9,6 +9,7 @@ import { hashPassword, PASSWORD_HASH_ITERATIONS } from "../../worker/lib/passwor
 function syntheticDB() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`
+    CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL);
     CREATE TABLE usuarios (
       id TEXT PRIMARY KEY, loja_id TEXT, nome TEXT NOT NULL, login TEXT NOT NULL UNIQUE,
       senha_hash TEXT NOT NULL, papel TEXT NOT NULL, ativo INTEGER NOT NULL,

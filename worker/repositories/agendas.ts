@@ -218,7 +218,15 @@ async function createAgendaImport(db, storeId, createdBy, input, storeName = nul
 // agendamento vivem aqui — única e lote não podem divergir (classe do
 // incidente 500 de 06/11). Retorna os agendamentos importados existentes
 // para o log de auditoria do chamador.
-function appendAgendaReplaceStatements(db, statements, agendaId, existingAppointments, input, now) {
+// A versão de importação é lida antes dos agendamentos. Se uma substituição
+// concorrente gravar primeiro, a constraint da migration 0024 aborta TODO
+// o db.batch, incluindo inserções, inativações, auditoria e avisos.
+async function readAgendaImportVersion(db, agendaId) {
+  const row = await db.prepare("SELECT versao_importacao FROM agendas WHERE id = ?").bind(agendaId).first();
+  if (!row) throw Object.assign(new Error("Agenda alterada durante a importação."), { code: "CONFLITO_ESTADO" });
+  return Number(row.versao_importacao);
+}
+function appendAgendaReplaceStatements(db, statements, agendaId, expectedVersion, existingAppointments, input, now) {
   const importedExisting = existingAppointments.filter(
     (appointment) => appointment.origem !== "manual"
   );
@@ -230,8 +238,9 @@ function appendAgendaReplaceStatements(db, statements, agendaId, existingAppoint
   );
   statements.push(
     db.prepare(
-      "UPDATE agendas SET arquivo_original = ?, atualizado_em = ? WHERE id = ?"
-    ).bind(input.originalFileName, now, agendaId)
+      "UPDATE agendas SET arquivo_original = ?, atualizado_em = ?, versao_importacao = " +
+      "CASE WHEN versao_importacao = ? THEN versao_importacao + 1 ELSE -1 END WHERE id = ?"
+    ).bind(input.originalFileName, now, expectedVersion, agendaId)
   );
   for (const appointment of input.appointments) {
     const current = byProtocol.get(appointment.protocol);
@@ -271,10 +280,11 @@ function appendAgendaReplaceStatements(db, statements, agendaId, existingAppoint
   return importedExisting;
 }
 async function replaceAgendaImport(db, agenda, userId, input) {
+  const expectedVersion = await readAgendaImportVersion(db, agenda.id);
   const existing = await listAppointmentsByAgenda(db, agenda.id, false);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [];
-  const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, existing, input, now);
+  const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, expectedVersion, existing, input, now);
   // Evento de aviso na mesma transação da substituição (spec de avisos, decisão 5).
   statements.push(avisoEventoStatement(db, {
     titulo: "Agenda substituída",
@@ -363,12 +373,13 @@ async function importAgendaBatchAtomic(db, userId, entries) {
       });
       continue;
     }
+    const expectedVersion = await readAgendaImportVersion(db, existing.id);
     const existingAppointments = await listAppointmentsByAgenda(
       db,
       existing.id,
       false
     );
-    const importedExisting = appendAgendaReplaceStatements(db, statements, existing.id, existingAppointments, input, now);
+    const importedExisting = appendAgendaReplaceStatements(db, statements, existing.id, expectedVersion, existingAppointments, input, now);
     statements.push(
       auditStatement(db, {
         userId,
@@ -416,12 +427,16 @@ async function importAgendaBatchAtomic(db, userId, entries) {
   await db.batch(statements);
   return results;
 }
-async function createManualAppointment(db, agenda, userId, supplier, businessHour, adminAdjustmentDetails) {
+async function createManualAppointment(db, agenda, userId, supplier, businessHour, adminAdjustmentDetails, requireOpenDay = false) {
   const id = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
-      "INSERT INTO agendamentos (id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, origem, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Sem agenda', '[]', '[]', 'aguardando', 'manual', 1, ?, ?)"
+      "INSERT INTO agendamentos (id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, origem, ativo, criado_em, atualizado_em) " +
+      (requireOpenDay
+        ? "SELECT ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Sem agenda', '[]', '[]', 'aguardando', 'manual', 1, ?, ? WHERE EXISTS (SELECT 1 FROM agendas WHERE id = ? AND status_dia = 'aberto')"
+        : "VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 'Sem agenda', '[]', '[]', 'aguardando', 'manual', 1, ?, ?)")
     ).bind(
       id,
       agenda.id,
@@ -430,10 +445,13 @@ async function createManualAppointment(db, agenda, userId, supplier, businessHou
       businessHour,
       supplier,
       now,
-      now
+      now,
+      ...(requireOpenDay ? [agenda.id] : [])
     ),
     auditStatement(db, {
+      onlyIfPreviousWrite: true,
       userId,
+      id: auditId,
       action: "fornecedor_manual_criado",
       entity: "agendamento",
       entityId: id,
@@ -450,27 +468,33 @@ async function createManualAppointment(db, agenda, userId, supplier, businessHou
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
-  await db.batch(statements);
+  const result = await db.batch(statements);
+  assertMutationApplied(result);
   const appointment = await findAppointmentById(db, id);
   if (!appointment) throw new Error("Fornecedor manual n\xE3o p\xF4de ser relido.");
   return appointment;
 }
-async function updateManualAppointmentSupplier(db, agenda, appointment, userId, supplier, adminAdjustmentDetails) {
+async function updateManualAppointmentSupplier(db, agenda, appointment, userId, supplier, adminAdjustmentDetails, requireOpenDay = false) {
   if (appointment.origem !== "manual" || appointment.ativo !== 1) {
     throw new Error("Agendamento manual inv\xE1lido.");
   }
   if (appointment.fornecedor === supplier) return appointment;
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
-      "UPDATE agendamentos SET fornecedor = ?, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1"
-    ).bind(supplier, now, appointment.id),
+      "UPDATE agendamentos SET fornecedor = ?, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1 AND fornecedor = ?" +
+      (requireOpenDay ? " AND EXISTS (SELECT 1 FROM agendas WHERE id = agendamentos.agenda_id AND status_dia = 'aberto')" : "")
+    ).bind(supplier, now, appointment.id, appointment.fornecedor),
     auditStatement(db, {
       userId,
+      id: auditId,
       action: "fornecedor_manual_editado",
+      onlyIfPreviousWrite: true,
       entity: "agendamento",
       entityId: appointment.id,
       storeId: agenda.loja_id,
@@ -487,26 +511,32 @@ async function updateManualAppointmentSupplier(db, agenda, appointment, userId, 
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
-  await db.batch(statements);
+  const result = await db.batch(statements);
+  assertMutationApplied(result);
   const updated = await findAppointmentById(db, appointment.id);
   if (!updated) throw new Error("Fornecedor manual atualizado n\xE3o p\xF4de ser relido.");
   return updated;
 }
-async function softDeleteManualAppointment(db, agenda, appointment, userId, adminAdjustmentDetails) {
+async function softDeleteManualAppointment(db, agenda, appointment, userId, adminAdjustmentDetails, requireOpenDay = false) {
   if (appointment.origem !== "manual" || appointment.ativo !== 1) {
     throw new Error("Agendamento manual inv\xE1lido.");
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
-      "UPDATE agendamentos SET ativo = 0, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1"
+      "UPDATE agendamentos SET ativo = 0, atualizado_em = ? WHERE id = ? AND origem = 'manual' AND ativo = 1" +
+      (requireOpenDay ? " AND EXISTS (SELECT 1 FROM agendas WHERE id = agendamentos.agenda_id AND status_dia = 'aberto')" : "")
     ).bind(now, appointment.id),
     auditStatement(db, {
       userId,
+      id: auditId,
       action: "fornecedor_manual_removido",
+      onlyIfPreviousWrite: true,
       entity: "agendamento",
       entityId: appointment.id,
       storeId: agenda.loja_id,
@@ -523,10 +553,12 @@ async function softDeleteManualAppointment(db, agenda, appointment, userId, admi
     agenda,
     userId,
     adminAdjustmentDetails,
-    now
+    now,
+    auditId
   );
   if (adjustment) statements.push(adjustment);
-  await db.batch(statements);
+  const result = await db.batch(statements);
+  assertMutationApplied(result);
 }
 async function findStoreAgendaByDate(db, storeId, date) {
   return db.prepare(
@@ -629,7 +661,7 @@ function assertMutationApplied(results) {
   }
 }
 
-async function changeAppointmentExchanges(db, appointment, userId, hasExchanges, adminAdjustmentDetails) {
+async function changeAppointmentExchanges(db, appointment, userId, hasExchanges, adminAdjustmentDetails, requireOpenDay = false) {
   const exchanges = hasExchanges ? 1 : 0;
   if (appointment.trocas === exchanges) return appointment;
   const agenda = await findAgendaById(db, appointment.agenda_id);
@@ -638,7 +670,8 @@ async function changeAppointmentExchanges(db, appointment, userId, hasExchanges,
   const auditId = crypto.randomUUID();
   const statements = [
     db.prepare(
-      "UPDATE agendamentos SET trocas = ?, atualizado_em = ? WHERE id = ? AND trocas IS ?"
+      "UPDATE agendamentos SET trocas = ?, atualizado_em = ? WHERE id = ? AND trocas IS ? AND ativo = 1" +
+      (requireOpenDay ? " AND EXISTS (SELECT 1 FROM agendas WHERE id = agendamentos.agenda_id AND status_dia = 'aberto')" : "")
     ).bind(exchanges, now, appointment.id, appointment.trocas ?? null),
     auditStatement(db, {
       id: auditId, onlyIfPreviousWrite: true,
@@ -666,7 +699,7 @@ async function changeAppointmentExchanges(db, appointment, userId, hasExchanges,
   return updated;
 }
 
-async function changeAppointmentStatus(db, appointment, userId, status, adminAdjustmentDetails, observation) {
+async function changeAppointmentStatus(db, appointment, userId, status, adminAdjustmentDetails, observation, requireOpenDay = false) {
   const previousObservation = appointment.observacao ?? null;
   const nextObservation = observation === undefined
     ? (status === appointment.status ? previousObservation : null)
@@ -681,7 +714,8 @@ async function changeAppointmentStatus(db, appointment, userId, status, adminAdj
   const statusChanged = appointment.status !== status;
   const statements = [
     db.prepare(
-      "UPDATE agendamentos SET status = ?, observacao = ?, atualizado_em = ? WHERE id = ? AND status = ? AND observacao IS ?"
+      "UPDATE agendamentos SET status = ?, observacao = ?, atualizado_em = ? WHERE id = ? AND status = ? AND observacao IS ? AND ativo = 1" +
+      (requireOpenDay ? " AND EXISTS (SELECT 1 FROM agendas WHERE id = agendamentos.agenda_id AND status_dia = 'aberto')" : "")
     ).bind(status, nextObservation, now, appointment.id, appointment.status, previousObservation),
     auditStatement(db, {
       id: auditId, onlyIfPreviousWrite: true,

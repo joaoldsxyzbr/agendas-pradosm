@@ -117,14 +117,13 @@
     ],
     "admin-reports": [
       "get(\"/\"",
-      "get(\"/latest\"",
       "get(\"/occurrences\""
     ],
     "avisos": [
       "get(\"/\"",
       "post(\"/:id/lido\"",
-      "post(\"/\"",
-      "post(\"/:id/inativar\""
+      "post(\"/marcar-todos\"",
+      "post(\"/\""
     ]
   }
 }

@@ -14,19 +14,20 @@
     "verify:production": "npm run check:migrations && npm test && npm run test:bootstrap-admin && npm run build && node scripts/check-build.mjs && node scripts/build-modern-preview.mjs",
     "deploy:cloudflare": "npm run check:migrations && wrangler d1 migrations apply DB --remote && wrangler deploy --config wrangler.jsonc",
     "db:migrate:preview:agendas": "wrangler d1 migrations apply DB --remote --config wrangler.preview-agendas-migrations.jsonc",
-    "deploy:preview": "npm run db:migrate:preview:agendas && wrangler deploy --config wrangler.preview.jsonc",
+    "deploy:preview": "npm run check:migrations && npm run db:migrate:preview && wrangler deploy --config wrangler.preview.jsonc",
     "deploy": "npm run verify:production && npm run deploy:cloudflare",
     "benchmark:password": "node --experimental-strip-types scripts/benchmark-password.mjs",
-    "benchmark:agendas": "node --experimental-strip-types scripts/benchmark-agendas.mjs"
+    "benchmark:agendas": "node --experimental-strip-types scripts/benchmark-agendas.mjs",
+    "db:migrate:preview": "wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc"
   },
   "dependencies": {
     "@llamaindex/liteparse-wasm": "^2.18.0",
-    "hono": "^4.13.17",
+    "hono": "^4.13.18",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "wrangler": "4.151.2"
+    "wrangler": "4.161.0"
   },
   "overrides": {
     "undici": "7.30.1"

@@ -3,7 +3,8 @@ import { validateStatusObservation } from "../../shared/observations.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import { ImportAgendaBatchInput, ImportAgendaInput } from "../../shared/agenda.ts";
-import { businessTime } from "../lib/time.ts";
+import { formatImportBatchIssues } from "../../shared/import/validateImportBatch.ts";
+import { businessDate, businessTime } from "../lib/time.ts";
 import { recordDiagnosticSafe } from "../repositories/diagnostics.ts";
 import { publishAgendaChanged } from "../services/realtime.ts";
 import { listAgendaSuppliers, listDigitacaoProgressByDate, changeSupplierCheck } from "../services/agenda-digitacao.ts";
@@ -104,21 +105,11 @@ async function details(db, agendaId) {
     appointments: appointments.map(appointmentJson)
   };
 }
-function currentBusinessDate() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(/* @__PURE__ */ new Date());
-  const values = Object.fromEntries(
-    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value])
-  );
-  return `${values.year}-${values.month}-${values.day}`;
-}
 function isAgendaConflict(error) {
-  return error instanceof Error && error.message.includes(
-    "UNIQUE constraint failed: agendas.loja_id, agendas.data_agenda"
+  if (error?.code === "CONFLITO_ESTADO") return true;
+  return error instanceof Error && (
+    error.message.includes("UNIQUE constraint failed: agendas.loja_id, agendas.data_agenda") ||
+    error.message.includes("ck_agenda_versao_importacao")
   );
 }
 adminAgendaRoutes.post("/import", async (c) => {
@@ -214,7 +205,8 @@ adminAgendaRoutes.post("/import/bulk", async (c) => {
     return c.json(
       {
         error: "REQUISICAO_INVALIDA",
-        message: "Dados do lote de agendas inv\xE1lidos."
+        message: "Dados do lote de agendas inv\xE1lidos.",
+        issues: formatImportBatchIssues(parsed.error.issues, body, 10)
       },
       400
     );
@@ -330,7 +322,7 @@ adminAgendaRoutes.post("/import/bulk", async (c) => {
 });
 adminAgendaRoutes.get("/today", async (c) => {
   const agendas = await listAdminAgendas(c.env.DB, {
-    date: currentBusinessDate()
+    date: businessDate() // data operacional America/Sao_Paulo (shared/time.ts)
   });
   return c.json(agendas.map(agendaSummaryJson));
 });
@@ -478,7 +470,9 @@ adminAgendaRoutes.patch("/:id/digitacao", async (c) => {
   const agenda = await findAgendaById(c.env.DB, c.req.param("id"));
   if (!agenda) return c.json({ error: "AGENDA_NAO_ENCONTRADA" }, 404);
   try {
-    const updated = await changeSupplierCheck(c.env.DB, agenda, c.get("authUser").id, parsed.data);
+    // changeSupplierCheck responde com o nome do digitador: passa o usuario autenticado.
+    const actor = c.get("authUser");
+    const updated = await changeSupplierCheck(c.env.DB, agenda, actor.id, actor.nome, parsed.data);
     if (!updated) return c.json({ error: "FORNECEDOR_NAO_ENCONTRADO" }, 404);
     return c.json(updated);
   } catch (error) {

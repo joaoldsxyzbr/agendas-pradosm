@@ -32,10 +32,11 @@ function constantTimeEqual(a, b) {
   }
   return difference === 0;
 }
-async function createSessionToken(userId, sessionVersion, secret, nowMs = Date.now()) {
+async function createSessionToken(userId, sessionVersion, secret, nowMs = Date.now(), sessionId = crypto.randomUUID()) {
   const payload = {
     userId,
     sessionVersion,
+    sessionId,
     exp: Math.floor(nowMs / 1e3) + SESSION_SECONDS
   };
   const encodedPayload = toBase64Url(
@@ -54,17 +55,25 @@ async function verifySessionToken(token, secret, nowMs = Date.now()) {
     const payload = JSON.parse(
       new TextDecoder().decode(fromBase64Url(encodedPayload))
     );
-    if (typeof payload.userId !== "string" || typeof payload.sessionVersion !== "number" || !Number.isInteger(payload.sessionVersion) || payload.sessionVersion < 1 || typeof payload.exp !== "number" || payload.exp <= Math.floor(nowMs / 1e3)) {
+    if (typeof payload.userId !== "string" || typeof payload.sessionVersion !== "number" || !Number.isInteger(payload.sessionVersion) || payload.sessionVersion < 1 || typeof payload.exp !== "number" || payload.exp <= Math.floor(nowMs / 1e3) || (payload.sessionId !== undefined && (typeof payload.sessionId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.sessionId)))) {
       return null;
     }
     return {
       userId: payload.userId,
       sessionVersion: payload.sessionVersion,
+      sessionId: payload.sessionId ?? null,
       exp: payload.exp
     };
   } catch {
     return null;
   }
+}
+// Tokens anteriores à versão de sessionId ainda podem autenticar durante a
+// transição. Para eles, o logout revoga o token exato sem armazenar seu valor.
+async function sessionKey(token, payload) {
+  if (payload.sessionId) return "sid:" + payload.sessionId;
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)));
+  return "legacy:" + Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
 }
 function shouldRenewSession(payload, nowMs = Date.now()) {
   const nowSeconds = Math.floor(nowMs / 1e3);
@@ -75,6 +84,7 @@ const SESSION_MAX_AGE = SESSION_SECONDS;
 export {
   SESSION_MAX_AGE,
   createSessionToken,
+  sessionKey,
   shouldRenewSession,
   verifySessionToken
 };

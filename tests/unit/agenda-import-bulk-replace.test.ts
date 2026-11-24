@@ -37,7 +37,7 @@ function arityDb(existingAppointments = []) {
               : []
           };
         },
-        async first() { return null; },
+        async first() { return sql.startsWith("SELECT versao_importacao FROM agendas") ? { versao_importacao: 0 } : null; },
         async run() { return { meta: { changes: 1 } }; }
       };
       statement.bind = (...values) => {

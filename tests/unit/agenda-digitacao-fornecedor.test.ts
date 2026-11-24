@@ -6,6 +6,7 @@ import { listAgendaSuppliers, listDigitacaoProgressByDate, changeSupplierCheck, 
 function setup() {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
+    "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
     "CREATE TABLE usuarios (id TEXT PRIMARY KEY, nome TEXT)",
     "CREATE TABLE agendas (id TEXT PRIMARY KEY, loja_id TEXT, data_agenda TEXT)",
     "CREATE TABLE agendamentos (id TEXT PRIMARY KEY, agenda_id TEXT, protocolo TEXT, horario_inicio TEXT, horario_fim TEXT, fornecedor TEXT, itens INTEGER, volumes INTEGER, paletes INTEGER, carga_batida TEXT, tipo TEXT, nfe TEXT, pedidos TEXT, status TEXT, trocas INTEGER, observacao TEXT, origem TEXT, ativo INTEGER, criado_em TEXT, atualizado_em TEXT, csv_campos TEXT)",
@@ -93,7 +94,7 @@ describe("Digitação administrativa por fornecedor — preview", () => {
       assert.deepEqual(before.get(agenda.id), { digitadas: 0, fornecedores: 1 });
       assert.equal((await listDigitacaoProgressByDate(d1, "2026-11-04")).size, 0);
       const supplier = (await listAgendaSuppliers(d1, agenda.id))[0];
-      await changeSupplierCheck(d1, agenda, "adm", {
+      await changeSupplierCheck(d1, agenda, "adm", "Administradora", {
         supplier: supplier.supplier, hash: supplier.hash,
         digitado: true, expectedDigitadoEm: null
       });
@@ -115,16 +116,24 @@ describe("Digitação administrativa por fornecedor — preview", () => {
     assert.equal(first[0].appointments.length, 2);
     assert.equal(first[0].appointments[0].csvFields.Doca, "01");
     assert.equal(first[0].digitadoEm, null);
-    const changed = await changeSupplierCheck(d1, agenda, "adm", {
+    const changed = await changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: first[0].supplier, hash: first[0].hash, digitado: true, expectedDigitadoEm: null
     });
     assert.ok(changed?.digitadoEm);
     const after = await listAgendaSuppliers(d1, agenda.id);
     assert.equal(after[0].digitadoPor.name, "Administradora");
     assert.ok(after[0].digitadoEm);
+    // No-op concorrente: pedir o mesmo estado devolve o nome salvo do
+    // digitador (nunca string vazia) e nao grava auditoria nova.
+    const noop = await changeSupplierCheck(d1, agenda, "adm", "Outra Pessoa", {
+      supplier: after[0].supplier, hash: after[0].hash, digitado: true,
+      expectedDigitadoEm: after[0].digitadoEm
+    });
+    assert.equal(noop.digitadoPor?.name, "Administradora");
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);
     assert.deepEqual(sqlite.prepare("SELECT status FROM agendamentos ORDER BY id").all().map(row => row.status), ["aguardando", "aguardando"]);
-    await changeSupplierCheck(d1, agenda, "adm", {
+    await changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: after[0].supplier, hash: after[0].hash, digitado: false,
       expectedDigitadoEm: after[0].digitadoEm
     });
@@ -136,14 +145,14 @@ describe("Digitação administrativa por fornecedor — preview", () => {
   it("invalida check quando muda pedido do CSV e rejeita hash desatualizado", async () => {
     const { sqlite, d1, agenda } = setup();
     const first = (await listAgendaSuppliers(d1, agenda.id))[0];
-    await changeSupplierCheck(d1, agenda, "adm", {
+    await changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: first.supplier, hash: first.hash, digitado: true, expectedDigitadoEm: null
     });
     sqlite.prepare("UPDATE agendamentos SET pedidos = ? WHERE id = ?").run('["NOVO"]', "item1");
     const changed = (await listAgendaSuppliers(d1, agenda.id))[0];
     assert.notEqual(changed.hash, first.hash);
     assert.equal(changed.digitadoEm, null);
-    await assert.rejects(() => changeSupplierCheck(d1, agenda, "adm", {
+    await assert.rejects(() => changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: first.supplier, hash: first.hash, digitado: true, expectedDigitadoEm: null
     }), error => error?.code === "CONFLITO_ESTADO");
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);

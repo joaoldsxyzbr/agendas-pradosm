@@ -4,8 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { RegisterFirstAdminInput } from "../../shared/api.ts";
 import { checkLoginRateLimit } from "../lib/login-rate-limit.ts";
-import { hashPassword, passwordNeedsUpgrade, verifyPassword } from "../lib/password.ts";
-import { createSessionToken, SESSION_MAX_AGE, verifySessionToken } from "../lib/session.ts";
+import { DUMMY_HASH, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../lib/password.ts";
+import { createSessionToken, sessionKey, SESSION_MAX_AGE, verifySessionToken } from "../lib/session.ts";
 import { requireAuth } from "../middleware/auth.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findActiveStoreById } from "../repositories/stores.ts";
@@ -14,6 +14,7 @@ import {
   findUserByLogin,
   hasAdmin,
   upgradeUserPasswordHash,
+  revokeSession,
 } from "../repositories/users.ts";
 
 const COOKIE_NAME = "agenda_session";
@@ -58,6 +59,14 @@ authRoutes.get("/bootstrap-status", async (c) => {
 
 authRoutes.post("/bootstrap-register", async (c) => {
   if (await hasAdmin(c.env.DB)) return bootstrapClosed(c);
+
+  // Bloqueia tentativas automatizadas de ocupar o primeiro cadastro.
+  // Continua exigindo ativação administrativa fora deste endpoint.
+  const decision = await checkLoginRateLimit(
+    c.env.LOGIN_RATE_LIMITER, "bootstrap-register", c.req.header("CF-Connecting-IP")
+  );
+  if (decision === "unavailable") return c.json({ error: "AUTENTICACAO_TEMPORARIAMENTE_INDISPONIVEL", message: "Cadastro temporariamente indisponível." }, 503);
+  if (decision === "limited") return c.json({ error: "MUITAS_TENTATIVAS", message: "Aguarde antes de tentar novamente." }, 429);
 
   const parsed = RegisterFirstAdminInput.safeParse(
     await c.req.json().catch(() => null),
@@ -141,7 +150,12 @@ authRoutes.post("/login", async (c) => {
   }
 
   const user = await findUserByLogin(c.env.DB, parsed.data.login);
-  if (!user || user.ativo !== 1) return invalidCredentials(c);
+  if (!user || user.ativo !== 1) {
+    // Anti-enumeracao por timing: usuario inexistente paga o mesmo custo PBKDF2
+    // de um usuario real com senha errada, sem alterar a resposta.
+    await verifyPassword(parsed.data.senha, DUMMY_HASH);
+    return invalidCredentials(c);
+  }
 
   const passwordOk = await verifyPassword(parsed.data.senha, user.senha_hash);
   if (!passwordOk) return invalidCredentials(c);
@@ -185,6 +199,9 @@ authRoutes.post("/logout", async (c) => {
   if (token) {
     const payload = await verifySessionToken(token, c.env.SESSION_SECRET);
     if (payload) {
+      // Grava antes de apagar o cookie: um logout só é confirmado depois da
+      // revogação no D1. O identificador permanece estável nas renovações.
+      await revokeSession(c.env.DB, await sessionKey(token, payload), payload.exp);
       await revokeRealtimeUser(c.env, payload.userId);
     }
   }

@@ -3,6 +3,7 @@ import {
   avisosResponseSchema,
   publicarAvisoSchema,
   type Aviso,
+  type AvisoCursor,
   type AvisosResponse,
   type PublicarAvisoInput,
 } from "../../../../../shared/avisos.ts";
@@ -10,12 +11,12 @@ import {
 // Contratos de avisos reaproveitados do shared entre Worker e frontend
 // (mesmo padrão do import-model). O zod continua sendo a fonte da verdade.
 export { avisoSchema, avisosResponseSchema, publicarAvisoSchema };
-export type { Aviso, AvisosResponse, PublicarAvisoInput };
+export type { Aviso, AvisoCursor, AvisosResponse, PublicarAvisoInput };
 
 export const avisoPublicadoSchema = avisoSchema;
 export type AvisoPublicado = Aviso;
 
-// Carimbo de criação/validade no fuso de Brasília (sem DST).
+// Carimbo de criação no fuso de Brasília (sem DST).
 export function formatAvisoStamp(iso: string | null | undefined) {
   if (!iso) return "";
   const date = new Date(iso);
@@ -25,9 +26,8 @@ export function formatAvisoStamp(iso: string | null | undefined) {
   }).format(date);
 }
 
-// Data escolhida no <input type="date"> vira expiração ISO no fim do dia
-// de Brasília (UTC-3 fixo; o Brasil não tem horário de verão).
-export function expiraEmFromInput(date: string): string | null {
-  if (!date) return null;
-  return new Date(`${date}T23:59:59-03:00`).toISOString();
+// Rótulo curto do público do aviso: null = todas as lojas.
+export function rotuloLojasAviso(lojas: string[] | null) {
+  if (!lojas) return "Todas as lojas";
+  return (lojas.length === 1 ? "Loja " : "Lojas ") + lojas.join(", ");
 }

@@ -1,11 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 describe("Benchmark SQL sintético nativo", () => {
   it("executa as consultas reais sem conectar no D1 remoto", () => {
     const execution = spawnSync(process.execPath,
-      ["--no-warnings", new URL("../../scripts/benchmark-agendas.mjs", import.meta.url).pathname, "--quick"],
+      // fileURLToPath: no Windows, URL.pathname vira "/C:/..." e quebra a resolucao do modulo.
+      ["--no-warnings", fileURLToPath(new URL("../../scripts/benchmark-agendas.mjs", import.meta.url)), "--quick"],
       { encoding: "utf8", timeout: 30_000 });
     assert.equal(execution.status, 0, execution.stderr || execution.stdout);
     const output = JSON.parse(execution.stdout);

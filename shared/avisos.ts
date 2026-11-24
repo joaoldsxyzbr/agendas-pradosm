@@ -2,9 +2,21 @@ import { z } from "zod";
 
 // Contrato da API de avisos/notificações in-app entre Worker e frontend.
 // "aviso" é publicado pelo admin; "evento" é gerado pelo sistema.
-// Limites de texto são hardening do input (spec 2026-11-11, decisão 9 complementar).
+// Avisos são registro permanente (sem expiração e sem inativação, decisão
+// de 12/11/2026); "lojas" null significa todas as lojas.
+// Limites de texto são hardening do input (spec 2026-11-11, decisão 9).
 
 export const avisoTipoSchema = z.enum(["aviso", "evento"]);
+
+const avisoLojaCodigo = z
+  .string()
+  .trim()
+  .min(1, "Código de loja inválido.")
+  .max(10, "Código de loja inválido.");
+
+export const avisoLojasSchema = z
+  .array(avisoLojaCodigo)
+  .max(20, "Escolha no máximo 20 lojas.");
 
 export const avisoSchema = z.object({
   id: z.string(),
@@ -12,17 +24,27 @@ export const avisoSchema = z.object({
   titulo: z.string(),
   mensagem: z.string(),
   criadoEm: z.string(),
-  expiraEm: z.string().nullable(),
   lido: z.boolean(),
+  urgente: z.boolean(),
+  autor: z.string(),
+  lojas: z.array(z.string()).nullable(),
+});
+
+export const avisoCursorSchema = z.object({
+  criadoEm: z.string(),
+  id: z.string(),
 });
 
 export const avisosResponseSchema = z.object({
   avisos: z.array(avisoSchema),
   naoLidos: z.number().int().nonnegative(),
+  // Opcionais para tolerar respostas dos mocks e da API anterior.
+  hasMore: z.boolean().optional(),
+  nextCursor: avisoCursorSchema.nullable().optional(),
 });
 
-// Corpo do POST /api/admin/avisos. expiraEm opcional (ISO 8601); sem expiração
-// o aviso fica visível até ser inativado (soft delete).
+// Corpo do POST /api/admin/avisos. "lojas" null (ou omitido) publica para
+// todas as lojas; um array publica apenas para as lojas escolhidas.
 export const publicarAvisoSchema = z.object({
   titulo: z
     .string()
@@ -34,9 +56,11 @@ export const publicarAvisoSchema = z.object({
     .trim()
     .min(1, "Informe a mensagem do aviso.")
     .max(2000, "Mensagem acima do limite de 2000 caracteres."),
-  expiraEm: z.string().datetime({ offset: true }).nullable().optional(),
+  urgente: z.boolean().optional().default(false),
+  lojas: avisoLojasSchema.nullable().optional().default(null),
 });
 
+export type AvisoCursor = z.infer<typeof avisoCursorSchema>;
 export type AvisoTipo = z.infer<typeof avisoTipoSchema>;
 export type Aviso = z.infer<typeof avisoSchema>;
 export type AvisosResponse = z.infer<typeof avisosResponseSchema>;

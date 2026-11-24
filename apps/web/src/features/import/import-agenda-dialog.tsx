@@ -107,7 +107,11 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
           ? `Lojas do arquivo não cadastradas ou inativas: ${missing.join(", ")}. Cadastre-as na tela Lojas ou corrija o arquivo e tente novamente.`
           : error.message);
       } else {
-        setMessage(error instanceof ApiError ? error.message : "Não foi possível importar as agendas.");
+        // Retrocompatibilidade de versão: se o Worker devolver issues no 400, elas
+        // nomeiam protocolo, loja e campo, em vez da mensagem genérica sozinha.
+        const issues = error instanceof ApiError ? stringList(error.details?.issues) : [];
+        const base = error instanceof ApiError ? error.message : "Não foi possível importar as agendas.";
+        setMessage(issues.length ? `${base} ${issues.slice(0, 5).join(" ")}` : base);
       }
     } finally {
       sending.current = false;

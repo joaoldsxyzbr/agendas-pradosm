@@ -4,13 +4,18 @@ import {
   avisoPublicadoSchema,
   publicarAvisoSchema,
   type AvisoPublicado,
+  type AvisoCursor,
   type AvisosResponse,
   type PublicarAvisoInput,
 } from "./model";
 
-// GET /api/avisos — lista ativos + contagem de não lidos do usuário logado.
-export async function getAvisos(): Promise<AvisosResponse> {
-  return avisosResponseSchema.parse(await apiFetch<unknown>("/api/avisos"));
+// GET /api/avisos — lista (histórico permanente, mais recentes primeiro) +
+// contagem de não lidos do usuário logado.
+export async function getAvisos(cursor?: AvisoCursor | null): Promise<AvisosResponse> {
+  const query = cursor
+    ? "?" + new URLSearchParams({ before: cursor.criadoEm, beforeId: cursor.id }).toString()
+    : "";
+  return avisosResponseSchema.parse(await apiFetch<unknown>("/api/avisos" + query));
 }
 
 // POST /api/avisos/:id/lido — idempotente; o servidor responde { jaLido }.
@@ -21,18 +26,20 @@ export async function markAvisoLido(id: string): Promise<boolean> {
   return data.jaLido === true;
 }
 
-// POST /api/admin/avisos — publica aviso visível a todos os papéis.
+// POST /api/avisos/marcar-todos — grava a leitura de todos os avisos visíveis.
+export async function marcarTodosLidos(): Promise<number> {
+  const data = await apiFetch<{ marcados?: number }>("/api/avisos/marcar-todos", {
+    method: "POST",
+  });
+  return data.marcados ?? 0;
+}
+
+// POST /api/admin/avisos — publica aviso (urgência e lojas opcionais).
+// Aviso é registro permanente: nunca é excluído, apenas marcado como lido.
 export async function publishAviso(input: PublicarAvisoInput): Promise<AvisoPublicado> {
   return avisoPublicadoSchema.parse(await apiFetch<unknown>("/api/admin/avisos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(publicarAvisoSchema.parse(input)),
   }));
-}
-
-// POST /api/admin/avisos/:id/inativar — soft delete; 404 se já inativo.
-export async function inativarAviso(id: string): Promise<void> {
-  await apiFetch<unknown>(`/api/admin/avisos/${encodeURIComponent(id)}/inativar`, {
-    method: "POST",
-  });
 }

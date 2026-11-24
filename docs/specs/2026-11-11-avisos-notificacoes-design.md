@@ -48,3 +48,18 @@ O João não tem como avisar os conferentes dentro do sistema, nem vê registro 
 ## Fluxo de entrega
 
 Preview é homologação ativa: PR `feat/avisos-notificacoes` → `preview`, CI verde, deploy:preview, homologação do João em preview.agendaspradosm.joaolds.xyz.br, e só então promoção para `main` por branch criada DA main com o conteúdo aprovado (lição do #205: nunca PR head=preview).
+
+
+## Adendo de 12/11/2026 — melhorias aprovadas em protótipo
+
+Decisões do João sobre o comportamento dos avisos, validadas em réplica visual
+(canvas) e implementadas na migration `0023_avisos_melhorias.sql`:
+
+| # | Decisão | Substitui |
+| --- | --- | --- |
+| A1 | Aviso é registro permanente: nunca é excluído, expirado ou inativado — nem pelo admin | Decisão 7 (expiração + inativação) |
+| A2 | Lista única do mais recente para o mais antigo; a lista É o histórico, sem aba separada | Ordenação "não lidos primeiro" da decisão 8 |
+| A3 | Urgência: aviso urgente tem chip e destaque no painel; o badge do sino pulsa em vermelho enquanto houver urgente não lido | — |
+| A4 | Direcionamento por loja: publicação escolhe "Todas as lojas" ou lojas específicas (`avisos_lojas`); conferente só vê os da sua loja e os globais; admin/visualizador veem tudo | Decisão 3 (todos veem tudo) |
+| A5 | Autor visível no card ("por João", "por Sistema") — coluna `autor` desnormalizada do nome no momento da publicação | — |
+| A6 | "Marcar todos" como lidos: `POST /api/avisos/marcar-todos` grava a leitura de tudo que o usuário enxerga | — |
