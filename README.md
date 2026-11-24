@@ -54,7 +54,7 @@ Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/READM
 
 Para testar a aplicação completa (React, Worker, autenticação e D1 local), sem conta Cloudflare e sem dados reais, use Node.js 22.18+ (o CI mantém Node 22 e testa também o modo local em Windows com Node 26).
 
-**Windows:** dê dois cliques em `iniciar-preview.bat` na raiz do repositório. Ele instala as dependências, prepara o SQLite local, inicia as rotas reais do Worker no Node e abre o navegador. Mantenha a janela aberta; a senha inicial aparece nela. Pressione Ctrl+C para parar.
+**Windows:** dê dois cliques em `iniciar-preview.bat` na raiz do repositório. Ele atualiza a branch `preview` com `git pull --ff-only origin preview`, instala as dependências, prepara o SQLite local, inicia as rotas reais do Worker no Node e abre o navegador. Requer Git para Windows e conexão com o GitHub; se houver alterações locais rastreadas, branch incorreta, divergência ou falha de atualização, interrompe sem forçar a atualização. O banco SQLite local é preservado. Mantenha a janela aberta; a senha inicial aparece nela. Pressione Ctrl+C para parar.
 
 Em outros sistemas, ou para iniciar manualmente, execute na raiz:
 
