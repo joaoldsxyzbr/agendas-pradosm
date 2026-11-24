@@ -1,3 +1,7 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
+import { AccessEditor, ExistingAccessEditor, validAccess } from "./access-editor";
+import type { AccessProfile } from "../../../../../shared/permissions.ts";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
@@ -49,6 +53,9 @@ function StoreSelect({ form, setForm, stores, editing }: {
 }
 
 function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores: Store[]; onClose: () => void }) {
+  const {data:session}=useSession();
+  const configurable=!!session?.acessoConfiguravel;
+  const [accessVisible,setAccessVisible]=useState(false);
   const modalRef = useRef<HTMLDialogElement>(null);
   const client = useQueryClient();
   const [form, setForm] = useState<UserForm>(() => ({
@@ -69,7 +76,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
   }, []);
   const refresh = async () => { await client.invalidateQueries({ queryKey: usersKey }); };
   const save = useMutation({
-    mutationFn: () => saveUser(form, user?.id),
+    mutationFn: () => saveUser(form, user?.id,user?.acessoPersonalizado),
     onSuccess: async () => { await refresh(); onClose(); },
   });
   const toggle = useMutation({
@@ -79,7 +86,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
   const busy = save.isPending || toggle.isPending;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!busy && validUser(form, !user)) save.mutate();
+    if (!busy && validUser(form, !user) && (!form.access||validAccess(form.access))) save.mutate();
   };
   return <dialog ref={modalRef} aria-label={user ? "Editar usuário" : "Cadastrar usuário"}
     onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}
@@ -105,25 +112,31 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
             autoComplete="new-password" required={!user} value={form.senha}
             onChange={event => setForm(value => ({ ...value, senha: event.target.value }))} />
         </label>
-        <label className="grid gap-1.5 text-xs font-semibold text-slate-300">Papel
-          <select className={input} name="papel" value={form.papel}
+        {!form.access&&<label className="grid gap-1.5 text-xs font-semibold text-slate-300">Papel
+          <select className={input} name="papel" disabled={!!user?.acessoPersonalizado} value={form.papel}
             onChange={event => setForm(value => ({ ...value, papel: event.target.value as UserForm["papel"] }))}>
             <option value="admin">Administrador</option>
             <option value="conferente">Conferente</option>
             <option value="visualizador">Visualizador</option>
           </select>
-        </label>
-        {form.papel === "conferente" &&
+        </label>}
+        {!form.access&&form.papel === "conferente"&&!user?.acessoPersonalizado &&
           <StoreSelect form={form} setForm={setForm} stores={stores} editing={Boolean(user)} />}
       </div>
+      {!user&&configurable&&<label className="flex items-center gap-2 text-xs text-slate-200"><input type="checkbox" checked={!!form.access} onChange={event=>setForm(v=>({...v,access:event.target.checked?{profile:"agendador",scope:{mode:"all"},overrides:[]}:undefined}))}/>Configurar perfil, lojas e permissões</label>}
+      {form.access&&<AccessEditor value={form.access} stores={stores} disabled={busy} onChange={access=>setForm(v=>({...v,access}))}/>}
       {save.isError && <p role="alert" className="text-xs text-rose-300">{errorText(save.error)}</p>}
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="secondary" disabled={busy} onClick={onClose}>Cancelar</Button>
-        <Button type="submit" disabled={busy || !validUser(form, !user)}>
+        <Button type="submit" disabled={busy || !validUser(form, !user) || (!!form.access&&!validAccess(form.access))}>
           {save.isPending ? "Salvando…" : user ? "Salvar alterações" : "Cadastrar usuário"}
         </Button>
       </div>
     </form>
+    {user&&configurable&&user.ativo&&user.id!==session?.id&&<div className="space-y-3 border-t border-slate-700 p-5">
+      <Button variant="secondary" onClick={()=>setAccessVisible(v=>!v)}>{accessVisible?"Ocultar permissões":"Configurar perfil e permissões"}</Button>
+      {accessVisible&&<ExistingAccessEditor id={user.id} stores={stores} onSaved={onClose}/>}
+    </div>}
     {user && <div className="space-y-4 border-t border-[#344d69] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="text-sm font-semibold">Histórico de alterações</h3><p className="text-xs text-slate-400">Auditoria deste cadastro</p></div>
@@ -174,8 +187,11 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
 }
 
 export function UsersPage() {
+  const {data:session}=useSession();
+  const canCreate=canUse(session,"usuarios.criar",true)&&!session?.perfil;
+  const canEdit=canUse(session,"usuarios.editar",true)&&!session?.perfil;
   const [search, setSearch] = useState("");
-  const [role, setRole] = useState<"todos" | AdminUser["papel"]>("todos");
+  const [role, setRole] = useState<"todos" | AccessProfile>("todos");
   const [status, setStatus] = useState<"todos" | "ativos" | "inativos">("todos");
   const [editing, setEditing] = useState<AdminUser | null | "new">(null);
   const usersQuery = useQuery({ queryKey: usersKey, queryFn: listUsers });
@@ -188,7 +204,7 @@ export function UsersPage() {
     <PageHeader eyebrow="Cadastros" title="Usuários" description="Gerencie os acessos ao sistema."
       actions={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         <span className="text-xs tabular-nums text-slate-400">{users.length} {users.length === 1 ? "usuário" : "usuários"} · {users.filter(user => user.ativo).length} ativos</span>
-        <Button onClick={() => setEditing("new")}><Plus size={14} />Novo usuário</Button>
+        <Button disabled={!canCreate} onClick={() => setEditing("new")}><Plus size={14} />Novo usuário</Button>
       </div>} />
     <div className={surface}>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344d69] p-4">
@@ -201,6 +217,7 @@ export function UsersPage() {
           <select aria-label="Filtrar por papel" value={role}
             onChange={event => setRole(event.target.value as typeof role)} className={input + " max-w-[170px]"}>
             <option value="todos">Todos os papéis</option>
+            {session?.acessoConfiguravel&&<option value="agendador">Agendador</option>}
             <option value="admin">Administrador</option>
             <option value="conferente">Conferente</option>
             <option value="visualizador">Visualizador</option>
@@ -230,10 +247,10 @@ export function UsersPage() {
               </div>
               <p className="mt-1 break-words text-xs text-slate-300">{user.login}</p>
               <p className="mt-1 break-words text-[11px] text-slate-400">
-                {user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"} · {ROLE_LABELS[user.papel]}
+                {user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"} · {ROLE_LABELS[user.perfil??user.papel]}
               </p>
             </div>
-            <Button size="sm" variant="secondary" aria-label={"Editar usuário " + user.nome} onClick={() => setEditing(user)}>
+            <Button size="sm" variant="secondary" aria-label={"Editar usuário " + user.nome} disabled={!canEdit} onClick={() => setEditing(user)}>
               <Pencil size={13} />Editar
             </Button>
           </article>)}
@@ -250,7 +267,7 @@ export function UsersPage() {
                 <td className="px-4 py-3 text-xs font-bold text-white">{user.nome}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{user.login}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"}</td>
-                <td className="px-4 py-3 text-xs text-slate-200">{ROLE_LABELS[user.papel]}</td>
+                <td className="px-4 py-3 text-xs text-slate-200">{ROLE_LABELS[user.perfil??user.papel]}</td>
                 <td className="px-4 py-3"><StatusBadge tone={user.ativo ? "success" : "neutral"}>{user.ativo ? "Ativo" : "Inativo"}</StatusBadge></td>
                 <td className="px-4 py-3 text-right"><Button size="sm" variant="secondary" aria-label={"Editar usuário " + user.nome} onClick={() => setEditing(user)}>
                   <Pencil size={13} />Editar</Button></td>

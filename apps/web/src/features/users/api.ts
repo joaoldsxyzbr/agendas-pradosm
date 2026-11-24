@@ -1,3 +1,4 @@
+import { ACCESS_PROFILES, PERMISSIONS, type AccessProfile, type PermissionOverride, type StoreScope } from "../../../../../shared/permissions.ts";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 import type { Store } from "@/features/receiving/model";
@@ -7,6 +8,8 @@ const userSchema = z.object({
   nome: z.string(),
   login: z.string(),
   papel: z.enum(["admin", "conferente", "visualizador"]),
+  perfil:z.enum(ACCESS_PROFILES).optional(),
+  acessoPersonalizado:z.boolean().optional(),
   lojaId: z.string().nullable().optional(),
   ativo: z.boolean(),
 });
@@ -29,10 +32,16 @@ export type UserForm = {
   senha: string;
   papel: AdminUser["papel"];
   lojaId: string;
+  access?:AccessForm;
 };
+export type AccessForm={profile:AccessProfile;scope:StoreScope;overrides:readonly PermissionOverride[]};
+const accessSchema=z.object({profile:z.enum(ACCESS_PROFILES),scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string())})]),overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})),permissions:z.array(z.enum(PERMISSIONS)),customized:z.boolean(),sessionVersion:z.number().int()});
+export async function getAccess(id:string){return accessSchema.parse(await apiFetch<unknown>("/api/admin/users/"+encodeURIComponent(id)+"/access"));}
+export async function setAccess(id:string,version:number,access:AccessForm){return accessSchema.parse(await apiFetch<unknown>("/api/admin/users/"+encodeURIComponent(id)+"/access",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({version,access})}));}
 
-export const ROLE_LABELS: Record<AdminUser["papel"], string> = {
+export const ROLE_LABELS: Record<AccessProfile, string> = {
   admin: "Administrador",
+  agendador: "Agendador",
   conferente: "Conferente",
   visualizador: "Visualizador",
 };
@@ -44,17 +53,17 @@ export const filterUsers = (
   users: AdminUser[],
   stores: Store[],
   search = "",
-  role: AdminUser["papel"] | "todos" = "todos",
+  role: AccessProfile | "todos" = "todos",
   status: "todos" | "ativos" | "inativos" = "todos",
 ) => {
   const names = new Map(stores.map(store => [store.id, `${store.codigo} - ${store.nome}`]));
   const query = search.trim().toLocaleLowerCase("pt-BR");
   return users.filter(user => {
     const store = user.lojaId ? names.get(user.lojaId) ?? "" : "";
-    const text = [user.nome, user.login, store, ROLE_LABELS[user.papel] ?? ""]
+    const text = [user.nome, user.login, store, ROLE_LABELS[user.perfil??user.papel] ?? ""]
       .join(" ").toLocaleLowerCase("pt-BR");
     return (!query || text.includes(query)) &&
-      (role === "todos" || user.papel === role) &&
+      (role === "todos" || (user.perfil??user.papel) === role) &&
       (status === "todos" || user.ativo === (status === "ativos"));
   });
 };
@@ -67,7 +76,7 @@ export const validUser = (form: UserForm, creating: boolean) => {
     : form.senha.length === 0 || (form.senha.length >= 12 && form.senha.length <= 200);
   return nome.length > 0 && nome.length <= 120 &&
     login.length >= 3 && login.length <= 100 && senhaOk &&
-    (form.papel !== "conferente" || form.lojaId.length > 0);
+    (form.access!==undefined || form.papel !== "conferente" || form.lojaId.length > 0);
 };
 
 export const emptyUserForm = (): UserForm => ({
@@ -78,14 +87,13 @@ export async function listUsers() {
   return z.array(userSchema).parse(await apiFetch<unknown>("/api/admin/users"));
 }
 
-export async function saveUser(form: UserForm, id?: string) {
+export async function saveUser(form: UserForm, id?: string, customized=false) {
   const payload = {
     ...(id ? { id } : {}),
     nome: form.nome.trim(),
     login: form.login.trim(),
     ...(form.senha ? { senha: form.senha } : {}),
-    papel: form.papel,
-    ...(form.papel === "conferente" ? { lojaId: form.lojaId } : {}),
+    ...(form.access?{access:form.access}:customized?{}:{papel:form.papel,...(form.papel === "conferente" ? { lojaId: form.lojaId } : {})}),
   };
   return userSchema.parse(await apiFetch<unknown>("/api/admin/users", {
     method: id ? "PATCH" : "POST",
