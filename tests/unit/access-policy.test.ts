@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {resolvePermissions} from "../../shared/permissions.ts";
 import {routePolicy,permitsAction,permitsResolvedScope,permitsImportReplacement,permitsDayStatus} from "../../worker/middleware/access-policy.ts";
-import {decodeAccess,findEffectiveAccess} from "../../worker/repositories/access.ts";
+import {decodeAccess,findEffectiveAccess,saveAccessConfiguration} from "../../worker/repositories/access.ts";
 import {openLocalDatabase} from "../../scripts/local-sqlite.mjs";
 import {fileURLToPath} from "node:url";
 import {buildMockSql,mockId} from "../../scripts/mock-data.mjs";
@@ -55,4 +55,31 @@ test("configuração inválida falha fechada",()=>{
   const row={papel:"visualizador",loja_id:null,session_version:1,perfil:"agendador",escopo:"todas",lojas:'["s1"]',excecoes:"[]"};
   assert.equal(decodeAccess(row),null);
   assert.equal(decodeAccess({...row,escopo:"vinculadas",excecoes:"not-json"}),null);
+});
+
+test("grava acesso e auditoria em batch, invalida sessão e reverte erro de loja ou autoridade",async()=>{
+  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations/",import.meta.url)));
+  try{
+    local.seed(await buildMockSql("teste-local-123456"));
+    const admin=mockId("user:admin.mock"),v=mockId("user:gerente.mock"),s1=mockId("store:1"),s2=mockId("store:2");
+    const actor={id:admin,sessionVersion:1};
+    const input={profile:"agendador",scope:{mode:"assigned",storeIds:[s1,s2]},overrides:[{permission:"agendas.editar",effect:"deny"}]} as const;
+    const result=await saveAccessConfiguration(local.DB,actor,v,1,input);
+    assert.equal(result.sessionVersion,2);
+    assert.equal(result.profile,"agendador");
+    assert.ok(!result.permissions.has("agendas.editar"));
+    const events=await local.DB.prepare("SELECT usuario_id,antes,depois FROM auditoria WHERE entidade_id=? AND acao='usuario_acesso_atualizado'").bind(v).all();
+    assert.equal(events.results.length,1);
+    assert.equal(events.results[0].usuario_id,admin);
+    assert.equal(JSON.parse(events.results[0].antes).profile,"visualizador");
+    assert.equal(JSON.parse(events.results[0].depois).profile,"agendador");
+    await assert.rejects(saveAccessConfiguration(local.DB,actor,v,1,input));
+    await assert.rejects(saveAccessConfiguration(local.DB,actor,v,2,{...input,scope:{mode:"assigned",storeIds:["inexistente"]}}));
+    await assert.rejects(saveAccessConfiguration(local.DB,{id:v,sessionVersion:2},admin,1,input));
+    await assert.rejects(saveAccessConfiguration(local.DB,actor,admin,1,input));
+    assert.equal((await findEffectiveAccess(local.DB,v))?.sessionVersion,2);
+    assert.deepEqual((await findEffectiveAccess(local.DB,v))?.scope,result.scope);
+    assert.equal((await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE entidade_id=? AND acao='usuario_acesso_atualizado'").bind(v).first()).n,1);
+    await assert.rejects(local.DB.prepare("INSERT INTO usuario_acesso(usuario_id,perfil,escopo) VALUES (?,?,?)").bind(admin,"agendador","todas").run(),/ULTIMO_ADMIN_INTEGRAL/);
+  }finally{local.close()}
 });

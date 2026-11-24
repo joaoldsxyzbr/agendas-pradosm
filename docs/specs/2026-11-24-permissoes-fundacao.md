@@ -78,3 +78,7 @@ Nenhuma conta com o novo perfil deve ser provisionada antes da integração.
 ### Etapa 2 — resolução e política de rotas (preview)
 
 Leitura consistente em `worker/repositories/access.ts` resolve perfis, vínculos e exceções, com fallback legado. `worker/middleware/access-policy.ts` inventaria métodos e caminhos, separa ações e exige escopo resolvido. Listas, avisos e realtime falham fechados na função de escopo até a implementação de filtros próprios. Testes usam todas as migrations e o adaptador SQLite local. Ainda não habilitar configuração de contas: faltam escrita transacional e auditoria, proteção efetiva do último admin, enforcement de rotas/consultas, sessões/realtime e interface. Nenhum usuário foi alterado.
+
+### Escrita transacional preparatória
+
+`saveAccessConfiguration` grava perfil, vínculos, exceções, versão de sessão e auditoria em um batch atômico; CAS e autoridade do administrador integral são verificados no mesmo batch. A migration 0027 protege pelo menos um administrador integral não personalizado. A escrita NÃO está exposta na API; não criar configurações reais antes dos guards, filtros, revogação de WebSocket e UI. A reversão deve suspender contas customizadas antes de usar código anterior.
