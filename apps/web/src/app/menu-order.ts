@@ -36,5 +36,5 @@ export function moveVisibleMenuItem(order: readonly string[], visible: readonly 
   reordered.splice(end, 0, from);
   const allowed = new Set(visible);
   let index = 0;
-  return order.map(path => allowed.has(path) ? reordered[index++] : path);
+  return order.map(path => allowed.has(path) ? (reordered[index++] ?? path) : path);
 }

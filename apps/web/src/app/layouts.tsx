@@ -125,9 +125,9 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <Icon size={14} className="shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1 text-xs">{label}</span>
       <Button variant="ghost" size="icon" className="size-7 shrink-0" disabled={index === 0} aria-label={"Mover " + label + " para cima"} title={"Mover " + label + " para cima"}
-        onClick={() => { if (index > 0) move(path, items[index - 1].path); }}><ArrowUp size={14} aria-hidden="true" /></Button>
+        onClick={() => { const previous = items[index - 1]; if (previous) move(path, previous.path); }}><ArrowUp size={14} aria-hidden="true" /></Button>
       <Button variant="ghost" size="icon" className="size-7 shrink-0" disabled={index === items.length - 1} aria-label={"Mover " + label + " para baixo"} title={"Mover " + label + " para baixo"}
-        onClick={() => { if (index < items.length - 1) move(path, items[index + 1].path); }}><ArrowDown size={14} aria-hidden="true" /></Button>
+        onClick={() => { const next = items[index + 1]; if (next) move(path, next.path); }}><ArrowDown size={14} aria-hidden="true" /></Button>
     </div> : <NavLink key={path} to={path} end
       className={({ isActive }) => cn("flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2.5 text-xs font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400",
         compact && "md:justify-center md:px-2",
