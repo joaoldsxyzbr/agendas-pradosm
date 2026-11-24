@@ -6,13 +6,13 @@ import { DatabaseSync } from "node:sqlite";
 
 // Somente SQLite em memória: nunca consulta ou escreve no D1 de produção.
 describe("Release candidata: migrations sobre schema de produção", () => {
-  it("aplica a sequência 0001–0027 sem remover campos operacionais", () => {
+  it("aplica a sequência 0001–0028 sem remover campos operacionais", () => {
     const files = readdirSync("migrations")
       .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
       .sort();
     assert.deepEqual(files.map(name => name.slice(0, 4)),
-      Array.from({ length: 27 }, (_, i) => String(i + 1).padStart(4, "0")),
-      "A candidata deve conter exatamente migrations 0001–0027");
+      Array.from({ length: 28 }, (_, i) => String(i + 1).padStart(4, "0")),
+      "A candidata deve conter exatamente migrations 0001–0028");
 
     const db = new DatabaseSync(":memory:");
     try {

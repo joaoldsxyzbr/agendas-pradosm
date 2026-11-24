@@ -3,11 +3,12 @@ import { canAccessStore } from "../../shared/permissions.ts";
 import type { Env } from "../env.ts";
 import { findEffectiveAccess, type EffectiveAccess } from "../repositories/access.ts";
 import { findActiveStoreById } from "../repositories/stores.ts";
-type UserRow={id:string;nome:string;papel:AuthUser["papel"];loja_id:string|null;session_version:number};
+type UserRow={id:string;nome:string;papel:AuthUser["papel"];loja_id:string|null;session_version:number;ativo:number};
 export async function sessionIdentity(env:Env,user:UserRow,requestedStore?:string):Promise<{user:AuthUser;access?:EffectiveAccess}|null>{
   const access=env.ACCESS_MODE==="on"?await findEffectiveAccess(env.DB,user.id):undefined;
   if(env.ACCESS_MODE==="on"&&(!access||access.sessionVersion!==user.session_version))return null;
   if(!access?.customized){
+    if(user.ativo!==1)return null;
     const store=user.papel==="conferente"&&user.loja_id?await findActiveStoreById(env.DB,user.loja_id):null;
     if(user.papel==="conferente"&&!store)return null;
     return {user:{id:user.id,nome:user.nome,papel:user.papel,lojaId:user.loja_id,lojaCodigo:store?.codigo??null,lojaNome:store?.nome??null,...(env.ACCESS_MODE==="on"&&user.papel==="admin"?{acessoConfiguravel:true}:{})},access};

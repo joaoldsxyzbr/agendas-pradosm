@@ -150,7 +150,8 @@ authRoutes.post("/login", async (c) => {
   }
 
   const user = await findUserByLogin(c.env.DB, parsed.data.login);
-  if (!user || user.ativo !== 1) {
+  const identity=user?await sessionIdentity(c.env,user):null;
+  if (!user || !identity) {
     // Anti-enumeracao por timing: usuario inexistente paga o mesmo custo PBKDF2
     // de um usuario real com senha errada, sem alterar a resposta.
     await verifyPassword(parsed.data.senha, DUMMY_HASH);
@@ -164,9 +165,6 @@ authRoutes.post("/login", async (c) => {
     const upgradedHash = await hashPassword(parsed.data.senha);
     await upgradeUserPasswordHash(c.env.DB, user.id, user.senha_hash, upgradedHash);
   }
-
-  const identity=await sessionIdentity(c.env,user);
-  if(!identity)return invalidCredentials(c);
 
   const token = await createSessionToken(
     user.id,

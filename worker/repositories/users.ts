@@ -93,7 +93,7 @@ async function createUser(db, input, actorUserId, access?:AccessChange, actorVer
   const lojaId = input.papel === "conferente" ? input.lojaId : null;
   const statements = [
     db.prepare(
-      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"
+      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(
       id,
       lojaId,
@@ -101,6 +101,7 @@ async function createUser(db, input, actorUserId, access?:AccessChange, actorVer
       input.login,
       passwordHash,
       input.papel,
+      access?0:1,
       now,
       now
     )
@@ -133,21 +134,24 @@ async function createUser(db, input, actorUserId, access?:AccessChange, actorVer
   await db.batch(statements);
   return await findUserById(db, id);
 }
-async function updateUser(db, current, input, actorUserId) {
+async function updateUser(db, current, input, actorUserId, customActive?:boolean) {
   const nome = input.nome ?? current.nome;
   const login = input.login ?? current.login;
   const papel = input.papel ?? current.papel;
-  const ativo = input.ativo === void 0 ? current.ativo : input.ativo ? 1 : 0;
+  const oldActive=customActive??(current.ativo===1);
+  const logicalActive=input.ativo===void 0?oldActive:input.ativo;
+  const ativo=customActive===undefined?(logicalActive?1:0):0;
   const lojaId = papel === "conferente" ? input.lojaId ?? current.loja_id : null;
   if (papel === "conferente" && !lojaId) {
     throw new Error("LOJA_OBRIGATORIA");
   }
   const passwordHash = input.senha ? await hashPassword(input.senha) : current.senha_hash;
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const statusChanged = input.ativo !== void 0 && input.ativo !== (current.ativo === 1);
+  const statusChanged = logicalActive!==oldActive;
   // Mudanças de identidade ou permissão exigem uma nova autenticação.
   const identityChanged = login !== current.login || papel !== current.papel || lojaId !== current.loja_id;
   const sessionVersion = current.session_version + (input.senha || statusChanged || identityChanged ? 1 : 0);
+  const accessAuditId=crypto.randomUUID();
   const statements = [
     db.prepare(
       "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ?"
@@ -173,6 +177,7 @@ async function updateUser(db, current, input, actorUserId) {
   statements.push(
     auditStatement(db, {
       userId: actorUserId,
+      id:accessAuditId,
       action: "usuario_atualizado",
       onlyIfPreviousWrite: true,
       entity: "usuario",
@@ -183,20 +188,21 @@ async function updateUser(db, current, input, actorUserId) {
         login: current.login,
         lojaId: current.loja_id,
         papel: current.papel,
-        ativo: current.ativo === 1
+        ativo: oldActive
       },
       after: {
         nome,
         login,
         lojaId,
         papel,
-        ativo: ativo === 1,
+        ativo: logicalActive,
         senhaAlterada: Boolean(input.senha)
       },
       details: "Usu\xE1rio atualizado.",
       createdAt: now
     })
   );
+  if(customActive!==undefined)statements.push(db.prepare("UPDATE usuario_acesso SET ativo=? WHERE usuario_id=? AND EXISTS (SELECT 1 FROM auditoria WHERE id=?)").bind(logicalActive?1:0,current.id,accessAuditId));
   const [write] = await db.batch(statements);
   if (write?.meta?.changes !== 1) {
     throw Object.assign(new Error("O usuário foi modificado por outra operação."), { code: "CONFLITO_ESTADO" });

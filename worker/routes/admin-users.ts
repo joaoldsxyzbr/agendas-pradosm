@@ -29,7 +29,7 @@ function accessError(c,error){
 }
 adminUserRoutes.get("/:id/access",async c=>{
   if(!integralAdmin(c))return c.json({error:"ACESSO_NEGADO"},403);
-  const access=await findEffectiveAccess(c.env.DB,c.req.param("id"));
+  const access=await findEffectiveAccess(c.env.DB,c.req.param("id"),true);
   return access?c.json(accessJson(access)):c.json({error:"USUARIO_NAO_ENCONTRADO"},404);
 });
 adminUserRoutes.put("/:id/access",async c=>{
@@ -69,7 +69,7 @@ async function validateStoreForRole(db, papel, lojaId) {
 adminUserRoutes.get("/", async (c) => {
   const users = await listUsers(c.env.DB);
   if(c.env.ACCESS_MODE!=="on")return c.json(users.map(userJson));
-  return c.json(await Promise.all(users.map(async user=>{const access=await findEffectiveAccess(c.env.DB,user.id);return {...userJson(user),...(access?{perfil:access.profile,acessoPersonalizado:access.customized}:{} )};})));
+  return c.json(await Promise.all(users.map(async user=>{const access=await findEffectiveAccess(c.env.DB,user.id,true);return {...userJson(user),...(access?{perfil:access.profile,acessoPersonalizado:access.customized,ativo:access.active,escopo:access.scope}:{} )};})));
 });
 adminUserRoutes.post("/", async (c) => {
   const body=await c.req.json().catch(()=>null);
@@ -110,7 +110,7 @@ adminUserRoutes.post("/", async (c) => {
       access?.success?access.data:undefined,
       c.get("sessionVersion")
     );
-    return c.json({...userJson(user),...(access?.success?{perfil:access.data.profile,acessoPersonalizado:true}:{})}, 201);
+    return c.json({...userJson(user),...(access?.success?{perfil:access.data.profile,acessoPersonalizado:true,ativo:true,escopo:access.data.scope}:{})}, 201);
   } catch (error) {
     if (isDuplicateLogin(error)) {
       return c.json(
@@ -139,8 +139,9 @@ adminUserRoutes.patch("/", async (c) => {
       404
     );
   }
-  if(c.env.ACCESS_MODE==="on" && (parsed.data.papel!==undefined||parsed.data.lojaId!==undefined)){
-    const access=await findEffectiveAccess(c.env.DB,current.id);
+  const currentAccess=c.env.ACCESS_MODE==="on"?await findEffectiveAccess(c.env.DB,current.id,true):null;
+  if(currentAccess?.customized && (parsed.data.papel!==undefined||parsed.data.lojaId!==undefined)){
+    const access=currentAccess;
     if(access?.customized&&(parsed.data.papel!==current.papel||parsed.data.lojaId!==undefined))
       return c.json({error:"ACESSO_CONFIGURADO",message:"Altere perfil e lojas na configuração de acesso."},409);
   }
@@ -170,13 +171,15 @@ adminUserRoutes.patch("/", async (c) => {
         papel,
         lojaId: storeCheck.lojaId ?? void 0
       },
-      actor.id
+      actor.id,
+      currentAccess?.customized?currentAccess.active:undefined
     );
     // O versionamento da sessão é decidido no repositório (senha, status, login, papel, loja).
     if (user.session_version !== current.session_version) {
       await revokeRealtimeUser(c.env, current.id, "terminate");
     }
-    return c.json(userJson(user));
+    const updatedAccess=currentAccess?.customized?await findEffectiveAccess(c.env.DB,user.id,true):null;
+    return c.json({...userJson(user),...(updatedAccess?{perfil:updatedAccess.profile,acessoPersonalizado:true,ativo:updatedAccess.active,escopo:updatedAccess.scope}:{})});
   } catch (error) {
     if (isDuplicateLogin(error)) {
       return c.json(

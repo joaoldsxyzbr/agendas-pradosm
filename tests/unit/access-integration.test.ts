@@ -43,6 +43,10 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     const changed=await request("/api/admin/users/"+schedulerId+"/access","PUT",admin.cookie,{version:config.sessionVersion,access:edit});
     assert.equal(changed.status,200,await changed.clone().text());
     assert.equal((await request("/api/auth/me","GET",old.cookie)).status,401);
+    const physical=await local.DB.prepare("SELECT ativo FROM usuarios WHERE id=?").bind(schedulerId).first();
+    assert.equal(physical.ativo,0);
+    const legacyEnv={...env,ACCESS_MODE:"off"};
+    assert.equal((await app.request(origin+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login:"agendador.mock",senha:password})},legacyEnv)).status,401);
     const current=await login("agendador.mock");
     assert.deepEqual(current.user.escopo.storeIds,[s1,s2].sort());
     assert.equal(current.user.permissoes.includes("recebimento.editar"),false);
@@ -85,5 +89,13 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     assert.equal((await request("/api/admin/users/"+admin.user.id+"/access","PUT",admin.cookie,{version:1,access:edit})).status,409);
     const audit=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='usuario_acesso_atualizado' AND usuario_id=? AND entidade_id=?").bind(admin.user.id,schedulerId).first();
     assert.equal(audit.n,1);
+    const disabled=await request("/api/admin/users","PATCH",admin.cookie,{id:multi.user.id,ativo:false});
+    assert.equal(disabled.status,200,await disabled.clone().text());
+    assert.equal((await disabled.json()).ativo,false);
+    assert.equal((await request("/api/auth/me","GET",multi.cookie)).status,401);
+    const enabled=await request("/api/admin/users","PATCH",admin.cookie,{id:multi.user.id,ativo:true});
+    assert.equal(enabled.status,200,await enabled.clone().text());
+    assert.equal((await enabled.json()).ativo,true);
+    await login("multi.mock");
   }finally{local.close();}
 });

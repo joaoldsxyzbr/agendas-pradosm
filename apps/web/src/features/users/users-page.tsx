@@ -134,7 +134,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
         </Button>
       </div>
     </form>
-    {user&&configurable&&user.ativo&&user.id!==session?.id&&<div className="space-y-3 border-t border-slate-700 p-5">
+    {user&&configurable&&user.id!==session?.id&&<div className="space-y-3 border-t border-slate-700 p-5">
       <Button variant="secondary" onClick={()=>setAccessVisible(v=>!v)}>{accessVisible?"Ocultar permissões":"Configurar perfil e permissões"}</Button>
       {accessVisible&&<ExistingAccessEditor id={user.id} stores={stores} onSaved={onClose}/>}
     </div>}
@@ -248,7 +248,7 @@ export function UsersPage() {
               </div>
               <p className="mt-1 break-words text-xs text-slate-300">{user.login}</p>
               <p className="mt-1 break-words text-[11px] text-slate-400">
-                {user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"} · {ROLE_LABELS[user.perfil??user.papel]}
+                {user.escopo?.mode==="all"?"Todas as lojas":user.escopo?.mode==="assigned"?user.escopo.storeIds.map(id=>storeNames.get(id)??id).join(", "):user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"} · {ROLE_LABELS[user.perfil??user.papel]}
               </p>
             </div>
             <Button size="sm" variant="secondary" aria-label={"Editar usuário " + user.nome} disabled={!canEdit} onClick={() => setEditing(user)}>
@@ -267,7 +267,7 @@ export function UsersPage() {
               {visible.map(user => <tr key={user.id} data-testid={"user-" + user.login} className="hover:bg-[#1c3047]">
                 <td className="px-4 py-3 text-xs font-bold text-white">{user.nome}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{user.login}</td>
-                <td className="px-4 py-3 text-xs text-slate-200">{user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"}</td>
+                <td className="px-4 py-3 text-xs text-slate-200">{user.escopo?.mode==="all"?"Todas as lojas":user.escopo?.mode==="assigned"?user.escopo.storeIds.map(id=>storeNames.get(id)??id).join(", "):user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{ROLE_LABELS[user.perfil??user.papel]}</td>
                 <td className="px-4 py-3"><StatusBadge tone={user.ativo ? "success" : "neutral"}>{user.ativo ? "Ativo" : "Inativo"}</StatusBadge></td>
                 <td className="px-4 py-3 text-right"><Button size="sm" variant="secondary" aria-label={"Editar usuário " + user.nome} onClick={() => setEditing(user)}>

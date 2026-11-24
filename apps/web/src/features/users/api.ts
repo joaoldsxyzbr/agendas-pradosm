@@ -10,6 +10,7 @@ const userSchema = z.object({
   papel: z.enum(["admin", "conferente", "visualizador"]),
   perfil:z.enum(ACCESS_PROFILES).optional(),
   acessoPersonalizado:z.boolean().optional(),
+  escopo:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string())})]).optional(),
   lojaId: z.string().nullable().optional(),
   ativo: z.boolean(),
 });
@@ -35,7 +36,7 @@ export type UserForm = {
   access?:AccessForm;
 };
 export type AccessForm={profile:AccessProfile;scope:StoreScope;overrides:readonly PermissionOverride[]};
-const accessSchema=z.object({profile:z.enum(ACCESS_PROFILES),scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string())})]),overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})),permissions:z.array(z.enum(PERMISSIONS)),customized:z.boolean(),sessionVersion:z.number().int()});
+const accessSchema=z.object({profile:z.enum(ACCESS_PROFILES),scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string())})]),overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})),permissions:z.array(z.enum(PERMISSIONS)),customized:z.boolean(),active:z.boolean().optional(),sessionVersion:z.number().int()});
 export async function getAccess(id:string){return accessSchema.parse(await apiFetch<unknown>("/api/admin/users/"+encodeURIComponent(id)+"/access"));}
 export async function setAccess(id:string,version:number,access:AccessForm){return accessSchema.parse(await apiFetch<unknown>("/api/admin/users/"+encodeURIComponent(id)+"/access",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({version,access})}));}
 

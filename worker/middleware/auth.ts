@@ -30,7 +30,7 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (!payload) return c.json(unauthorized(), 401);
   const key = await sessionKey(token, payload);
   const user = await findUserForSession(c.env.DB, payload.userId, key);
-  if (!user || user.ativo !== 1 || user.session_version !== payload.sessionVersion) {
+  if (!user || user.session_version !== payload.sessionVersion || (user.ativo!==1&&c.env.ACCESS_MODE!=="on")) {
     return c.json(unauthorized(), 401);
   }
   const identity=await sessionIdentity(c.env,user,c.req.header("X-Agenda-Store"));

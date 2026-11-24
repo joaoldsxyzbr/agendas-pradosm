@@ -78,7 +78,7 @@ else{
     const body=await request.json().catch(()=>null);
     const account=MOCK_ACCOUNTS.find(a=>a.login===body?.login);
     if(!account)return quickJson({error:"CONTA_INVALIDA",message:"Conta fictícia inválida."},400);
-    const fixture=await local.DB.prepare("SELECT id FROM usuarios WHERE id=? AND login=? AND ativo=1 AND excluido_em IS NULL")
+    const fixture=await local.DB.prepare("SELECT id FROM usuarios WHERE id=? AND login=? AND excluido_em IS NULL")
       .bind(mockId("user:"+account.login),account.login).first();
     if(!fixture)return quickJson({error:"CONTA_INDISPONIVEL",message:"Conta fictícia indisponível. Use o login manual."},401);
     // Usa a autenticação verdadeira: senha, situação da conta, sessão e rate limit.

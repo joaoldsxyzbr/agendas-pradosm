@@ -86,3 +86,7 @@ Leitura consistente em `worker/repositories/access.ts` resolve perfis, vínculos
 ### Integração local (preview)
 
 A flag ACCESS_MODE=on no servidor Node local habilita sessão com perfil efetivo e permissões, API de cadastro/configuração, revogação de sessão, filtros SQL por loja em agendas e relatórios, guards de IDs e lote, seletor de loja de conferência, menu e editor por usuário. Usuários legados permanecem inalterados. O Agendador fictício é incluído no seed local. A administração de credenciais e delegação fica com administradores integrais; direitos de gestão global exigem escopo global. Exportação cliente não é barreira contra copiar dados visíveis. Eventos antigos sem loja não são exibidos a usuários de escopo limitado, e contas customizadas usam polling HTTP. A flag remota permanece desligada até testes verdes e garantia de rollback (código antigo não pode interpretar perfil físico como autorização de conta customizada).
+
+### Rollback fail-closed (0028)
+
+Uma conta personalizada passa a guardar seu status lógico em `usuario_acesso.ativo`; o papel físico fica inativo em `usuarios.ativo`. O runtime antigo não consegue autenticar nem reativar essas contas. A migration converte configurações existentes, revoga as sessões físicas antigas e acrescenta triggers de proteção. O runtime novo usa o status efetivo. O administrador integral continua com o modelo legado e acesso ao gerenciamento, inclusive para recuperar contas. A flag desligada bloqueia logins personalizados (não os promove ao papel físico).
