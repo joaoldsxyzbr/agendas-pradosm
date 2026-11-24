@@ -42,7 +42,7 @@ export function LoginPage() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage("");
-    if (loginValue.trim() && senha) signin.mutate();
+    if (loginValue.trim() && senha) signin.mutate(undefined);
   };
   return <main className="flex min-h-svh items-center justify-center bg-[#101923] p-4">
     <section aria-labelledby="login-title" className="w-full max-w-sm rounded-xl border border-slate-700 bg-[#172638] p-6 shadow-2xl">
@@ -65,7 +65,7 @@ export function LoginPage() {
       {quickAccounts.length > 0 && <section aria-label="Acesso rápido local" className="mt-5 grid gap-2 border-t border-slate-700 pt-4">
         <h2 className="text-xs font-bold text-sky-300">Acesso rápido · ambiente local</h2>
         <p className="text-xs text-slate-400">Escolha uma conta fictícia para entrar sem digitar a senha.</p>
-        {quickAccounts.map(account => <Button key={account.login} type="button" variant="outline" disabled={signin.isPending}
+        {quickAccounts.map(account => <Button key={account.login} type="button" variant="secondary" disabled={signin.isPending}
           className="w-full justify-start"
           onClick={() => { setErrorMessage(""); signin.mutate(account.login); }}>
           {account.label}
