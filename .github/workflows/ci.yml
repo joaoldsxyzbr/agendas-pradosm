@@ -102,16 +102,43 @@ jobs:
           jq -r '[.[].runs[]?.results[]? | {rule: .ruleId, file: (.locations[0].physicalLocation.artifactLocation.uri // ""), message: (.message.text // "")}]' --slurp "${files[@]}"
           jq -e '[.[].runs[]?.results[]?] | length == 0' --slurp "${files[@]}"
 
+  local_windows:
+    name: Preview local real (Windows / Node 26)
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26"
+          cache: npm
+      - name: Instalar dependencias
+        run: npm.cmd ci --legacy-peer-deps
+      - name: Build real no Windows
+        run: npm.cmd run build
+      - name: Validar migrations, seed e login no D1 local
+        run: node scripts/check-local-mock.mjs
+      - name: Logs locais em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnosticos-local-windows
+          path: .tmp/local-mock-smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   verify:
     name: verify
     if: always()
-    needs: [quality, codeql]
+    needs: [quality, codeql, local_windows]
     runs-on: ubuntu-24.04
     steps:
       - name: Exigir qualidade e seguranca verdes
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           CODEQL_RESULT: ${{ needs.codeql.result }}
+          LOCAL_WINDOWS_RESULT: ${{ needs.local_windows.result }}
         run: |
           test "$QUALITY_RESULT" = "success"
           test "$CODEQL_RESULT" = "success"
+          test "$LOCAL_WINDOWS_RESULT" = "success"

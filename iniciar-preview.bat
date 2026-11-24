@@ -34,10 +34,10 @@ popd
 exit /b 0
 
 :semnode
-echo Node.js ou npm nao encontrado. Instale o Node.js 22 LTS e abra novamente.
+echo Node.js ou npm nao encontrado. Instale o Node.js atual (26 ou posterior) e abra novamente.
 goto :erro
 :versao
-echo Node.js 22.18 ou superior necessario. Recomendado: Node.js 22 LTS.
+echo Node.js 22.18 ou superior necessario; Node 26 e aceito.
 goto :erro
 :incompleto
 echo Arquivos do ambiente mock ausentes. Baixe a branch completa do repositorio.

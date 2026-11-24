@@ -6,9 +6,12 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { buildMockSql, MOCK_ACCOUNTS, mockImportCsv } from "./mock-data.mjs";
+import { mockStatePath } from "./mock-state.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const state = join(root, ".wrangler", "mock-state");
+const state = mockStatePath(root);
+console.log("Node "+process.version+" | "+process.platform+" "+process.arch);
+console.log("Estado local: "+state);
 const config = join(root, "wrangler.local.jsonc");
 const wrangler = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
 const args = process.argv.slice(2);
@@ -44,9 +47,10 @@ const env={...process.env,WRANGLER_SEND_METRICS:"false"};
 function run(cliArgs) {
   const result=spawnSync(process.execPath,[wrangler,...cliArgs],{cwd:root,env,stdio:"inherit"});
   if (result.error) throw result.error;
-  if (result.status !== 0) throw Error("Wrangler local terminou sem sucesso.");
+  if (result.status !== 0) throw Error("Wrangler local terminou sem sucesso na etapa "+cliArgs.slice(0,3).join(" ")+". Confira o log acima. Estado preservado em "+state);
 }
 const localFlags=["--local","--config",config,"--persist-to",state];
+console.log("Aplicando migrations no D1 LOCAL...");
 run(["d1","migrations","apply","DB",...localFlags]);
 const sqlFile=join(state,"seed-"+randomBytes(8).toString("hex")+".sql");
 writeFileSync(sqlFile,await buildMockSql(password),{flag:"wx",mode:0o600});
