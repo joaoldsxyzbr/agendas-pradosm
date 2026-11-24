@@ -1,7 +1,8 @@
 // Smoke do servidor de homologação LOCAL. Não usa deploy ou credencial remota.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -13,6 +14,11 @@ const state=mockStatePath(root);
 const base="http://127.0.0.1:8787";
 const logs=join(root,".tmp","local-mock-smoke.log");
 mkdirSync(join(root,".tmp"),{recursive:true});
+// Credenciais efêmeras, produzidas pelo próprio smoke. Não transmitir dados lidos de arquivos.
+// A criação exclusiva garante que o teste nunca sobrescreva uma conta local existente.
+mkdirSync(state,{recursive:true});
+const password=randomBytes(18).toString("base64url");
+writeFileSync(join(state,"credentials.json"),JSON.stringify({password,sessionSecret:randomBytes(48).toString("hex")}),{flag:"wx",mode:0o600});
 let output="";
 const child=spawn(process.execPath,[join(root,"scripts","dev-mock.mjs")],{cwd:root,env,stdio:["ignore","pipe","pipe"],windowsHide:true});
 let exited=false;
@@ -31,7 +37,6 @@ try {
     await delay(1000);
   }
   assert.ok(ready,"Servidor e D1 local não ficaram prontos.");
-  const {password}=JSON.parse(readFileSync(join(state,"credentials.json"),"utf8"));
   async function login(loginName){
     const res=await fetch(base+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:base},body:JSON.stringify({login:loginName,senha:password})});
     assert.equal(res.status,200,"Login local: "+loginName);
