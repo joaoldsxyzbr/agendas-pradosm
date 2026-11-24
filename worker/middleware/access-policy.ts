@@ -15,6 +15,8 @@ const RULES:Rule[]=[
   route("PATCH",A+"/stores",rule("lojas.editar","all-stores")),
   route("DELETE",A+"/stores/"+id,rule("lojas.excluir","all-stores")),
   route("GET",A+"/users",rule("usuarios.ver","all-stores")),
+  route("GET",A+"/users/"+id+"/access",rule("usuarios.permissoes","all-stores")),
+  route("PUT",A+"/users/"+id+"/access",rule("usuarios.permissoes","all-stores")),
   route("POST",A+"/users",rule("usuarios.criar","all-stores",["usuarios.permissoes"])),
   route("PATCH",A+"/users",rule("usuarios.editar","all-stores",["usuarios.permissoes"])),
   route("DELETE",A+"/users/"+id,rule("usuarios.excluir","all-stores",["usuarios.permissoes"])),

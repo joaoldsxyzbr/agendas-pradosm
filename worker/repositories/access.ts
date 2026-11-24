@@ -66,7 +66,7 @@ export interface AccessChange {
 function accessAudit(access: EffectiveAccess | AccessChange) {
   return {profile:access.profile,scope:access.scope,overrides:[...access.overrides]};
 }
-function validChange(input:AccessChange):boolean {
+export function validChange(input:AccessChange):boolean {
   if(!isAccessProfile(input.profile)||!resolvePermissions(input.profile,input.overrides))return false;
   const scope=input.scope;
   if(!scope||typeof scope!=="object")return false;
@@ -116,4 +116,15 @@ export async function saveAccessConfiguration(db:D1Database, actor:{id:string;se
   const after=await findEffectiveAccess(db,targetId);
   if(!after||after.sessionVersion!==expectedVersion+1)throw new Error("ACESSO_CONFLITO");
   return after;
+}
+
+export function accessInsertStatements(db:D1Database,targetId:string,input:AccessChange):D1PreparedStatement[]{
+  if(!validChange(input))throw new Error("ACESSO_CONFIG_INVALIDA");
+  const statements=[db.prepare("INSERT INTO usuario_acesso(usuario_id,perfil,escopo) VALUES (?,?,?)").bind(targetId,input.profile,input.scope.mode==="all"?"todas":"vinculadas")];
+  if(input.scope.mode==="assigned")for(const id of input.scope.storeIds)statements.push(db.prepare("INSERT INTO usuario_acesso_lojas(usuario_id,loja_id) VALUES (?,(SELECT id FROM lojas WHERE id=? AND ativo=1 AND excluido_em IS NULL))").bind(targetId,id));
+  for(const override of input.overrides)statements.push(db.prepare("INSERT INTO usuario_acesso_excecoes(usuario_id,permissao,efeito) VALUES (?,?,?)").bind(targetId,override.permission,override.effect));
+  return statements;
+}
+export function accessJson(access:EffectiveAccess){
+  return {profile:access.profile,scope:access.scope,overrides:access.overrides,permissions:[...access.permissions],customized:access.customized,sessionVersion:access.sessionVersion};
 }

@@ -62,7 +62,7 @@ try {
 const csv=join(state,"importacao-mock.csv");
 writeFileSync(csv,mockImportCsv(),"utf8");
 console.log("\nAmbiente LOCAL fictício — não use estas contas fora do localhost.");
-for(const user of MOCK_ACCOUNTS) console.log("  "+user.login+" — "+user.name);
+for(const user of MOCK_ACCOUNTS.filter(u=>!u.profile)) console.log("  "+user.login+" — "+user.name);
 console.log("Senha inicial comum: "+password);
 console.log("CSV de importação: "+csv);
 console.log("Dados persistidos em: "+state);

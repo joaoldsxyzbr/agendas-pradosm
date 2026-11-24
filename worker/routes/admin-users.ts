@@ -1,6 +1,8 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { z } from "zod";
+import { ACCESS_PROFILES, PERMISSIONS } from "../../shared/permissions.ts";
+import { accessJson, findEffectiveAccess, saveAccessConfiguration, validChange } from "../repositories/access.ts";
 import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findStoreById } from "../repositories/stores.ts";
@@ -12,6 +14,35 @@ import {
   updateUser
 } from "../repositories/users.ts";
 const adminUserRoutes = new Hono<AppEnv>();
+const AccessInput=z.object({
+  profile:z.enum(ACCESS_PROFILES),
+  scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}).strict(),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string().uuid()).max(50)}).strict()]),
+  overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})).max(PERMISSIONS.length)
+}).refine(validChange);
+function integralAdmin(c){
+  return c.env.ACCESS_MODE==="on"&&c.get("authUser")?.papel==="admin"&&!c.get("effectiveAccess")?.customized;
+}
+function accessError(c,error){
+  if(error instanceof Error&&/ACESSO_|ULTIMO_ADMIN|NOT NULL|FOREIGN KEY|UNIQUE constraint/.test(error.message))
+    return c.json({error:"ACESSO_CONFLITO",message:"Configuração inválida, loja indisponível ou usuário alterado. Atualize e tente novamente."},409);
+  throw error;
+}
+adminUserRoutes.get("/:id/access",async c=>{
+  if(!integralAdmin(c))return c.json({error:"ACESSO_NEGADO"},403);
+  const access=await findEffectiveAccess(c.env.DB,c.req.param("id"));
+  return access?c.json(accessJson(access)):c.json({error:"USUARIO_NAO_ENCONTRADO"},404);
+});
+adminUserRoutes.put("/:id/access",async c=>{
+  if(!integralAdmin(c))return c.json({error:"ACESSO_NEGADO"},403);
+  const parsed=z.object({version:z.number().int().positive(),access:AccessInput}).safeParse(await c.req.json().catch(()=>null));
+  if(!parsed.success)return c.json({error:"REQUISICAO_INVALIDA",message:"Configuração de acesso inválida."},400);
+  const actor=c.get("authUser");
+  try{
+    const result=await saveAccessConfiguration(c.env.DB,{id:actor.id,sessionVersion:c.get("sessionVersion")},c.req.param("id"),parsed.data.version,parsed.data.access);
+    await revokeRealtimeUser(c.env,c.req.param("id"),"terminate");
+    return c.json(accessJson(result));
+  }catch(error){return accessError(c,error);}
+});
 function userJson(user) {
   return {
     id: user.id,
@@ -37,12 +68,16 @@ async function validateStoreForRole(db, papel, lojaId) {
 }
 adminUserRoutes.get("/", async (c) => {
   const users = await listUsers(c.env.DB);
-  return c.json(users.map(userJson));
+  if(c.env.ACCESS_MODE!=="on")return c.json(users.map(userJson));
+  return c.json(await Promise.all(users.map(async user=>{const access=await findEffectiveAccess(c.env.DB,user.id);return {...userJson(user),...(access?{perfil:access.profile,acessoPersonalizado:access.customized}:{} )};})));
 });
 adminUserRoutes.post("/", async (c) => {
-  const parsed = CreateUserInput.safeParse(
-    await c.req.json().catch(() => null)
-  );
+  const body=await c.req.json().catch(()=>null);
+  const custom=body&&typeof body==="object"&&Object.hasOwn(body,"access");
+  const access=custom?AccessInput.safeParse(body.access):null;
+  if(custom&&(!integralAdmin(c)||!access?.success))return c.json({error:"REQUISICAO_INVALIDA",message:"Configuração de acesso inválida."},400);
+  // Perfil efetivo separado do papel físico legado.
+  const parsed=CreateUserInput.safeParse(custom?{...body,papel:"visualizador"}:body);
   if (!parsed.success) {
     return c.json(
       { error: "REQUISICAO_INVALIDA", message: "Dados inv\xE1lidos." },
@@ -71,9 +106,11 @@ adminUserRoutes.post("/", async (c) => {
         ...parsed.data,
         lojaId: storeCheck.lojaId ?? void 0
       },
-      actor.id
+      actor.id,
+      access?.success?access.data:undefined,
+      c.get("sessionVersion")
     );
-    return c.json(userJson(user), 201);
+    return c.json({...userJson(user),...(access?.success?{perfil:access.data.profile,acessoPersonalizado:true}:{})}, 201);
   } catch (error) {
     if (isDuplicateLogin(error)) {
       return c.json(
@@ -81,6 +118,7 @@ adminUserRoutes.post("/", async (c) => {
         409
       );
     }
+    if(custom)return accessError(c,error);
     throw error;
   }
 });
@@ -100,6 +138,11 @@ adminUserRoutes.patch("/", async (c) => {
       { error: "USUARIO_NAO_ENCONTRADO", message: "Usu\xE1rio n\xE3o encontrado." },
       404
     );
+  }
+  if(c.env.ACCESS_MODE==="on" && (parsed.data.papel!==undefined||parsed.data.lojaId!==undefined)){
+    const access=await findEffectiveAccess(c.env.DB,current.id);
+    if(access?.customized&&(parsed.data.papel!==current.papel||parsed.data.lojaId!==undefined))
+      return c.json({error:"ACESSO_CONFIGURADO",message:"Altere perfil e lojas na configuração de acesso."},409);
   }
   const papel = parsed.data.papel ?? current.papel;
   const requestedStore = papel === "conferente" ? parsed.data.lojaId ?? current.loja_id : null;

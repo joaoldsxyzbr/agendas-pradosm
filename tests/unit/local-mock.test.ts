@@ -22,7 +22,7 @@ test("seed mock: migrations reais, perfis disponíveis, agendas da data operacio
     db.exec(seed);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM lojas").get().n,3);
     const users=db.prepare("SELECT * FROM usuarios").all();
-    assert.equal(users.length,MOCK_ACCOUNTS.length);
+    assert.equal(users.length,MOCK_ACCOUNTS.filter(u=>!u.profile).length);
     assert.deepEqual(new Set(users.map(u=>u.papel)),new Set(["admin","visualizador","conferente"]));
     for (const u of users) assert.equal(await verifyPassword(password,u.senha_hash),true);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM agendas").get().n,21);

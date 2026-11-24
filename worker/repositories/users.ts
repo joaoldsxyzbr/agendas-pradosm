@@ -1,4 +1,5 @@
 import { hashPassword } from "../lib/password.ts";
+import { accessInsertStatements, type AccessChange } from "./access.ts";
 import { auditStatement } from "./audit.ts";
 const USER_COLUMNS = "id, loja_id, nome, login, senha_hash, papel, ativo, session_version, excluido_em";
 async function findUserByLogin(db, login) {
@@ -82,7 +83,7 @@ async function listUsers(db) {
   ).all();
   return result.results;
 }
-async function createUser(db, input, actorUserId) {
+async function createUser(db, input, actorUserId, access?:AccessChange, actorVersion?:number) {
   if (input.papel === "conferente" && !input.lojaId) {
     throw new Error("LOJA_OBRIGATORIA");
   }
@@ -104,6 +105,11 @@ async function createUser(db, input, actorUserId) {
       now
     )
   ];
+  if(access){
+    // Atomicidade da criação e da autorização; não criar conta com papel legado se o acesso falhar.
+    statements.unshift(db.prepare(`UPDATE usuarios SET session_version=CASE WHEN session_version=? AND papel='admin' AND ativo=1 AND excluido_em IS NULL AND NOT EXISTS (SELECT 1 FROM usuario_acesso WHERE usuario_id=?) THEN session_version ELSE NULL END WHERE id=?`).bind(actorVersion,actorUserId,actorUserId));
+    statements.push(...accessInsertStatements(db,id,access));
+  }
   statements.push(
     auditStatement(db, {
       userId: actorUserId,
@@ -117,7 +123,8 @@ async function createUser(db, input, actorUserId) {
         lojaId,
         papel: input.papel,
         ativo: true,
-        senhaAlterada: true
+        senhaAlterada: true,
+        ...(access?{acesso:access}:{})
       },
       details: "Usu\xE1rio criado.",
       createdAt: now
