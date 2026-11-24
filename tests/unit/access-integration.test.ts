@@ -112,3 +112,49 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     await login("multi.mock");
   }finally{local.close();}
 });
+
+
+test("relatório conta todos os fornecedores sem agenda antes do limite e separa os três tipos de ocorrência",async()=>{
+  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations/",import.meta.url)));
+  try{
+    const now=new Date();
+    const day=businessDate(now);
+    const start=new Date(Date.parse(day+"T12:00:00Z")-6*86400000).toISOString().slice(0,10);
+    const password="teste-local-relatorio-123";
+    local.seed(await buildMockSql(password,now,{access:true}));
+    const env={DB:local.DB,SESSION_SECRET:"segredo-sintetico-relatorio-sem-producao-123456789",REALTIME_MODE:"off",ACCESS_MODE:"on",LOGIN_RATE_LIMITER:{async limit(){return {success:true}}}};
+    const origin="http://localhost";
+    // 21 registros manuais, cada qual com fornecedor diferente; um foi recusado.
+    const manual=(await local.DB.prepare("SELECT id FROM agendamentos WHERE origem='manual' ORDER BY id").all()).results;
+    assert.equal(manual.length,21);
+    for(const [i,row] of manual.entries()){
+      await local.DB.prepare("UPDATE agendamentos SET fornecedor=?,status=?,observacao=? WHERE id=?").bind("Fornecedor sintético "+i,i===0?"recusado":"recebido",i===0?"Recusa de teste":null,row.id).run();
+    }
+    const login=await app.request(origin+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login:"gerente.mock",senha:password})},env);
+    assert.equal(login.status,200);
+    const cookie=login.headers.get("set-cookie")?.split(";")[0];
+    assert.ok(cookie);
+    async function get(path,extra=""){
+      const response=await app.request(origin+path+"?start="+start+"&end="+day+extra,{headers:{Cookie:cookie}},env);
+      assert.equal(response.status,200,await response.clone().text());
+      return response.json();
+    }
+    const report=await get("/api/admin/reports");
+    assert.equal(report.manualSupplierCount,21);
+    assert.equal(report.semAgendaSuppliers.length,12);
+    assert.equal(report.rows.reduce((n,row)=>n+row.semAgenda,0),21);
+    assert.equal(report.rows.reduce((n,row)=>n+row.semAgendaRecebidos,0),20);
+    assert.equal(report.rows.reduce((n,row)=>n+row.recusado,0),1);
+    assert.ok(report.suppliers.some(row=>row.recusado===1));
+    for(const [type,expected] of [["recusado",1],["nao_recebido",42],["nao_compareceu",18]]){
+      const data=await get("/api/admin/reports/occurrences","&type="+type);
+      assert.equal(data.total,expected);
+      assert.ok(data.rows.every(row=>row.occurrenceType===type));
+    }
+    const all=await get("/api/admin/reports/occurrences");
+    assert.equal(all.total,61);
+    const scoped=await get("/api/admin/reports","&storeCode=F901");
+    assert.equal(scoped.manualSupplierCount,7);
+    assert.equal(scoped.rows.reduce((n,row)=>n+row.semAgenda,0),7);
+  }finally{local.close();}
+});

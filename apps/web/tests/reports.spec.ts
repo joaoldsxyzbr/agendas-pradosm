@@ -7,14 +7,15 @@ const stores = [
 ];
 const rows = [
   { date: "2026-10-29", storeCode: "F01", storeName: "Loja 01", dayStatus: "concluido",
-    total: 2, recebido: 1, naoChegou: 1, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 1, semAgendaRecebidos: 1 },
+    total: 15, recebido: 10, naoChegou: 3, naoCompareceu: 1, aguardando: 0, recusado: 1, semAgenda: 5, semAgendaRecebidos: 4 },
   { date: "2026-10-30", storeCode: "F02", storeName: "Loja 02", dayStatus: "aberto",
-    total: 1, recebido: 1, naoChegou: 0, naoCompareceu: 0, aguardando: 0, recusado: 0, semAgenda: 0 },
+    total: 15, recebido: 10, naoChegou: 3, naoCompareceu: 0, aguardando: 1, recusado: 1, semAgenda: 5, semAgendaRecebidos: 4 },
 ];
 const occurrences = { total: 55, rows: [
   { date: "2026-10-29", storeCode: "F01", storeName: "Loja 01", supplier: "Fornecedor Alfa",
-    protocol: "P001", observation: "Entrega não realizada", origin: "imported",
+    protocol: "P001", observation: "Entrega não realizada", origin: "importado",
     occurrenceType: "nao_recebido", classificationOrigin: "manual" },
+  { date: "2026-10-30", storeCode: "F02", storeName: "Loja 02", supplier: "Fornecedor Beta", protocol: "P002", observation: "Recusa registrada", origin: "importado", occurrenceType: "recusado", classificationOrigin: "manual" },
 ]};
 const suppliers = [
   { supplier: "Fornecedor Alfa", total: 3, recebido: 1, naoChegou: 2 },
@@ -53,12 +54,12 @@ async function mock(page, options = {}) {
         rows: selected.length ? rows.filter(row => selected.includes(row.storeCode)) : rows,
         suppliers,
         semAgendaSuppliers,
-        manualSupplierCount: 20,
+        manualSupplierCount: 6,
       } });
     }
     if (url.pathname === "/api/admin/reports/occurrences") return route.fulfill({ json: {
       ...occurrences, offset: Number(url.searchParams.get("offset") || 0), limit: 50,
-      rows: url.searchParams.get("q") === "Inexistente" ? [] : occurrences.rows,
+      rows: url.searchParams.get("q") === "Inexistente" ? [] : occurrences.rows.filter(row => !url.searchParams.get("type") || row.occurrenceType === url.searchParams.get("type")),
     } });
     throw Error("API de teste inesperada: " + url.pathname);
   });
@@ -70,13 +71,13 @@ test("Relatório React mostra KPIs, rankings de fornecedores, visão gerencial e
   await page.goto("/admin/reports");
   await expect(page.getByRole("heading", { name: "Relatório Gerencial" })).toBeVisible();
   await expect(page.getByLabel("Indicadores gerenciais")).toContainText("66,7%");
-  await expect(page.getByLabel("Indicadores gerenciais")).toContainText("3");
+  await expect(page.getByLabel("Indicadores gerenciais")).toContainText("30");
   await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("Taxa de recebimento");
   await expect(page.getByRole("heading", { name: "Distribuição das situações" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Desempenho por loja" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores com ocorrências" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Fornecedores sem agenda" })).toBeVisible();
-  await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("2 registro(s) sem agenda · 2 recebido(s) · 20 fornecedor(es)");
+  await expect(page.getByLabel("Visão gerencial de recebimentos")).toContainText("10 registro(s) sem agenda · 8 recebido(s) · 6 fornecedor(es)");
   await page.getByRole("button", { name: "Ver ranking de fornecedores" }).nth(0).click();
   await expect(page.getByRole("table", { name: "Fornecedores com ocorrências" })).toContainText("Fornecedor Alfa");
   await page.getByRole("button", { name: "Fechar" }).click();
@@ -127,6 +128,8 @@ test("Relatório React oferece pesquisa, paginação e comparação sem gravaç�
   await expect(page.getByRole("table", { name: "Ocorrências e observações" })).toBeVisible();
   await page.getByLabel("Tipo de ocorrência").selectOption("recusado");
   await expect.poll(() => requests.some(x => x.type === "recusado")).toBe(true);
+  await expect(page.getByRole("table", { name: "Ocorrências e observações" })).toContainText("Recusado");
+  await expect(page.getByRole("table", { name: "Ocorrências e observações" })).not.toContainText("Fornecedor Alfa");
   await page.getByLabel("Tipo de ocorrência").selectOption("todos");
   await page.getByRole("searchbox", { name: "Buscar ocorrência por fornecedor ou protocolo" }).fill("Alfa");
   await page.getByRole("button", { name: "Buscar" }).click();
