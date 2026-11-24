@@ -39,7 +39,7 @@ function Guard({ roles, path }: { roles: Role[]; path?:string }) {
 function LayoutRoute() {
   const session = useSession();
   // O Guard garante que o papel foi validado antes de renderizar a estrutura.
-  return session.data ? <AppLayout user={session.data} /> : null;
+  return session.data ? <AppLayout key={session.data.id} user={session.data} /> : null;
 }
 
 function UnknownRoute() {

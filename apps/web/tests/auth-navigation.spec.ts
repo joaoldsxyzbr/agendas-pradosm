@@ -157,7 +157,7 @@ test("React: agendador personalizado recebe menu autorizado e bloqueio de rota d
   await page.goto("/admin/users");
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
-  await expect(page.getByRole("link",{name:"Histórico",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Histórico",exact:true})).toHaveCount(0);
   await expect(page.getByRole("link",{name:"Importação",exact:true})).toBeVisible();
   await expect(page.getByRole("link",{name:"Usuários",exact:true})).toHaveCount(0);
   await expect(page.getByRole("link",{name:"Lojas",exact:true})).toHaveCount(0);
@@ -176,4 +176,68 @@ test("React: administrador configura perfil, escopo e exceções no cadastro",as
   await expect(page.getByLabel("Recebimento — Editar",{exact:true})).toHaveValue("inherit");
   await page.getByLabel("Escopo de lojas").selectOption("assigned");
   await expect(page.getByRole("button",{name:"Cadastrar usuário",exact:true})).toBeDisabled();
+});
+
+
+test("React: organiza menu por arraste e setas, persiste por usuário e restaura padrão", async ({page}) => {
+  await page.setViewportSize({width:1600,height:900});
+  await sessionMocks(page,admin);
+  await page.goto("/admin");
+  const aside=page.locator("aside");
+  const nav=aside.getByRole("navigation",{name:"Navegação principal"});
+  await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
+  const order=()=>nav.getByRole("link").allTextContents();
+  const original=await order();
+  expect(original).toContain("Agendas");
+  expect(original).not.toContain("Histórico");
+  await aside.getByRole("button",{name:"Organizar menu"}).click();
+  await expect(nav.getByRole("link")).toHaveCount(0);
+  await nav.locator('[data-menu-item="/admin/agendas"]').dragTo(nav.locator('[data-menu-item="/admin/users"]'));
+  await aside.getByRole("button",{name:"Concluir"}).click();
+  expect(await order()).toEqual(["Recebimento","Relatório Gerencial","Importação","Lojas","Usuários","Agendas","Logs e Auditoria"]);
+  await page.reload();
+  await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
+  expect(await order()).toEqual(["Recebimento","Relatório Gerencial","Importação","Lojas","Usuários","Agendas","Logs e Auditoria"]);
+  await aside.getByRole("button",{name:"Organizar menu"}).click();
+  await aside.getByRole("button",{name:"Mover Agendas para cima"}).click();
+  await aside.getByRole("button",{name:"Concluir"}).click();
+  const custom=await order();
+  expect(custom.indexOf("Agendas")).toBeLessThan(custom.indexOf("Usuários"));
+  await nav.getByRole("link",{name:"Usuários"}).click();
+  await expect(page.getByRole("heading",{name:"Usuários",exact:true})).toBeVisible();
+  expect(await order()).toEqual(custom);
+  await sessionMocks(page,viewer);
+  await page.goto("/admin");
+  await expect(nav.getByRole("link",{name:"Recebimento"})).toBeVisible();
+  expect(await order()).toEqual(["Recebimento","Relatório Gerencial"]);
+  await sessionMocks(page,admin);
+  await page.goto("/admin");
+  await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
+  expect(await order()).toEqual(custom);
+  await aside.getByRole("button",{name:"Organizar menu"}).click();
+  await aside.getByRole("button",{name:"Restaurar ordem padrão"}).click();
+  await aside.getByRole("button",{name:"Concluir"}).click();
+  expect(await order()).toEqual(original);
+});
+
+test("React: menu móvel permite reordenar por setas sem ampliar a página",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await sessionMocks(page,viewer);
+  await page.goto("/admin");
+  const mobile=page.getByTestId("mobile-navigation");
+  await mobile.getByRole("button",{name:"Organizar menu"}).click();
+  await mobile.getByRole("button",{name:"Mover Relatório Gerencial para cima"}).click();
+  await mobile.getByRole("button",{name:"Concluir"}).click();
+  expect(await mobile.getByRole("link").allTextContents()).toEqual(["Relatório Gerencial","Recebimento"]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth)).toBeLessThanOrEqual(2);
+});
+
+test("React: preferência antiga não exibe itens não autorizados nem histórico",async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem("agenda-prado-menu-order-v1:view",JSON.stringify(["/admin/history","/admin/users","/admin/reports","/admin/reports","/admin","/desconhecido"])));
+  await sessionMocks(page,viewer);
+  await page.setViewportSize({width:1600,height:900});
+  await page.goto("/admin");
+  const nav=page.locator("aside").getByRole("navigation");
+  await expect(nav.getByRole("link",{name:"Recebimento"})).toBeVisible();
+  expect(await nav.getByRole("link").allTextContents()).toEqual(["Relatório Gerencial","Recebimento"]);
 });
