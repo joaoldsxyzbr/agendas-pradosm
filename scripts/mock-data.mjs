@@ -36,9 +36,9 @@ export function mockImportCsv(now = new Date()) {
     "Dia: " + day + " ; Filial: Todas ; Doca: Todas ; Busca:  ; ;",
     "",
     "Protocolo;Data agenda;Fornecedor;Filial;Doca;Itens;Vol.;Paletes;Carga batida;Tipo;N° NFe;Pedidos;",
-    "99000001;" + day + " 07:00 às 08:00;Fornecedor Mock Norte;MOCK01;DOCA 01;5;12;1;-;Pedido;-;99001;",
-    "99000002;" + day + " 08:00 às 09:00;Fornecedor Mock Sul;MOCK02;DOCA 01;6;20;2;-;Nota fiscal;99002;99003;",
-    "99000003;" + day + " 09:00 às 10:00;Fornecedor Mock Centro;MOCK03;DOCA 01;7;30;3;-;Agenda fixa;-;-;",
+    "99000001;" + day + " 07:00 às 08:00;Fornecedor Mock Norte;F901 - Loja fictícia 01;DOCA 01;5;12;1;-;Pedido;-;99001;",
+    "99000002;" + day + " 08:00 às 09:00;Fornecedor Mock Sul;F902 - Loja fictícia 02;DOCA 01;6;20;2;-;Nota fiscal;99002;99003;",
+    "99000003;" + day + " 09:00 às 10:00;Fornecedor Mock Centro;F903 - Loja fictícia 03;DOCA 01;7;30;3;-;Agenda fixa;-;-;",
     "",
   ].join("\n");
 }
@@ -48,7 +48,7 @@ export async function buildMockSql(password, now = new Date()) {
   const stamp = now.toISOString();
   const admin = mockId("user:admin.mock");
   const rows = [];
-  const stores = [1, 2, 3].map(i => ({ id: mockId("store:"+i), codigo: "MOCK0"+i,
+  const stores = [1, 2, 3].map(i => ({ id: mockId("store:"+i), codigo: "F90"+i,
     nome: "Loja fictícia 0"+i, ativo: 1, criado_em: stamp, atualizado_em: stamp }));
   for (const store of stores) rows.push(insert("lojas",store));
   for (const user of MOCK_ACCOUNTS) {

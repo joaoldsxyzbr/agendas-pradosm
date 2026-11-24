@@ -65,9 +65,9 @@ Abra **http://127.0.0.1:8787**. O comando compila a UI, aplica todas as migratio
 | --- | --- |
 | `admin.mock` | Administrador |
 | `gerente.mock` | Visualizador |
-| `conferente01.mock` | Conferente da MOCK01 |
-| `conferente02.mock` | Conferente da MOCK02 |
-| `conferente03.mock` | Conferente da MOCK03 |
+| `conferente01.mock` | Conferente da F901 |
+| `conferente02.mock` | Conferente da F902 |
+| `conferente03.mock` | Conferente da F903 |
 
 A base inclui três lojas, agendas dos últimos seis dias e de hoje (data operacional de São Paulo), fornecedores recebidos, não recebidos, pendentes e sem agenda, históricos, auditoria e um aviso. O CSV `.wrangler/mock-state/importacao-mock.csv` permite testar a importação de amanhã nas três lojas. O perfil Agendador será incluído quando a issue #248 integrar esse papel à autenticação; não simular permissões no cliente.
 

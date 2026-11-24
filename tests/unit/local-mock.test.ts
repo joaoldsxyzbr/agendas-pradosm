@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { buildMockSql, mockId, MOCK_ACCOUNTS, mockImportCsv } from "../../scripts/mock-data.mjs";
 import { verifyPassword } from "../../worker/lib/password.ts";
 import { businessDate } from "../../shared/time.ts";
+import { parseAgendaCsv } from "../../shared/import/parseAgendaBatch.ts";
 
 const now=new Date("2026-11-24T15:00:00Z");
 
@@ -47,5 +48,8 @@ test("seed mock: migrations reais, perfis disponíveis, agendas da data operacio
 test("CSV de importação fictício usa amanhã e as três lojas",()=>{
   const csv=mockImportCsv(now);
   assert.match(csv,/Dia: 25\/11\/2026/);
-  for(const code of ["MOCK01","MOCK02","MOCK03"])assert.ok(csv.includes(code));
+  const result=parseAgendaCsv(csv);
+  assert.deepEqual(result.blockingErrors,[]);
+  assert.equal(result.totalAppointments,3);
+  assert.deepEqual(result.agendas.map(a=>a.storeCode),["F901","F902","F903"]);
 });
