@@ -19,6 +19,11 @@ export const enforceAccess=createMiddleware<AppEnv>(async(c,next)=>{
   // de edição de cadastro não pode ser usada como delegação ou autoelevação.
   if(path.startsWith("/api/admin/users")&&method!=="GET")return deny();
   if(policy.scope==="all-stores"&&access.scope.mode!=="all")return deny();
+  if(policy.scope==="store-id"){
+    const body=method==="PATCH"?await c.req.raw.clone().json().catch(()=>null) as {id?:unknown}|null:null;
+    const id=method==="PATCH"?body?.id:path.split("/")[4];
+    if(typeof id!=="string"||!canAccessStore(access.scope,id))return deny();
+  }
   if(policy.scope==="agenda-id"||policy.scope==="appointment-id"){
     const id=path.split("/")[4];
     const row=policy.scope==="agenda-id"?

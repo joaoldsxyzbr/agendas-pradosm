@@ -63,7 +63,7 @@ storePresenceRoutes.delete("/", async (c) => {
   return c.body(null, 204);
 });
 adminPresenceRoutes.get("/", async (c) => {
-  const rows = await listActiveConferentePresence(c.env.DB);
+  const rows = await listActiveConferentePresence(c.env.DB,c.env.ACCESS_MODE==="on");
   const nowMs = Date.now();
   const byStore = /* @__PURE__ */ new Map();
   const ids=scopedStoreIds(c);

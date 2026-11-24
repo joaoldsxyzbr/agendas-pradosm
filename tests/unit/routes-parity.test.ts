@@ -11,7 +11,9 @@ describe("Superfície de rotas da main preservada", () => {
   for (const path of ["admin-audit", "admin-stores", "admin-users", "presence", "realtime", "avisos"]) {
     it(path + " possui os mesmos endpoints da main", () => {
       const root = "../../worker/routes/" + path;
-      assert.deepEqual(routePatterns(load(root + ".ts")), JSON.parse(load("./legacy-route-contracts.json")).routes[path]);
+      const expected=JSON.parse(load("./legacy-route-contracts.json")).routes[path];
+      const extended=path==="admin-users"?['get("/:id/access"','put("/:id/access"',...expected]:expected;
+      assert.deepEqual(routePatterns(load(root + ".ts")),extended);
     });
   }
   it("middleware mantém autenticação e permissões por papel", () => {

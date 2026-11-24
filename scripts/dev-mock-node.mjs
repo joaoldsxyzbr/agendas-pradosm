@@ -1,7 +1,7 @@
 // Servidor exclusivamente local usando as rotas Hono reais e SQLite nativo do Node.
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,7 @@ for(const user of MOCK_ACCOUNTS)console.log(user.login+" - "+user.name);
 console.log("Senha inicial comum: "+password);
 if(args.includes("--seed-only")){local.close();}
 else{
+  const quickToken=randomBytes(32).toString("hex");
   const files=new Map();
   const types={html:"text/html; charset=utf-8",js:"text/javascript; charset=utf-8",css:"text/css; charset=utf-8",wasm:"application/wasm",svg:"image/svg+xml",png:"image/png",json:"application/json",ico:"image/x-icon",woff2:"font/woff2",webp:"image/webp"};
   // Arquivos lidos exclusivamente do build, nunca de caminhos vindos da URL.
@@ -62,11 +63,15 @@ else{
     login:account.login,
     label:account.profile==="agendador"?"Agendador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
   }));
+  function validQuickToken(request){
+    const token=request.headers.get("x-agenda-local-token")??"";
+    return /^[a-f0-9]{64}$/.test(token)&&timingSafeEqual(Buffer.from(token,"hex"),Buffer.from(quickToken,"hex"));
+  }
   function quickJson(value,status=200){
     return Response.json(value,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
   }
   async function quickLogin(request){
-    if(request.headers.get("origin")!==base || request.headers.get("sec-fetch-site")==="cross-site")
+    if(!validQuickToken(request) || request.headers.get("origin")!==base || request.headers.get("sec-fetch-site")==="cross-site")
       return quickJson({error:"ORIGEM_INVALIDA",message:"Acesso rápido permitido apenas no ambiente local."},403);
     if(!request.headers.get("content-type")?.startsWith("application/json"))
       return quickJson({error:"REQUISICAO_INVALIDA",message:"Requisição inválida."},400);
@@ -86,7 +91,9 @@ else{
   function staticResponse(path){
     const asset=files.get(path)||(path.startsWith("/assets/")?null:files.get("/index.html"));
     if(!asset)return new Response("Not found",{status:404});
-    return new Response(asset.data,{headers:{"Content-Type":asset.type,"X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:"}});
+    const html=asset.type.startsWith("text/html");
+    const data=html?asset.data.toString("utf8").replace("</head>",'<meta name="agenda-local-token" content="'+quickToken+'"></head>'):asset.data;
+    return new Response(data,{headers:{"Content-Type":asset.type,...(html?{"Cache-Control":"no-store"}:{}),"X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"no-referrer","Content-Security-Policy":"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:"}});
   }
   const server=createServer(async(req,res)=>{
     try{
@@ -106,7 +113,7 @@ else{
         }
         const body=method==="GET"||method==="HEAD"?undefined:Buffer.concat(chunks);
         const request=new Request(url,{method,headers,body});
-        if(url.pathname==="/api/local-mock/accounts"&&method==="GET")response=quickJson({accounts:quickAccounts});
+        if(url.pathname==="/api/local-mock/accounts"&&method==="GET")response=validQuickToken(request)?quickJson({accounts:quickAccounts}):quickJson({error:"ACESSO_NEGADO"},403);
         else if(url.pathname==="/api/local-mock/login"&&method==="POST")response=await quickLogin(request);
         else response=await app.fetch(request,env);
       }else if(method==="GET"||method==="HEAD"){response=staticResponse(url.pathname);}

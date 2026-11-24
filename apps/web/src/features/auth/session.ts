@@ -66,12 +66,13 @@ const quickAccountsSchema = z.object({
   accounts: z.array(z.object({ login: z.string(), label: z.string() })),
 });
 export function isLocalMockOrigin(): boolean {
-  return window.location.origin === "http://127.0.0.1:8787";
+  return window.location.origin === "http://127.0.0.1:8787" && Boolean(localMockToken());
 }
+function localMockToken(){return document.querySelector<HTMLMetaElement>('meta[name="agenda-local-token"]')?.content??"";}
 export async function loadQuickAccounts() {
   if (!isLocalMockOrigin()) return [];
   try {
-    const raw = await apiFetch<unknown>("/api/local-mock/accounts");
+    const raw = await apiFetch<unknown>("/api/local-mock/accounts",{headers:{"X-Agenda-Local-Token":localMockToken()}});
     return quickAccountsSchema.parse(raw).accounts;
   } catch {
     // Wrangler local e servidor publicado não oferecem esse endpoint.
@@ -83,7 +84,7 @@ export async function quickLogin(login: string): Promise<SessionUser> {
   if (!isLocalMockOrigin()) throw new Error("Acesso rápido indisponível.");
   const raw = await apiFetch<unknown>("/api/local-mock/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json","X-Agenda-Local-Token":localMockToken() },
     body: JSON.stringify({ login }),
   });
   return userSchema.parse(raw);

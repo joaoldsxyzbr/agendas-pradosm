@@ -2,7 +2,7 @@
 // Um identificador de loja do cliente nunca é suficiente: a integração deverá resolver a entidade real.
 import { canAccessStore, type Permission, type StoreScope } from "../../shared/permissions.ts";
 
-export type ScopeCheck="none"|"all-stores"|"filtered-list"|"agenda-id"|"appointment-id"|"import-batch"|"selected-store"|"notice-filter"|"realtime";
+export type ScopeCheck="none"|"all-stores"|"filtered-list"|"agenda-id"|"appointment-id"|"store-id"|"import-batch"|"selected-store"|"notice-filter"|"realtime";
 export type RoutePolicy={any:readonly Permission[];all?:readonly Permission[];scope:ScopeCheck};
 const rule=(any:Permission|readonly Permission[],scope:ScopeCheck="none",all?:readonly Permission[]):RoutePolicy=>({any:typeof any==="string"?[any]:any,scope,...(all?{all}:{})});
 const id="[^/]+";
@@ -12,8 +12,8 @@ const A="/api/admin",S="/api/store";
 const RULES:Rule[]=[
   route("GET",A+"/stores",rule(["lojas.ver","recebimento.ver","agendas.ver","importacao.ver","relatorios.ver"],"filtered-list")),
   route("POST",A+"/stores",rule("lojas.criar","all-stores")),
-  route("PATCH",A+"/stores",rule("lojas.editar","all-stores")),
-  route("DELETE",A+"/stores/"+id,rule("lojas.excluir","all-stores")),
+  route("PATCH",A+"/stores",rule("lojas.editar","store-id")),
+  route("DELETE",A+"/stores/"+id,rule("lojas.excluir","store-id")),
   route("GET",A+"/users",rule("usuarios.ver","all-stores")),
   route("GET",A+"/users/"+id+"/access",rule("usuarios.permissoes","all-stores")),
   route("PUT",A+"/users/"+id+"/access",rule("usuarios.permissoes","all-stores")),

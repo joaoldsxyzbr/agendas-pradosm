@@ -71,7 +71,8 @@ async function updateStore(db, current, input, actorUserId) {
   ]);
   return await findStoreById(db, current.id);
 }
-async function hasStoreUsers(db, storeId) {
+async function hasStoreUsers(db, storeId, custom=false) {
+  if(custom){const linked=await db.prepare("SELECT 1 AS presente FROM usuario_acesso_lojas a JOIN usuarios u ON u.id=a.usuario_id WHERE a.loja_id=? AND u.excluido_em IS NULL LIMIT 1").bind(storeId).first();if(linked)return true;}
   const result = await db.prepare(
     "SELECT 1 AS presente FROM usuarios WHERE loja_id = ? AND papel = 'conferente' AND excluido_em IS NULL LIMIT 1"
   ).bind(storeId).first();

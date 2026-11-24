@@ -88,7 +88,7 @@ adminStoreRoutes.delete("/:id", async (c) => {
       404
     );
   }
-  if (await hasStoreUsers(c.env.DB, current.id)) {
+  if (await hasStoreUsers(c.env.DB, current.id,c.env.ACCESS_MODE==="on")) {
     return c.json(
       {
         error: "LOJA_POSSUI_USUARIOS",

@@ -49,7 +49,9 @@ avisoRoutes.get("/", async (c) => {
   const { avisos, naoLidos, hasMore, nextCursor } = await listAvisos(
     c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor
   );
-  return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
+  const allowed=user.escopo?.mode==="assigned"?new Set(user.lojasDisponiveis?.map(s=>s.codigo)??[]):null;
+  const visible=avisos.map(row=>{const aviso=avisoJson(row);return allowed&&aviso.lojas?{...aviso,lojas:aviso.lojas.filter(code=>allowed.has(code))}:aviso;});
+  return c.json({ avisos: visible, naoLidos, hasMore, nextCursor });
 });
 
 avisoRoutes.post("/:id/lido", async (c) => {

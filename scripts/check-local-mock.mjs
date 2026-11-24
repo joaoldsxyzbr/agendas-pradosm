@@ -59,14 +59,18 @@ try {
   assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:conf.cookie}})).status,403);
   assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:viewer.cookie}})).status,403);
   assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:admin.cookie}})).status,200);
-  assert.equal((await fetch(base+"/login")).status,200);
-  const quickList=await fetch(base+"/api/local-mock/accounts");
+  const html=await fetch(base+"/login");
+  assert.equal(html.status,200);
+  const token=(await html.text()).match(/name="agenda-local-token" content="([a-f0-9]{64})"/)?.[1];
+  const quickList=await fetch(base+"/api/local-mock/accounts",{headers:token?{"X-Agenda-Local-Token":token}:{}});
   if(native){
+    assert.ok(token);
+    assert.equal((await fetch(base+"/api/local-mock/accounts")).status,403);
     assert.equal(quickList.status,200);
     const list=await quickList.json();
     assert.equal(list.accounts.length,6);
     assert.ok(list.accounts.every(a=>Object.keys(a).sort().join(",")==="label,login"));
-    const fast=(login,origin=base)=>fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login})});
+    const fast=(login,origin=base)=>fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,"X-Agenda-Local-Token":token},body:JSON.stringify({login})});
     assert.equal((await fast("admin.mock","https://example.invalid")).status,403);
     assert.equal((await fast("unknown.mock")).status,400);
     const scheduler=await fast("agendador.mock");
@@ -87,6 +91,7 @@ try {
       assert.equal((await me.json()).papel,role);
     }
   }else{
+    assert.equal(token,undefined);
     assert.equal(quickList.status,404);
     assert.equal((await fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:base},body:JSON.stringify({login:"admin.mock"})})).status,404);
   }

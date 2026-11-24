@@ -94,6 +94,7 @@ export async function saveAccessConfiguration(db:D1Database, actor:{id:string;se
          AND NOT EXISTS (SELECT 1 FROM usuario_acesso a WHERE a.usuario_id=actor.id))
       THEN session_version+1 ELSE NULL END,atualizado_em=? WHERE id=?`)
       .bind(expectedVersion,actor.id,actor.sessionVersion,now,targetId),
+    db.prepare("DELETE FROM conferente_presenca WHERE usuario_id=?").bind(targetId),
     db.prepare("DELETE FROM usuario_acesso_lojas WHERE usuario_id=?").bind(targetId),
     db.prepare("DELETE FROM usuario_acesso_excecoes WHERE usuario_id=?").bind(targetId),
     db.prepare(`INSERT INTO usuario_acesso(usuario_id,perfil,escopo) VALUES (?,?,?)

@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
@@ -25,6 +27,10 @@ function auditValue(value: Record<string, unknown> | null | undefined) {
 }
 function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => void }) {
   const modalRef = useRef<HTMLDialogElement>(null);
+  const {data:user}=useSession();
+  const canSave=canUse(user,store?"lojas.editar":"lojas.criar",true);
+  const canDelete=canUse(user,"lojas.excluir",true);
+  const canAudit=canUse(user,"auditoria.ver",true);
   const client = useQueryClient();
   const [form, setForm] = useState<StoreForm>(() => ({
     codigo: store?.codigo ?? "", nome: store?.nome ?? "", ativo: store?.ativo ?? true,
@@ -89,13 +95,13 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
       {feedback && <p role="status" className="text-xs text-slate-300">{feedback}</p>}
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="secondary" disabled={busy} onClick={onClose}>Cancelar</Button>
-        <Button type="submit" disabled={busy || !validStore(form)}>{save.isPending ? "Salvando…" : store ? "Salvar alterações" : "Cadastrar loja"}</Button>
+        <Button type="submit" disabled={busy || !validStore(form)||!canSave}>{save.isPending ? "Salvando…" : store ? "Salvar alterações" : "Cadastrar loja"}</Button>
       </div>
     </form>
     {store && <div className="space-y-4 border-t border-[#344d69] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="text-sm font-semibold">Histórico de alterações</h3><p className="text-xs text-slate-400">Auditoria deste cadastro</p></div>
-        <Button variant="secondary" size="sm" disabled={busy} onClick={() => setAuditVisible(value => !value)}>{auditVisible ? "Ocultar histórico" : "Ver histórico"}</Button>
+        <Button variant="secondary" size="sm" disabled={busy||!canAudit} onClick={() => setAuditVisible(value => !value)}>{auditVisible ? "Ocultar histórico" : "Ver histórico"}</Button>
       </div>
       {auditVisible && <div className="max-h-56 overflow-auto rounded-lg border border-[#344d69] bg-[#101e30] p-3">
         {audit.isPending && <Loading label="Carregando histórico…" className="text-xs text-slate-400" />}
@@ -114,9 +120,9 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><strong className="text-xs text-slate-100">{confirmDelete ? "Confirmar exclusão da loja?" : "Excluir loja"}</strong>
             <p className="mt-1 text-[11px] text-slate-400">{confirmDelete ? "Usuários vinculados impedem a exclusão." : "Preserva agendas e histórico existentes."}</p></div>
-          {!confirmDelete ? <Button size="sm" variant="danger" disabled={busy} onClick={() => { setFeedback(""); setConfirmDelete(true); }}><Trash2 size={13} />Excluir loja</Button>
+          {!confirmDelete ? <Button size="sm" variant="danger" disabled={busy||!canDelete} onClick={() => { setFeedback(""); setConfirmDelete(true); }}><Trash2 size={13} />Excluir loja</Button>
             : <div className="flex gap-2"><Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancelar</Button>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => remove.mutate()}>{remove.isPending ? "Excluindo…" : "Confirmar exclusão"}</Button></div>}
+              <Button size="sm" variant="danger" disabled={busy||!canDelete} onClick={() => remove.mutate()}>{remove.isPending ? "Excluindo…" : "Confirmar exclusão"}</Button></div>}
         </div>
         {remove.isError && <p role="alert" className="mt-2 text-xs text-rose-300">{errorText(remove.error)}</p>}
       </div>
@@ -125,6 +131,7 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
 }
 
 export function StoresPage() {
+  const {data:user}=useSession();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"todas" | "ativas" | "inativas">("todas");
   const [editing, setEditing] = useState<Store | null | "new">(null);
@@ -135,7 +142,7 @@ export function StoresPage() {
     <PageHeader eyebrow="Cadastros" title="Lojas" description="Gerencie as unidades habilitadas para recebimento."
       actions={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         <span className="text-xs tabular-nums text-slate-400">{stores.length} lojas · {stores.filter(s => s.ativo).length} ativas</span>
-        <Button onClick={() => setEditing("new")}><Plus size={14} />Nova loja</Button>
+        <Button disabled={!canUse(user,"lojas.criar",true)||user?.escopo?.mode==="assigned"} onClick={() => setEditing("new")}><Plus size={14} />Nova loja</Button>
       </div>} />
     <div className={surface}>
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344d69] p-4">

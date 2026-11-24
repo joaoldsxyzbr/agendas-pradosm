@@ -99,7 +99,7 @@ jobs:
           shopt -s nullglob
           files=(codeql-results/*.sarif)
           test "${#files[@]}" -gt 0
-          jq -r '[.[].runs[]?.results[]? | {rule: .ruleId, file: (.locations[0].physicalLocation.artifactLocation.uri // ""), message: (.message.text // "")}]' --slurp "${files[@]}"
+          jq -r '[.[].runs[]?.results[]? | {rule: .ruleId, file: (.locations[0].physicalLocation.artifactLocation.uri // ""), line: (.locations[0].physicalLocation.region.startLine // 0), message: (.message.text // "")}]' --slurp "${files[@]}"
           jq -e '[.[].runs[]?.results[]?] | length == 0' --slurp "${files[@]}"
 
   local_windows:

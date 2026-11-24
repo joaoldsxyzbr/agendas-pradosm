@@ -31,7 +31,11 @@ async function touchConferentePresence(db, input) {
 async function clearConferentePresence(db, userId) {
   await db.prepare("DELETE FROM conferente_presenca WHERE usuario_id = ?").bind(userId).run();
 }
-async function listActiveConferentePresence(db) {
+async function listActiveConferentePresence(db,custom=false) {
+  if(custom){
+    const rows=await db.prepare(`SELECT p.usuario_id,p.loja_id,p.ultima_interacao_em,p.ultimo_sinal_em FROM conferente_presenca p JOIN usuarios u ON u.id=p.usuario_id LEFT JOIN usuario_acesso a ON a.usuario_id=u.id WHERE u.ativo=1 AND u.excluido_em IS NULL AND ((a.usuario_id IS NULL AND u.papel=\'conferente\' AND u.loja_id=p.loja_id) OR (a.usuario_id IS NOT NULL AND (a.escopo=\'todas\' OR EXISTS (SELECT 1 FROM usuario_acesso_lojas l WHERE l.usuario_id=u.id AND l.loja_id=p.loja_id))))`).all();
+    return rows.results;
+  }
   const result = await db.prepare(
     `SELECT
         p.usuario_id,

@@ -1,3 +1,5 @@
+import { useSession } from "@/app/session-query";
+import { canUse } from "@/features/auth/session";
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, FileText, Upload, X } from "lucide-react";
@@ -29,6 +31,8 @@ const conflictLabels = (details: Record<string, unknown> | null): string => {
 // Importação de agendas como popup aberto pelo botão "Importar agenda" da
 // tela de Recebimento, igual ao fluxo do sistema legado (data-open-import).
 export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
+  const {data:user}=useSession();
+  const canReplace=canUse(user,"importacao.substituir",true);
   const ref = useRef<HTMLDialogElement>(null);
   const client = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -85,6 +89,7 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
   };
 
   const importData = async (replace: boolean) => {
+    if (replace&&!canReplace)return;
     if (!canConfirmImport(file, preview, sending.current) || !file || !preview || success) return;
     sending.current = true;
     setSubmitting(true); setMessage("");
@@ -239,7 +244,7 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
           <p className="mt-1 text-xs text-slate-300">A substituição atualiza somente os dados importados e preserva status, histórico e fornecedores adicionados manualmente.</p>
           <div className="mt-3 flex justify-end gap-2">
             <Button size="sm" variant="secondary" disabled={submitting} onClick={() => setReplacePending(false)}>Cancelar</Button>
-            <Button size="sm" variant="danger" disabled={!ready} onClick={() => void importData(true)}>Substituir agendas existentes</Button>
+            <Button size="sm" variant="danger" disabled={!ready||!canReplace} onClick={() => void importData(true)}>Substituir agendas existentes</Button>
           </div>
         </section>}
       </div>}
