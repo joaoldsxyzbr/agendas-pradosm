@@ -1,4 +1,5 @@
 import type { AppEnv } from "../env.ts";
+import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { validateStatusObservation } from "../../shared/observations.ts";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -322,6 +323,7 @@ adminAgendaRoutes.post("/import/bulk", async (c) => {
 });
 adminAgendaRoutes.get("/today", async (c) => {
   const agendas = await listAdminAgendas(c.env.DB, {
+    storeIds: scopedStoreIds(c),
     date: businessDate() // data operacional America/Sao_Paulo (shared/time.ts)
   });
   return c.json(agendas.map(agendaSummaryJson));
@@ -347,10 +349,10 @@ adminAgendaRoutes.get("/", async (c) => {
     );
   }
   if (parsed.data.limit !== undefined) {
-    const page = await listAdminAgendasPage(c.env.DB, parsed.data, parsed.data.limit, parsed.data.offset ?? 0);
+    const page = await listAdminAgendasPage(c.env.DB, {...parsed.data,storeIds:scopedStoreIds(c)}, parsed.data.limit, parsed.data.offset ?? 0);
     return c.json({ items: page.items.map(agendaSummaryJson), hasMore: page.hasMore });
   }
-  const agendas = await listAdminAgendas(c.env.DB, parsed.data);
+  const agendas = await listAdminAgendas(c.env.DB, {...parsed.data,storeIds:scopedStoreIds(c)});
   // Os totais são usados apenas pela visão administrativa filtrada por data.
   // Endpoints antigos e consultas sem data mantêm exatamente seu contrato.
   if (!parsed.data.date) return c.json(agendas.map(agendaSummaryJson));

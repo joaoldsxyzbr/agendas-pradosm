@@ -47,7 +47,7 @@ else{
   load(join(root,"dist"));
   if(!files.has("/index.html"))throw Error("Build local ausente.");
   const limits=new Map();
-  const env={DB:local.DB,SESSION_SECRET:sessionSecret,REALTIME_MODE:"off",
+  const env={DB:local.DB,SESSION_SECRET:sessionSecret,REALTIME_MODE:"off",ACCESS_MODE:"on",
     LOGIN_RATE_LIMITER:{async limit({key}){
       const now=Date.now();let record=limits.get(key);
       if(!record||record.until<=now){record={until:now+60000,count:0};limits.set(key,record);}

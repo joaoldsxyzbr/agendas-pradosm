@@ -1,4 +1,5 @@
 import type { AppEnv } from "../env.ts";
+import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 const adminReportRoutes = new Hono<AppEnv>();
@@ -29,12 +30,13 @@ function parseFilters(req) {
     storeCodes: req.queries("storeCode") ?? []
   });
 }
-function storeFilter({ start, end, storeCodes }) {
+function storeFilter({ start, end, storeCodes },storeIds?:readonly string[]) {
   const codes=[...new Set(storeCodes.map(code=>code.toLocaleUpperCase("pt-BR")))];
   const where=["a.data_agenda BETWEEN ? AND ?"];
   if(codes.length===1)where.push("AND l.codigo = ? COLLATE NOCASE");
   else if(codes.length>1)where.push("AND l.codigo COLLATE NOCASE IN ("+codes.map(()=>"?").join(",")+")");
-  return {where:where.join(" "),args:[start,end,...codes],codes};
+  if(storeIds!==undefined)where.push(storeIds.length?"AND a.loja_id IN ("+storeIds.map(()=>"?").join(",")+")":"AND 1=0");
+  return {where:where.join(" "),args:[start,end,...codes,...(storeIds??[])],codes};
 }
 adminReportRoutes.get("/", async (c) => {
   const parsed = parseFilters(c.req);
@@ -42,7 +44,7 @@ adminReportRoutes.get("/", async (c) => {
     return c.json({ error: "FILTROS_INVALIDOS", message: "Informe um per\xEDodo v\xE1lido de at\xE9 93 dias." }, 400);
   }
   const { start, end } = parsed.data;
-  const {where,args:filters,codes}=storeFilter(parsed.data);
+  const {where,args:filters,codes}=storeFilter(parsed.data,scopedStoreIds(c));
   const [rows, suppliers, semAgendaSuppliers] = await Promise.all([
     c.env.DB.prepare([
     "SELECT a.data_agenda AS date, l.codigo AS storeCode, l.nome AS storeName,",
@@ -130,7 +132,7 @@ adminReportRoutes.get("/occurrences", async (c) => {
   if (!parsed.success || !paging.success) {
     return c.json({ error: "FILTROS_INVALIDOS", message: "Filtros ou pagina\xE7\xE3o inv\xE1lidos." }, 400);
   }
-  const {where,args:filters}=storeFilter(parsed.data);
+  const {where,args:filters}=storeFilter(parsed.data,scopedStoreIds(c));
   const base = [
     "FROM agendamentos ag",
     "JOIN agendas a ON a.id = ag.agenda_id",

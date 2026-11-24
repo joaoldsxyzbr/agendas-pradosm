@@ -29,7 +29,7 @@ async function findAgendaById(db, id) {
        LIMIT 1`
   ).bind(id).first();
 }
-async function listAdminAgendas(db, filters: { date?: string; storeCode?: string } = {}) {
+async function listAdminAgendas(db, filters: { date?: string; storeCode?: string; storeIds?: readonly string[] } = {}) {
   const clauses = [];
   const values = [];
   if (filters.date) {
@@ -39,6 +39,10 @@ async function listAdminAgendas(db, filters: { date?: string; storeCode?: string
   if (filters.storeCode) {
     clauses.push("l.codigo = ? COLLATE NOCASE");
     values.push(filters.storeCode);
+  }
+  if(filters.storeIds!==undefined){
+    clauses.push(filters.storeIds.length?"a.loja_id IN ("+filters.storeIds.map(()=>"?").join(",")+")":"1=0");
+    values.push(...filters.storeIds);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const statement = db.prepare(
@@ -71,7 +75,7 @@ async function listAdminAgendas(db, filters: { date?: string; storeCode?: string
  * página ANTES de agregar agendamentos, evitando GROUP BY da base inteira.
  * A listagem antiga permanece inalterada para Recebimento e outros clientes.
  */
-async function listAdminAgendasPage(db, filters: { date?: string; storeCode?: string } = {}, limit = 20, offset = 0) {
+async function listAdminAgendasPage(db, filters: { date?: string; storeCode?: string; storeIds?: readonly string[] } = {}, limit = 20, offset = 0) {
   const clauses = [];
   const values = [];
   if (filters.date) {
@@ -81,6 +85,10 @@ async function listAdminAgendasPage(db, filters: { date?: string; storeCode?: st
   if (filters.storeCode) {
     clauses.push("l.codigo = ? COLLATE NOCASE");
     values.push(filters.storeCode);
+  }
+  if(filters.storeIds!==undefined){
+    clauses.push(filters.storeIds.length?"a.loja_id IN ("+filters.storeIds.map(()=>"?").join(",")+")":"1=0");
+    values.push(...filters.storeIds);
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   // A linha adicional permite descobrir se há próxima página sem COUNT(*).

@@ -27,11 +27,12 @@ const adminAvisoRoutes = new Hono<AppEnv>();
 // Conferente vê os avisos da sua loja (e os de todas) e nenhum evento; os
 // demais papéis, sem loja, veem tudo (avisos e eventos).
 function lojaDoUsuario(user) {
-  return user.papel === "conferente" ? user.lojaCodigo : null;
+  if(user.escopo?.mode==="assigned")return user.lojasDisponiveis?.map(store=>store.codigo)??[];
+  return user.papel === "conferente" && !user.perfil ? user.lojaCodigo : null;
 }
 
 function verEventosDoUsuario(user) {
-  return user.papel !== "conferente";
+  return user.escopo?.mode!=="assigned" && (user.perfil??user.papel)!=="conferente";
 }
 
 avisoRoutes.get("/", async (c) => {

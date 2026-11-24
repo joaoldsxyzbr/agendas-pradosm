@@ -8,7 +8,7 @@ import { DUMMY_HASH, hashPassword, passwordNeedsUpgrade, verifyPassword } from "
 import { createSessionToken, sessionKey, SESSION_MAX_AGE, verifySessionToken } from "../lib/session.ts";
 import { requireAuth } from "../middleware/auth.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
-import { findActiveStoreById } from "../repositories/stores.ts";
+import { sessionIdentity } from "../services/access-session.ts";
 import {
   createInactiveFirstAdmin,
   findUserByLogin,
@@ -165,11 +165,8 @@ authRoutes.post("/login", async (c) => {
     await upgradeUserPasswordHash(c.env.DB, user.id, user.senha_hash, upgradedHash);
   }
 
-  const store =
-    user.papel === "conferente" && user.loja_id
-      ? await findActiveStoreById(c.env.DB, user.loja_id)
-      : null;
-  if (user.papel === "conferente" && !store) return invalidCredentials(c);
+  const identity=await sessionIdentity(c.env,user);
+  if(!identity)return invalidCredentials(c);
 
   const token = await createSessionToken(
     user.id,
@@ -184,14 +181,7 @@ authRoutes.post("/login", async (c) => {
     maxAge: SESSION_MAX_AGE,
   });
 
-  return c.json({
-    id: user.id,
-    nome: user.nome,
-    papel: user.papel,
-    lojaId: user.loja_id,
-    lojaCodigo: store?.codigo ?? null,
-    lojaNome: store?.nome ?? null,
-  });
+  return c.json(identity.user);
 });
 
 authRoutes.post("/logout", async (c) => {

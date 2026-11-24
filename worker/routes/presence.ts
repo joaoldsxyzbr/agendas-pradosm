@@ -1,4 +1,5 @@
 import type { AppEnv } from "../env.ts";
+import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -65,7 +66,9 @@ adminPresenceRoutes.get("/", async (c) => {
   const rows = await listActiveConferentePresence(c.env.DB);
   const nowMs = Date.now();
   const byStore = /* @__PURE__ */ new Map();
+  const ids=scopedStoreIds(c);
   for (const row of rows) {
+    if(ids!==undefined&&!ids.includes(row.loja_id))continue;
     const status = conferentePresenceStatus(
       row.ultima_interacao_em,
       row.ultimo_sinal_em,

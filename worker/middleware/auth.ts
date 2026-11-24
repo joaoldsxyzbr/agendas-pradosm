@@ -8,7 +8,7 @@ import {
   shouldRenewSession,
   verifySessionToken
 } from "../lib/session.ts";
-import { findActiveStoreById } from "../repositories/stores.ts";
+import { sessionIdentity } from "../services/access-session.ts";
 import { findUserForSession } from "../repositories/users.ts";
 const COOKIE_NAME = "agenda_session";
 function unauthorized() {
@@ -33,18 +33,11 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (!user || user.ativo !== 1 || user.session_version !== payload.sessionVersion) {
     return c.json(unauthorized(), 401);
   }
-  const store = user.papel === "conferente" && user.loja_id ? await findActiveStoreById(c.env.DB, user.loja_id) : null;
-  if (user.papel === "conferente" && !store) {
-    return c.json(unauthorized(), 401);
-  }
-  const authUser = {
-    id: user.id,
-    nome: user.nome,
-    papel: user.papel,
-    lojaId: user.loja_id,
-    lojaCodigo: store?.codigo ?? null,
-    lojaNome: store?.nome ?? null
-  };
+  const identity=await sessionIdentity(c.env,user,c.req.header("X-Agenda-Store"));
+  if(!identity)return c.json(unauthorized(),401);
+  const authUser=identity.user;
+  if(identity.access)c.set("effectiveAccess",identity.access);
+  c.set("sessionVersion",user.session_version);
   if (shouldRenewSession(payload)) {
     const refreshedToken = await createSessionToken(
       user.id,
@@ -68,6 +61,7 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
 const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.get("authUser");
   if (!user) return c.json(unauthorized(), 401);
+  if (c.get("effectiveAccess")?.customized) { await next(); return; }
   if (user.papel !== "admin" && user.papel !== "visualizador") {
     return c.json(forbidden(), 403);
   }
@@ -77,6 +71,7 @@ const restrictDashboardViewer = createMiddleware<AppEnv>(
   async (c, next) => {
     const user = c.get("authUser");
     if (!user) return c.json(unauthorized(), 401);
+    if (c.get("effectiveAccess")?.customized) { await next(); return; }
     if (user.papel !== "visualizador") {
       await next();
       return;

@@ -1,4 +1,5 @@
 import type { AppEnv } from "../env.ts";
+import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import { CreateStoreInput, UpdateStoreInput } from "../../shared/api.ts";
@@ -27,7 +28,8 @@ function isDuplicateCode(error) {
 }
 adminStoreRoutes.get("/", async (c) => {
   const stores = await listStores(c.env.DB);
-  return c.json(stores.map(storeJson));
+  const ids=scopedStoreIds(c);
+  return c.json(stores.filter(store=>ids===undefined||ids.includes(store.id)).map(storeJson));
 });
 adminStoreRoutes.post("/", async (c) => {
   const parsed = CreateStoreInput.safeParse(await c.req.json().catch(() => null));

@@ -7,6 +7,9 @@
 // Filtro de direcionamento por loja: aviso sem linhas em avisos_lojas é de
 // todas as lojas; com linhas, só quem tem a loja (ou vê tudo) o enxerga.
 function visibilidadePorLoja(loja) {
+  if(Array.isArray(loja))return loja.length?
+    "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id=a.id)=0 OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id=a.id AND x.loja IN ("+loja.map(()=>"?").join(",")+"))":
+    "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id=a.id)=0";
   return loja
     ? "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id = a.id) = 0 " +
         "OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = a.id AND x.loja = ?)"
@@ -16,6 +19,7 @@ function visibilidadePorLoja(loja) {
 // Eventos automáticos são do admin/gerente: o conferente recebe apenas os
 // avisos publicados pelo admin (decisão de 12/11/2026 — sem ruído de
 // operações de lojas alheias no sino de quem confere).
+function lojaArgs(loja){return Array.isArray(loja)?loja:loja?[loja]:[];}
 function filtroTipo(verEventos) {
   return verEventos ? "" : "a.tipo = 'aviso'";
 }
@@ -37,7 +41,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
     "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
-  const values = [userId, ...(loja ? [loja] : []),
+  const values = [userId, ...lojaArgs(loja),
     ...(cursor ? [cursor.criadoEm, cursor.criadoEm, cursor.id] : []), limit + 1];
   const result = await db.prepare(
     `SELECT a.id, a.tipo, a.titulo, a.mensagem, a.criado_em, a.urgente, a.autor,
@@ -56,7 +60,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
           SELECT 1 FROM avisos_lidos l
            WHERE l.aviso_id = a.id AND l.usuario_id = ?
         )`
-  ).bind(...(loja ? [loja, userId] : [userId])).first();
+  ).bind(...lojaArgs(loja),userId).first();
   const rows = result.results ?? [];
   const avisos = rows.slice(0, limit);
   const hasMore = rows.length > limit;
@@ -82,7 +86,7 @@ export async function markAvisoLido(db, avisoId, userId, now, loja = null, verEv
       SELECT ?, ?, ? WHERE EXISTS (
         SELECT 1 FROM avisos a WHERE a.id = ?${where ? " AND " + where : ""}
       )`
-  ).bind(...(loja ? [avisoId, userId, now, avisoId, loja] : [avisoId, userId, now, avisoId])).run();
+  ).bind(avisoId,userId,now,avisoId,...lojaArgs(loja)).run();
   return result?.meta?.changes === 1;
 }
 
@@ -101,7 +105,7 @@ export async function markTodosAvisosLidos(db, userId, now, loja = null, verEven
         SELECT 1 FROM avisos_lidos l
          WHERE l.aviso_id = a.id AND l.usuario_id = ?
       )`
-  ).bind(...(loja ? [userId, now, loja, userId] : [userId, now, userId])).run();
+  ).bind(userId,now,...lojaArgs(loja),userId).run();
   return result?.meta?.changes ?? 0;
 }
 

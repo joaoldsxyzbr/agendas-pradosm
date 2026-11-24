@@ -30,6 +30,7 @@ import {
   storeAgendaRoutes,
   storeAppointmentRoutes,
 } from "./routes/store-agendas.ts";
+import { enforceAccess } from "./middleware/enforce-access.ts";
 import { closePastOpenAgendas } from "./services/agenda-maintenance.ts";
 
 export const app = new Hono<AppEnv>();
@@ -85,14 +86,14 @@ app.route("/api/auth", authRoutes);
 app.use("/api/diagnostics/*", requireAuth, validateMutationOrigin);
 app.route("/api/diagnostics", diagnosticRoutes);
 
-app.use("/api/realtime", requireAuth);
-app.use("/api/realtime/*", requireAuth);
+app.use("/api/realtime", requireAuth, enforceAccess);
+app.use("/api/realtime/*", requireAuth, enforceAccess);
 app.route("/api/realtime", realtimeRoutes);
 
 // Avisos/notificações in-app: leitura e marcação de lidos para todos os
 // papéis autenticados (visualizador incluso); publicação só no bloco admin.
-app.use("/api/avisos", requireAuth, validateMutationOrigin);
-app.use("/api/avisos/*", requireAuth, validateMutationOrigin);
+app.use("/api/avisos", requireAuth, validateMutationOrigin, enforceAccess);
+app.use("/api/avisos/*", requireAuth, validateMutationOrigin, enforceAccess);
 app.route("/api/avisos", avisoRoutes);
 
 app.use(
@@ -104,6 +105,7 @@ app.use(
 );
 app.use("/api/admin/agendas/import", limitAgendaImportBody);
 app.use("/api/admin/agendas/import/bulk", limitAgendaImportBody);
+app.use("/api/admin/*", enforceAccess);
 app.use("/api/admin/agendas", async (c, next) => {
   await closePastOpenAgendas(c.env.DB);
   await next();
@@ -119,7 +121,7 @@ app.route("/api/admin/reports", adminReportRoutes);
 app.route("/api/admin/presence", adminPresenceRoutes);
 app.route("/api/admin/avisos", adminAvisoRoutes);
 
-app.use("/api/store/*", requireAuth, validateMutationOrigin);
+app.use("/api/store/*", requireAuth, validateMutationOrigin, enforceAccess);
 app.use("/api/store/today", async (c, next) => {
   await closePastOpenAgendas(c.env.DB);
   await next();

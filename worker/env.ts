@@ -1,9 +1,11 @@
+import type { EffectiveAccess } from "./repositories/access.ts";
 import type { AuthUser } from "../shared/auth.ts";
 
 export interface Env {
   DB: D1Database;
   SESSION_SECRET: string;
   REALTIME_MODE: string;
+  ACCESS_MODE?: string;
   REALTIME_HUB: DurableObjectNamespace;
   LOGIN_RATE_LIMITER: RateLimit;
   ASSETS: Fetcher;
@@ -16,5 +18,7 @@ export interface AppEnv {
   Variables: {
     authUser?: AuthUser;
     sessionExpiresAt?: number;
+    sessionVersion?: number;
+    effectiveAccess?: EffectiveAccess;
   };
 }

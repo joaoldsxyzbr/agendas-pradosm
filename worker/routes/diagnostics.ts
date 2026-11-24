@@ -43,7 +43,7 @@ diagnosticRoutes.post("/events", async c => {
 });
 
 adminDiagnosticRoutes.get("/", async c => {
-  if (c.get("authUser")?.papel !== "admin") {
+  if (c.get("authUser")?.papel !== "admin" && !c.get("effectiveAccess")?.permissions.has("diagnosticos.ver")) {
     return c.json({ error: "ACESSO_NEGADO" }, 403);
   }
   const parsed = FilterInput.safeParse({
