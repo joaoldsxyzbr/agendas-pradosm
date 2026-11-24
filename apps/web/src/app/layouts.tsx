@@ -2,7 +2,7 @@ import { useState } from "react";
 import { moveVisibleMenuItem, readMenuOrder, writeMenuOrder } from "./menu-order";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate } from "react-router";
-import { ArrowDown, ArrowUp, Check, GripVertical, RotateCcw, ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, PanelLeft, Settings2, Store, Users } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, PanelLeft, Settings2, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { logout, ACCESS_PAGES, canUse, type SessionUser, type Role } from "@/features/auth/session";
@@ -56,14 +56,12 @@ function writeSidebarCollapsed(role: Role, collapsed: boolean) {
 export function AppLayout({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [storedCollapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
-  const [organizing, setOrganizing] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
   const [order, setOrder] = useState(() => readMenuOrder(user.id, defaultMenuOrder));
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [storageFailed, setStorageFailed] = useState(false);
   const [announcement, setAnnouncement] = useState("");
-  const collapsed = storedCollapsed && !organizing;
   const signout = useMutation({
     mutationFn: logout,
     onSuccess: () => {
@@ -87,51 +85,47 @@ export function AppLayout({ user }: { user: SessionUser }) {
     const label = items.find(item => item.path === from)?.label;
     setAnnouncement(label + " movido para a posição " + (visible.indexOf(to) + 1) + ".");
   };
-  const finishOrganizing = () => {
-    setOrganizing(false);
+  const clearDrag = () => {
     setDragging(null);
     setDropTarget(null);
   };
-  const organizationControls = (compact = false) => items.length > 1 && <div className={cn("mt-3 space-y-1 border-t border-slate-700/70 pt-2", compact && "text-center")}>
-    {!organizing ? <Button variant="ghost" size={compact ? "icon" : "sm"} aria-label="Organizar menu" title="Organizar menu"
-      className={compact ? "size-8" : "w-full justify-start"} onClick={() => { setOrganizing(true); setAnnouncement(""); }}>
-      <GripVertical size={15} aria-hidden="true" />{!compact && "Organizar menu"}
-    </Button> : <>
-      <p className="px-2 py-1 text-[11px] text-slate-400">Arraste os itens ou use as setas.</p>
-      <Button variant="secondary" size="sm" className="w-full" onClick={finishOrganizing}><Check size={14} aria-hidden="true" />Concluir</Button>
-      <Button variant="ghost" size="sm" className="w-full" onClick={() => { saveOrder([...defaultMenuOrder]); setAnnouncement("Ordem padrão restaurada."); }}>
-        <RotateCcw size={14} aria-hidden="true" />Restaurar ordem padrão
-      </Button>
-    </>}
-    {storageFailed && <p className="px-2 text-[11px] text-amber-300" role="status">Não foi possível salvar a ordem neste navegador.</p>}
-  </div>;
   const toggleCollapsed = () => {
-    if (organizing) return;
-    const next = !storedCollapsed;
+    const next = !collapsed;
     setCollapsed(next);
     writeSidebarCollapsed(user.papel, next);
   };
-  const renderNav = (compact: boolean) => <nav aria-label="Navegação principal" className={cn("flex min-w-0 gap-1 md:flex-col", compact && "md:items-center", organizing && "flex-col")}>
-    {items.map(({ path, label, icon: Icon }, index) => organizing ? <div key={path}
-      data-menu-item={path} draggable
-      onDragStart={event => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", path); setDragging(path); }}
-      onDragOver={event => { if (dragging && dragging !== path) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropTarget(path); } }}
-      onDragLeave={() => setDropTarget(current => current === path ? null : current)}
-      onDrop={event => { event.preventDefault(); if (dragging) move(dragging, path); setDragging(null); setDropTarget(null); }}
-      onDragEnd={() => { setDragging(null); setDropTarget(null); }}
-      className={cn("flex min-w-0 cursor-grab items-center gap-1 rounded-md border border-slate-700 bg-slate-800/50 p-1 text-slate-200 active:cursor-grabbing",
-        dragging === path && "opacity-50", dropTarget === path && "border-sky-400 bg-sky-500/15")}>
-      <GripVertical size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
-      <Icon size={14} className="shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1 text-xs">{label}</span>
-      <Button variant="ghost" size="icon" className="size-7 shrink-0" disabled={index === 0} aria-label={"Mover " + label + " para cima"} title={"Mover " + label + " para cima"}
-        onClick={() => { const previous = items[index - 1]; if (previous) move(path, previous.path); }}><ArrowUp size={14} aria-hidden="true" /></Button>
-      <Button variant="ghost" size="icon" className="size-7 shrink-0" disabled={index === items.length - 1} aria-label={"Mover " + label + " para baixo"} title={"Mover " + label + " para baixo"}
-        onClick={() => { const next = items[index + 1]; if (next) move(path, next.path); }}><ArrowDown size={14} aria-hidden="true" /></Button>
-    </div> : <NavLink key={path} to={path} end
-      className={({ isActive }) => cn("flex shrink-0 items-center gap-2.5 rounded-md px-3 py-2.5 text-xs font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400",
+  const renderNav = (compact: boolean) => <nav aria-label="Navegação principal" className={cn("flex min-w-0 gap-1 md:flex-col", compact && "md:items-center")}>
+    {items.map(({ path, label, icon: Icon }) => <NavLink key={path} to={path} end
+      data-menu-item={path}
+      draggable={items.length > 1}
+      onDragStart={event => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", path);
+        setDragging(path);
+      }}
+      onDragOver={event => {
+        if (!dragging || dragging === path) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropTarget(path);
+      }}
+      onDragLeave={event => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        setDropTarget(current => current === path ? null : current);
+      }}
+      onDrop={event => {
+        if (!dragging) return;
+        event.preventDefault();
+        move(dragging, path);
+        clearDrag();
+      }}
+      onDragEnd={clearDrag}
+      onClick={event => { if (dragging) event.preventDefault(); }}
+      className={({ isActive }) => cn("flex shrink-0 select-none items-center gap-2.5 rounded-md px-3 py-2.5 text-xs font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400",
         compact && "md:justify-center md:px-2",
-        isActive ? "bg-sky-500/15 text-sky-200" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")}>
+        isActive ? "bg-sky-500/15 text-sky-200" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+        dragging === path && "opacity-50",
+        dropTarget === path && "ring-1 ring-inset ring-sky-400 bg-sky-500/15")}>
       <Icon size={16} aria-hidden="true" />
       <span className={compact ? "sr-only" : undefined}>{label}</span>
     </NavLink>)}
@@ -147,14 +141,14 @@ export function AppLayout({ user }: { user: SessionUser }) {
         </> : <>
           <div className="flex items-center justify-between gap-2">
             <strong className="text-sm tracking-tight text-white">Agenda Prado</strong>
-            <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Recolher navegação" aria-expanded disabled={organizing} onClick={toggleCollapsed}>
+            <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Recolher navegação" aria-expanded onClick={toggleCollapsed}>
               <PanelLeft size={16} aria-hidden="true" />
             </Button>
           </div>
           <p className="mt-1 text-[11px] text-slate-500">Gestão de recebimentos</p>
         </>}
       </div>
-      <div className="flex-1">{renderNav(collapsed)}{organizationControls(collapsed)}</div>
+      <div className="flex-1">{renderNav(collapsed)}</div>
       <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-[11px] text-slate-500", collapsed && "truncate text-center")}>{labels[user.perfil??user.papel]}</div>
     </aside>
     <div className="flex w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
@@ -172,8 +166,9 @@ export function AppLayout({ user }: { user: SessionUser }) {
           </Button>
         </div>
       </header>
-      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}{organizationControls()}</div>
+      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
       <span className="sr-only" aria-live="polite">{announcement}</span>
+      {storageFailed && <p className="px-5 pt-2 text-xs text-amber-300" role="status">Não foi possível salvar a ordem neste navegador.</p>}
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
       <main className="w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-6"><Outlet /></main>
     </div>

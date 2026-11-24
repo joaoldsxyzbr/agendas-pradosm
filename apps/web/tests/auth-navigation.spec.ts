@@ -179,7 +179,7 @@ test("React: administrador configura perfil, escopo e exceções no cadastro",as
 });
 
 
-test("React: organiza menu por arraste e setas, persiste por usuário e restaura padrão", async ({page}) => {
+test("React: arrasta diretamente os links do menu, persiste por usuário e mantém navegação", async ({page}) => {
   await page.setViewportSize({width:1600,height:900});
   await sessionMocks(page,admin);
   await page.goto("/admin");
@@ -188,48 +188,25 @@ test("React: organiza menu por arraste e setas, persiste por usuário e restaura
   await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
   const order=()=>nav.getByRole("link").allTextContents();
   const original=await order();
-  expect(original).toContain("Agendas");
   expect(original).not.toContain("Histórico");
-  await aside.getByRole("button",{name:"Organizar menu"}).click();
-  await expect(nav.getByRole("link")).toHaveCount(0);
-  await nav.locator('[data-menu-item="/admin/agendas"]').dragTo(nav.locator('[data-menu-item="/admin/users"]'));
-  await aside.getByRole("button",{name:"Concluir"}).click();
-  expect(await order()).toEqual(["Recebimento","Relatório Gerencial","Importação","Lojas","Usuários","Agendas","Logs e Auditoria"]);
+  await expect(aside.getByRole("button",{name:"Organizar menu"})).toHaveCount(0);
+  await nav.getByRole("link",{name:"Agendas",exact:true}).dragTo(nav.getByRole("link",{name:"Usuários",exact:true}));
+  const custom=["Recebimento","Relatório Gerencial","Importação","Lojas","Usuários","Agendas","Logs e Auditoria"];
+  await expect.poll(order).toEqual(custom);
+  await expect(page).toHaveURL(/\/admin$/);
   await page.reload();
-  await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
-  expect(await order()).toEqual(["Recebimento","Relatório Gerencial","Importação","Lojas","Usuários","Agendas","Logs e Auditoria"]);
-  await aside.getByRole("button",{name:"Organizar menu"}).click();
-  await aside.getByRole("button",{name:"Mover Agendas para cima"}).click();
-  await aside.getByRole("button",{name:"Concluir"}).click();
-  const custom=await order();
-  expect(custom.indexOf("Agendas")).toBeLessThan(custom.indexOf("Usuários"));
+  await expect.poll(order).toEqual(custom);
   await nav.getByRole("link",{name:"Usuários"}).click();
   await expect(page.getByRole("heading",{name:"Usuários",exact:true})).toBeVisible();
-  expect(await order()).toEqual(custom);
+  await expect.poll(order).toEqual(custom);
   await sessionMocks(page,viewer);
   await page.goto("/admin");
-  await expect(nav.getByRole("link",{name:"Recebimento"})).toBeVisible();
-  expect(await order()).toEqual(["Recebimento","Relatório Gerencial"]);
+  await expect.poll(order).toEqual(["Recebimento","Relatório Gerencial"]);
   await sessionMocks(page,admin);
   await page.goto("/admin");
-  await expect(nav.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
-  expect(await order()).toEqual(custom);
-  await aside.getByRole("button",{name:"Organizar menu"}).click();
-  await aside.getByRole("button",{name:"Restaurar ordem padrão"}).click();
-  await aside.getByRole("button",{name:"Concluir"}).click();
-  expect(await order()).toEqual(original);
-});
-
-test("React: menu móvel permite reordenar por setas sem ampliar a página",async({page})=>{
-  await page.setViewportSize({width:390,height:844});
-  await sessionMocks(page,viewer);
-  await page.goto("/admin");
-  const mobile=page.getByTestId("mobile-navigation");
-  await mobile.getByRole("button",{name:"Organizar menu"}).click();
-  await mobile.getByRole("button",{name:"Mover Relatório Gerencial para cima"}).click();
-  await mobile.getByRole("button",{name:"Concluir"}).click();
-  expect(await mobile.getByRole("link").allTextContents()).toEqual(["Relatório Gerencial","Recebimento"]);
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth)).toBeLessThanOrEqual(2);
+  await expect.poll(order).toEqual(custom);
+  await nav.getByRole("link",{name:"Agendas",exact:true}).dragTo(nav.getByRole("link",{name:"Importação",exact:true}));
+  await expect.poll(order).toEqual(original);
 });
 
 test("React: preferência antiga não exibe itens não autorizados nem histórico",async({page})=>{
