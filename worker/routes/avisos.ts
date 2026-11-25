@@ -106,6 +106,7 @@ avisoRoutes.post("/", async (c) => {
   ];
   await c.env.DB.batch(statements);
   // Resposta é a mensagem completa (avisoSchema): o frontend faz parse dela.
+  // próprio autor recebe com proprio=1 para alinhar a bolha à direita.
   return c.json(
     avisoJson({
       id: mensagemId,
@@ -116,7 +117,8 @@ avisoRoutes.post("/", async (c) => {
       urgente: 0,
       autor: user.nome,
       lojas: null,
-      lido: 0
+      lido: 0,
+      proprio: 1
     }),
     201
   );
