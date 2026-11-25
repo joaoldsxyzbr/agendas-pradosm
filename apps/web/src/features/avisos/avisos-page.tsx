@@ -186,7 +186,7 @@ export function AvisosPage() {
   const listaDesc = [...(avisos.data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)];
   const lista = [...new Map(listaDesc.map(aviso => [aviso.id, aviso] as const)).values()].reverse();
   const lastPage = olderPages.at(-1) ?? avisos.data;
-  const hasMore = Boolean(lastPage?.hasMore && lastPage.nextCursor);
+  const hasMore = Boolean(lastPage?.hasMore && Boolean(lastPage?.nextCursor));
 
   // Rola para o fim quando entra uma mensagem nova (não ao carregar antigas).
   const ultimoId = lista.at(-1)?.id;
