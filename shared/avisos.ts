@@ -28,6 +28,10 @@ export const avisoSchema = z.object({
   criadoEm: z.string(),
   lido: z.boolean(),
   urgente: z.boolean(),
+  // Presente quando a linha vem da listagem do usuário (GET /api/avisos):
+  // true quando a mensagem foi escrita pelo próprio usuário. Opcional para
+  // manter respostas de publicação e mocks antigos válidos.
+  proprio: z.boolean().optional(),
   autor: z.string(),
   lojas: z.array(z.string()).nullable(),
 });
