@@ -220,7 +220,8 @@ export function AvisosPage() {
       {olderError && <p role="alert" className="text-center text-xs text-rose-300">Não foi possível carregar mensagens antigas.</p>}
       {lista.map((aviso, index) => {
         const dia = formatAvisoDia(aviso.criadoEm);
-        const diaAnterior = index > 0 ? formatAvisoDia(lista[index - 1].criadoEm) : null;
+        const anterior = lista[index - 1];
+        const diaAnterior = anterior ? formatAvisoDia(anterior.criadoEm) : null;
         return <div key={aviso.id} className="contents">
           {dia !== diaAnterior && <DiaSeparador dia={dia} />}
           {aviso.tipo === "chat" ? <BolhaChat aviso={aviso} />
