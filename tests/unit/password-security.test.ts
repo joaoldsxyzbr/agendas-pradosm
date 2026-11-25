@@ -11,7 +11,8 @@ async function fixtureHash(password, iterations) {
   const hash = new Uint8Array(await crypto.subtle.deriveBits({
     name: "PBKDF2", hash: "SHA-256", salt, iterations
   }, key, 256));
-  return `pbkdf2_sha256$${iterations}$${Buffer.from(salt).toString("base64")}$${Buffer.from(hash).toString("base64")}`;
+  return `pbkdf2_sha256${iterations}${Buffer.from(salt).toString("base64")}${Buffer.from(hash).toString("base64")}`;
+}
 
 describe("Segurança do hash de senha PBKDF2", () => {
   it("gera salt aleatório e verifica senha atual corretamente", async () => {
