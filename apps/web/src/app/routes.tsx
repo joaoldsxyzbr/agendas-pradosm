@@ -14,6 +14,7 @@ const StoresPage = lazy(() => import("@/features/stores/stores-page").then(m => 
 const HistoryPage = lazy(() => import("@/features/history/history-page").then(m => ({ default: m.HistoryPage })));
 const UsersPage = lazy(() => import("@/features/users/users-page").then(m => ({ default: m.UsersPage })));
 const DiagnosticsPage = lazy(() => import("@/features/diagnostics/diagnostics-page").then(m => ({ default: m.DiagnosticsPage })));
+const AvisosPage = lazy(() => import("@/features/avisos/avisos-page").then(m => ({ default: m.AvisosPage })));
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/loading";
 import { homeForRole, type Role, type SessionUser } from "@/features/auth/session";
@@ -54,6 +55,7 @@ export function AppRoutes() {
       <Route element={<LayoutRoute />}>
         <Route path="/admin" element={<DeferredPage><ReceivingPage /></DeferredPage>} />
         <Route path="/admin/reports" element={<DeferredPage><ReportsPage /></DeferredPage>} />
+        <Route path="/admin/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} />
       </Route>
     </Route>
     <Route element={<Guard roles={["admin"]} />}>
@@ -69,6 +71,7 @@ export function AppRoutes() {
     <Route element={<Guard roles={["conferente"]} />}>
       <Route element={<LayoutRoute />}>
         <Route path="/app" element={<DeferredPage><ConferencePage /></DeferredPage>} />
+        <Route path="/app/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} />
       </Route>
     </Route>
     <Route path="*" element={<UnknownRoute />} />

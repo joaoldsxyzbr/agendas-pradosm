@@ -1,31 +1,32 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { auditStatement } from "../repositories/audit.ts";
-import { publicarAvisoSchema } from "../../shared/avisos.ts";
+import { checkLoginRateLimit } from "../lib/login-rate-limit.ts";
+import { publicarAvisoSchema, publicarMensagemSchema } from "../../shared/avisos.ts";
 import {
   avisoJson,
   listAvisos,
+  listLeitoresDoAviso,
   markAvisoLido,
   markTodosAvisosLidos,
-  publishAvisoStatements
+  publishAvisoStatements,
+  publishMensagemStatements
 } from "../repositories/avisos.ts";
 
-// Rotas de avisos/notificações in-app (spec 2026-11-11, melhorias de 12/11).
-// - /api/avisos: qualquer papel autenticado lê e marca os próprios avisos
-//   como lidos. O visualizador (dashboard) usa só estas rotas. Avisos são
-//   registro permanente: a lista é o histórico completo (mais recentes
-//   primeiro) e ninguém publica/exclui por aqui.
-// - /api/admin/avisos: publicação exclusiva do admin (a cadeia /api/admin/*
-//   já exige requireAuth + requireAdmin). Não existe inativação/exclusão.
-// - Visibilidade (decisão de 12/11/2026): o conferente recebe apenas os
-//   avisos publicados pelo admin; eventos automáticos do sistema são do
-//   admin/gerente (visualizador).
+// Rotas de avisos e do canal de avisos em chat (decisão do João, 25/11/2026).
+// - /api/avisos: qualquer papel autenticado lê o canal (avisos oficiais,
+//   mensagens e, para admin/visualizador, eventos do sistema) e marca leituras
+//   — a leitura automática ao abrir a página usa o marcar-todos. Admin e
+//   conferente publicam mensagens comuns aqui; o visualizador não publica.
+// - /api/admin/avisos: publicação de aviso oficial e a régua "quem viu"
+//   exclusivas do admin (a cadeia /api/admin/* já exige requireAuth +
+//   requireAdmin). Não existe inativação/exclusão: registro permanente.
 
 const avisoRoutes = new Hono<AppEnv>();
 const adminAvisoRoutes = new Hono<AppEnv>();
 
 // Conferente vê os avisos da sua loja (e os de todas) e nenhum evento; os
-// demais papéis, sem loja, veem tudo (avisos e eventos).
+// demais papéis, sem loja, veem tudo (avisos, mensagens e eventos).
 function lojaDoUsuario(user) {
   return user.papel === "conferente" ? user.lojaCodigo : null;
 }
@@ -51,6 +52,78 @@ avisoRoutes.get("/", async (c) => {
   return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
 });
 
+// Mensagem comum do canal (tipo "chat"): escrita de admin e conferente,
+// sempre global. Rate limit reutiliza o limitador do login por usuário e
+// por IP, falhando fechado quando o limitador está indisponível.
+avisoRoutes.post("/", async (c) => {
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
+  if (user.papel === "visualizador") {
+    return c.json(
+      { error: "SEM_PERMISSAO", message: "Visualizadores acompanham o canal; a escrita é de administradores e conferentes." },
+      403
+    );
+  }
+  const parsed = publicarMensagemSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { error: "REQUISICAO_INVALIDA", message: parsed.error.issues[0]?.message ?? "Verifique a mensagem." },
+      400
+    );
+  }
+  const rate = await checkLoginRateLimit(
+    c.env.LOGIN_RATE_LIMITER, "chat:" + user.id, c.req.header("CF-Connecting-IP")
+  );
+  if (rate === "unavailable") {
+    return c.json(
+      { error: "INDISPONIVEL", message: "Não foi possível enviar agora. Tente novamente em instantes." },
+      503
+    );
+  }
+  if (rate === "limited") {
+    return c.json({ error: "MUITAS_MENSAGENS", message: "Aguarde antes de enviar outra mensagem." }, 429);
+  }
+  const { mensagem } = parsed.data;
+  const now = new Date().toISOString();
+  const mensagemId = crypto.randomUUID();
+  const statements = [
+    publishMensagemStatements(c.env.DB, {
+      id: mensagemId,
+      mensagem,
+      criadoPor: user.id,
+      autor: user.nome,
+      criadoEm: now
+    }),
+    auditStatement(c.env.DB, {
+      userId: user.id,
+      action: "mensagem_do_canal_publicada",
+      entity: "aviso",
+      entityId: mensagemId,
+      after: { tipo: "chat", mensagem },
+      details: "Mensagem enviada no canal de avisos.",
+      createdAt: now
+    })
+  ];
+  await c.env.DB.batch(statements);
+  // Resposta é a mensagem completa (avisoSchema): o frontend faz parse dela.
+  // próprio autor recebe com proprio=1 para alinhar a bolha à direita.
+  return c.json(
+    avisoJson({
+      id: mensagemId,
+      tipo: "chat",
+      titulo: null,
+      mensagem,
+      criado_em: now,
+      urgente: 0,
+      autor: user.nome,
+      lojas: null,
+      lido: 0,
+      proprio: 1
+    }),
+    201
+  );
+});
+
 avisoRoutes.post("/:id/lido", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
@@ -72,7 +145,8 @@ avisoRoutes.post("/:id/lido", async (c) => {
   return c.json({ ok: true, jaLido: false });
 });
 
-// "Marcar todos": grava a leitura de todos os avisos visíveis ao usuário.
+// "Marcar todos": grava a leitura de todos os avisos e mensagens visíveis ao
+// usuário. É também a base da leitura automática ao abrir o canal.
 avisoRoutes.post("/marcar-todos", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
@@ -84,6 +158,23 @@ avisoRoutes.post("/marcar-todos", async (c) => {
     verEventosDoUsuario(user)
   );
   return c.json({ ok: true, marcados });
+});
+
+// Régua do admin: quem já viu o AVISO oficial (com horário) e quem falta.
+// "Visto" tem a semântica da leitura automática: abriu o canal depois da
+// publicação (decisão de 25/11/2026). Só aviso oficial tem acompanhamento.
+adminAvisoRoutes.get("/:id/leitores", async (c) => {
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
+  const id = c.req.param("id");
+  const existe = await c.env.DB.prepare(
+    "SELECT id FROM avisos WHERE id = ? AND tipo = 'aviso'"
+  ).bind(id).first();
+  if (!existe) {
+    return c.json({ error: "NAO_ENCONTRADO", message: "Aviso não encontrado." }, 404);
+  }
+  const { vistos, faltantes } = await listLeitoresDoAviso(c.env.DB, id);
+  return c.json({ vistos, faltantes });
 });
 
 adminAvisoRoutes.post("/", async (c) => {

@@ -7,10 +7,10 @@ import { getStores } from "@/features/receiving/api";
 import { publishAviso } from "./api";
 import { publicarAvisoSchema } from "./model";
 
-// Diálogo de publicação de aviso, aberto pelo botão "Novo aviso" do sino.
-// Mesmo padrão de <dialog> nativo do import-agenda-dialog. O aviso é
-// registro permanente (sem expiração); a urgência e o público por loja
-// são as melhorias de 12/11.
+// Diálogo de publicação de aviso oficial, aberto pelo botão "Novo aviso" da
+// página do canal de Avisos. Mesmo padrão de <dialog> nativo do
+// import-agenda-dialog. O aviso é registro permanente (sem expiração); a
+// urgência e o público por loja são as melhorias de 12/11.
 export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const client = useQueryClient();
@@ -95,7 +95,7 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
       <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
         <input type="checkbox" checked={urgente} onChange={event => setUrgente(event.target.checked)}
           className="size-4 accent-rose-500" aria-label="Aviso urgente" disabled={submitting} />
-        Urgente (destaca o aviso e faz o badge do sino pulsar em vermelho)
+        Urgente (destaca o aviso no canal e faz o item Avisos do menu pulsar em vermelho)
       </label>
       <fieldset className="block space-y-1.5">
         <legend className="text-xs font-semibold text-slate-300">Público</legend>
@@ -121,7 +121,7 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
         )}
       </fieldset>
       <p className="rounded-md border border-[#34516d] bg-[#12213a] px-3 py-2 text-[11px] text-slate-400">
-        O aviso fica registrado permanentemente: nunca é excluído, apenas marcado como lido. A lista de avisos é o histórico completo, visível a todas as lojas destinatárias.
+        O aviso fica registrado permanentemente no canal: nunca é excluído, apenas marcado como lido. A régua "Visto por" mostra ao administrador quem abriu o canal após a publicação.
       </p>
       {error && <p role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}
       <div className="flex justify-end gap-2">

@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate } from "react-router";
-import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, PanelLeft, Settings2, Store, Users } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, Megaphone, PanelLeft, Settings2, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { logout, type SessionUser, type Role } from "@/features/auth/session";
-import { AvisosBell } from "@/features/avisos/avisos-bell";
+import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
 
+// O canal de Avisos virou página própria com badge na navegação (decisão de
+// 25/11/2026): o item "Avisos (Desenvolvimento)" carrega a contagem de não
+// lidos — o rótulo "(Desenvolvimento)" é removível quando o canal for
+// promovido a recurso oficial.
 const menu = [
   { path: "/admin", label: "Recebimento", icon: ClipboardCheck, roles: ["admin", "visualizador"] },
   { path: "/admin/reports", label: "Relatório Gerencial", icon: FileBarChart, roles: ["admin", "visualizador"] },
@@ -15,7 +19,9 @@ const menu = [
   { path: "/admin/stores", label: "Lojas", icon: Store, roles: ["admin"] },
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },
   { path: "/admin/diagnostics", label: "Logs e Auditoria", icon: Settings2, roles: ["admin"] },
+  { path: "/admin/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["admin", "visualizador"] },
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
+  { path: "/app/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["conferente"] },
 ] as const;
 
 const labels: Record<Role, string> = {
@@ -77,6 +83,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
         isActive ? "bg-sky-500/15 text-sky-200" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")}>
       <Icon size={16} aria-hidden="true" />
       <span className={compact ? "sr-only" : undefined}>{label}</span>
+      {path.endsWith("/avisos") && <AvisosMenuBadge />}
     </NavLink>)}
   </nav>;
   return <div className="flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row">
@@ -104,7 +111,6 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[#2b415b] bg-[#142337] px-4">
         <span className="text-sm font-semibold text-slate-200 md:text-xs">Painel operacional</span>
         <div className="flex items-center gap-3">
-          <AvisosBell papel={user.papel} />
           <span className="max-w-40 truncate text-xs text-slate-400">{user.nome}</span>
           <Button variant="ghost" size="sm" disabled={signout.isPending} onClick={() => signout.mutate()}>
             <LogOut size={14} aria-hidden="true" /> Sair
