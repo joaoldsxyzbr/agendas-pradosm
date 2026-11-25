@@ -1,3 +1,13 @@
 {
-  "approvals": []
+  "approvals": [
+    {
+      "fileName": "0029_avisos_chat.sql",
+      "sha256": "b32ff0a7bacf154fd12cfa6634a19d7ed1fbd06dc74a1a6f49d5891b45e3deb0",
+      "operation": "DROP",
+      "issue": "#253",
+      "approvedBy": "João",
+      "approvedAt": "2026-11-25",
+      "reason": "Rebuild aditivo da tabela avisos aprovado pelo mantenedor em 25/11/2026: ampliacao do CHECK de tipo para incluir chat e titulo nullable, exigidos pelo canal de avisos em conversa. Dados preservados por copy-and-rebuild com foreign_keys OFF e PRAGMA foreign_key_check no final."
+    }
+  ]
 }
