@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useOutletContext } from "react-router";
 import { Megaphone, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import type { SessionUser } from "@/features/auth/session";
+import { useSession } from "@/app/session-query";
 import { enviarMensagem, getAvisos, getLeitores, marcarTodosLidos } from "./api";
 import {
   formatAvisoDia,
@@ -110,10 +109,14 @@ function CartaoAviso({ aviso, isAdmin }: { aviso: Aviso; isAdmin: boolean }) {
 }
 
 export function AvisosPage() {
-  const user = useOutletContext<SessionUser>();
+  // Sessão pelo hook canônico do app (o mesmo do LayoutRoute): a página não
+  // depende mais do contexto do Outlet do Guard — nenhuma outra tela do
+  // sistema consome esse contexto e a sessão em cache evita nova chamada.
+  const session = useSession();
+  const user = session.data;
   const client = useQueryClient();
-  const isAdmin = user.papel === "admin";
-  const podeEscrever = user.papel === "admin" || user.papel === "conferente";
+  const isAdmin = user?.papel === "admin";
+  const podeEscrever = user?.papel === "admin" || user?.papel === "conferente";
   const [publishing, setPublishing] = useState(false);
   const [texto, setTexto] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);

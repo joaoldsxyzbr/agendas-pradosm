@@ -27,12 +27,21 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
   const user = role === "admin" ? admin : role === "visualizador" ? visualizador : conferente;
   const state = { data: buildCanal(), nextId: 0 };
   const requests = [];
+  // Erros não tratados do app aparecem no log do job do CI; o boundary de erro
+  // reporta o erro de render via POST /api/diagnostics/events — o mock no
+  // handler imprime o corpo no log para diagnóstico.
+  page.on("pageerror", error => console.log("PAGEERROR:", error.message));
   await page.route("**/api/**", route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
     const body = method === "GET" ? null : route.request().postDataJSON();
     requests.push({ path, method, body, search: url.search });
+    // Diagnóstico do AppErrorBoundary: logar o corpo no job e responder 204.
+    if (path === "/api/diagnostics/events") {
+      console.log("DIAGNOSTICS-BODY:", route.request().postData() ?? "(vazio)");
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (path === "/api/auth/me") return route.fulfill({ json: user });
     if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
     if (path === "/api/avisos" && method === "GET") {
@@ -114,11 +123,13 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
 
 test("Conferente vê o badge no menu, abre o canal com leitura automática e escreve", async ({ page }) => {
   const requests = await setup(page, { role: "conferente" });
-  const linkAvisos = page.getByRole("link", { name: "Avisos (Desenvolvimento)" });
+  // O menu renderiza duas cópias (aside desktop e navegação móvel): os
+  // locators do link e do badge ficam escopados no aside visível.
+  const linkAvisos = page.locator("aside").getByRole("link", { name: "Avisos (Desenvolvimento)" });
   await expect(linkAvisos).toBeVisible();
   // Badge da migração do sino: conta TODAS as pendências e pulsa vermelho
   // enquanto houver urgente não lido.
-  const badge = page.getByTestId("avisos-badge");
+  const badge = page.locator("aside").getByTestId("avisos-badge");
   await expect(badge).toHaveText("2");
   await expect(badge).toHaveClass(/bg-red-500/);
   await linkAvisos.click();
@@ -163,7 +174,7 @@ test("Visualizador acompanha o canal sem escrever", async ({ page }) => {
 test("Admin publica aviso urgente direcionado e acompanha quem viu", async ({ page }) => {
   const requests = await setup(page, { role: "admin" });
   // Leitura automática limpa as pendências antes da publicação.
-  const badge = page.getByTestId("avisos-badge");
+  const badge = page.locator("aside").getByTestId("avisos-badge");
   await expect(badge).toHaveCount(0);
   await page.getByRole("button", { name: "Novo aviso" }).click();
   const dialog = page.getByRole("dialog", { name: "Novo aviso" });
