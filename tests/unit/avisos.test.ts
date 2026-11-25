@@ -114,11 +114,20 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
     const contrato = avisoSchema.safeParse({
       id: "msg-1", tipo: "chat", titulo: null, mensagem: "Recado do canal.",
       criadoEm: "2026-11-25T10:00:00.000Z", lido: false, urgente: false,
-      autor: "Conferente 1", lojas: null
+      autor: "Conferente 1", lojas: null, proprio: true
     });
     assert.equal(contrato.success, true);
     assert.equal(contrato.success && contrato.data.titulo, null);
     assert.equal(contrato.success && contrato.data.tipo, "chat");
+    assert.equal(contrato.success && contrato.data.proprio, true);
+    // Sem "proprio" (resposta de publicação antiga) o contrato ainda vale.
+    const semProprio = avisoSchema.safeParse({
+      id: "msg-2", tipo: "chat", titulo: null, mensagem: "Outro recado.",
+      criadoEm: "2026-11-25T10:05:00.000Z", lido: false, urgente: false,
+      autor: "Conferente 2", lojas: null
+    });
+    assert.equal(semProprio.success, true);
+    assert.equal(semProprio.success && semProprio.data.proprio, undefined);
   });
 
   it("leitoresAvisoSchema valida a régua de quem viu o aviso oficial", () => {
@@ -387,6 +396,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(resposta.avisos[0].autor, "Administrador");
       assert.equal(resposta.avisos[0].urgente, false);
       assert.equal(resposta.avisos[0].lojas, null);
+      assert.equal(resposta.avisos[0].proprio, false, "aviso do admin não é próprio do conferente");
       assert.equal(f.auditCount("aviso_publicado"), 1);
 
       const lido = await f.call("conf1", `/api/avisos/${publicado.id}/lido`, { method: "POST" });
@@ -725,6 +735,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(contrato.success && contrato.data.urgente, false);
       assert.equal(contrato.success && contrato.data.lojas, null);
       assert.equal(contrato.success && contrato.data.lido, false);
+      assert.equal(contrato.success && contrato.data.proprio, true, "quem publica recebe a própria mensagem");
       assert.equal(f.auditCount("mensagem_do_canal_publicada"), 1);
       // Mensagem é global: entra na lista (e no badge) de todos os papéis.
       const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
@@ -732,6 +743,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(visaoConf2.avisos[0].tipo, "chat");
       assert.equal(visaoConf2.avisos[0].titulo, null);
       assert.equal(visaoConf2.avisos[0].autor, "Conferente 1");
+      assert.equal(visaoConf2.avisos[0].proprio, false, "mensagem do colega não é própria");
       const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
       assert.equal(visaoAdm.naoLidos, 1);
       const visaoView = await (await f.call("view1", "/api/avisos")).json();
