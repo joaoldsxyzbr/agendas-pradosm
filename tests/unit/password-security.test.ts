@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PASSWORD_HASH_ITERATIONS, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../../worker/lib/password.ts";
+import { DUMMY_HASH, PASSWORD_HASH_ITERATIONS, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../../worker/lib/password.ts";
 
 // Hash sintético gerado em teste, nunca obtido do D1 ou de credenciais reais.
 async function fixtureHash(password, iterations) {
@@ -12,7 +12,6 @@ async function fixtureHash(password, iterations) {
     name: "PBKDF2", hash: "SHA-256", salt, iterations
   }, key, 256));
   return `pbkdf2_sha256$${iterations}$${Buffer.from(salt).toString("base64")}$${Buffer.from(hash).toString("base64")}`;
-}
 
 describe("Segurança do hash de senha PBKDF2", () => {
   it("gera salt aleatório e verifica senha atual corretamente", async () => {
@@ -45,5 +44,21 @@ describe("Segurança do hash de senha PBKDF2", () => {
       assert.equal(await verifyPassword("SenhaDeTesteSegura2026", value), false);
       assert.equal(passwordNeedsUpgrade(value), false);
     }
+  });
+
+  it("guarda: hash dummy do login acompanha as iterações atuais", () => {
+    // Anti-enumeração por timing (#240): um bump de CURRENT_ITERATIONS que não
+    // regenerar o DUMMY_HASH deixa o caminho de usuário inexistente mais rápido
+    // que o caminho real, quebrando a proteção em silêncio. A issue #82 segue
+    // bloqueada pelo plano Free (decisão de 25/11); este teste garante que,
+    // quando o bump acontecer (Workers Paid), o dummy ande junto no mesmo PR.
+    const parts = DUMMY_HASH.split("$");
+    assert.equal(parts.length, 4, "DUMMY_HASH deve ter o formato completo de um hash real.");
+    assert.equal(parts[0], "pbkdf2_sha256");
+    assert.ok(parts[2] && parts[3]);
+    assert.equal(Number(parts[1]), PASSWORD_HASH_ITERATIONS,
+      "DUMMY_HASH ficou para trás em um bump de CURRENT_ITERATIONS — regenere com hashPassword.");
+    assert.equal(passwordNeedsUpgrade(DUMMY_HASH), false,
+      "O dummy com iterações antigas seria rejeitado pelo parse ou marcado como upgrade pendente.");
   });
 });
