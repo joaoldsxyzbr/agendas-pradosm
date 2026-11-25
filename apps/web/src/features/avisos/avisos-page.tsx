@@ -32,9 +32,12 @@ function DiaSeparador({ dia }: { dia: string }) {
 }
 
 function LinhaEvento({ aviso }: { aviso: Aviso }) {
-  return <p className="mx-auto max-w-xl rounded-full bg-slate-700/40 px-3 py-1 text-center text-[11px] text-slate-300">
-    <span className="font-semibold text-slate-200">{aviso.titulo}</span> · {formatAvisoHora(aviso.criadoEm)} · por {aviso.autor}
-  </p>;
+  // O título do evento é heading h3 (mesma hierarquia do título do aviso):
+  // a régua de eventos fica navegável por leitores de tela e pela busca
+  // por papel de heading dos testes. O "inline" preserva a pílula de uma linha.
+  return <div className="mx-auto max-w-xl rounded-full bg-slate-700/40 px-3 py-1 text-center text-[11px] text-slate-300">
+    <h3 className="inline text-[11px] font-semibold text-slate-200">{aviso.titulo}</h3> · {formatAvisoHora(aviso.criadoEm)} · por {aviso.autor}
+  </div>;
 }
 
 function BolhaChat({ aviso }: { aviso: Aviso }) {
