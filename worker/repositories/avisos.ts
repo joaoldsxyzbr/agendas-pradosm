@@ -3,9 +3,12 @@
 // os origina: operação gravada sem aviso é estado inconsistente (decisão 5).
 // Avisos são registro permanente: sem filtro de expiração/inativação — a
 // lista é o histórico completo, do mais recente para o mais antigo.
+// Desde 25/11/2026 o canal é um chat: a mensagem comum (tipo "chat") vive na
+// mesma tabela, sem título, sem urgência e sempre global.
 
 // Filtro de direcionamento por loja: aviso sem linhas em avisos_lojas é de
 // todas as lojas; com linhas, só quem tem a loja (ou vê tudo) o enxerga.
+// Mensagens de chat não têm linhas em avisos_lojas: sempre visíveis.
 function visibilidadePorLoja(loja) {
   return loja
     ? "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id = a.id) = 0 " +
@@ -13,16 +16,16 @@ function visibilidadePorLoja(loja) {
     : "";
 }
 
-// Eventos automáticos são do admin/gerente: o conferente recebe apenas os
-// avisos publicados pelo admin (decisão de 12/11/2026 — sem ruído de
-// operações de lojas alheias no sino de quem confere).
+// Eventos automáticos são do admin/gerente: o conferente recebe os avisos
+// publicados pelo admin E as mensagens do chat (decisão de 25/11/2026 — sem
+// ruído de operações de lojas alheias para quem confere).
 function filtroTipo(verEventos) {
-  return verEventos ? "" : "a.tipo = 'aviso'";
+  return verEventos ? "" : "a.tipo IN ('aviso', 'chat')";
 }
 
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
-// Limitado aos últimos `limit`. Admin/visualizador (loja null) veem tudo.
+// Limitado aos últimos \`limit\`. Admin/visualizador (loja null) veem tudo.
 export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null) {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
@@ -86,9 +89,10 @@ export async function markAvisoLido(db, avisoId, userId, now, loja = null, verEv
   return result?.meta?.changes === 1;
 }
 
-// Marca todos os avisos visíveis ao usuário como lidos ("Marcar todos" do
-// painel). Idempotente por aviso (INSERT OR IGNORE); respeita o
-// direcionamento por loja e o filtro de tipo (conferente só marca o que vê).
+// Marca todos os avisos visíveis ao usuário como lidos. Também é a base da
+// leitura automática estilo WhatsApp (decisão de 25/11/2026): abrir o canal
+// marca tudo o que o usuário enxerga. Idempotente por aviso (INSERT OR
+// IGNORE); respeita o direcionamento por loja e o filtro de tipo.
 // Retorna quantos viraram lidos agora.
 export async function markTodosAvisosLidos(db, userId, now, loja = null, verEventos = true) {
   const filtroLoja = visibilidadePorLoja(loja);
@@ -110,7 +114,7 @@ export function avisoJson(row) {
   return {
     id: row.id,
     tipo: row.tipo,
-    titulo: row.titulo,
+    titulo: row.titulo ?? null,
     mensagem: row.mensagem,
     criadoEm: row.criado_em,
     lido: row.lido === 1,
@@ -122,7 +126,7 @@ export function avisoJson(row) {
 
 // Statements de INSERT do aviso publicado pelo admin (com urgência, autor e
 // direcionamento por loja); entram no mesmo batch da auditoria
-// (aviso_publicado) na rota. O `id` opcional permite casar o INSERT com o
+// (aviso_publicado) na rota. O \`id\` opcional permite casar o INSERT com o
 // entityId gravado na auditoria.
 export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, autor, criadoEm, urgente, lojas }) {
   const avisoId = id ?? crypto.randomUUID();
@@ -139,8 +143,57 @@ export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, au
   return statements;
 }
 
+// Statement de INSERT da mensagem comum do canal (tipo "chat"): sem título,
+// sem urgência e global (sem linhas em avisos_lojas = todas as lojas).
+// Usada pelo POST /api/avisos de admin e conferente (decisão de 25/11).
+export function publishMensagemStatements(db, { id, mensagem, criadoPor, autor, criadoEm }) {
+  const mensagemId = id ?? crypto.randomUUID();
+  return db.prepare(
+    "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_por, criado_em, urgente, autor) VALUES (?, 'chat', NULL, ?, ?, ?, 0, ?)"
+  ).bind(mensagemId, mensagem, criadoPor, criadoEm, autor);
+}
+
+// Régua do admin para o aviso oficial: conferentes ATIVOS do público
+// destinatário (aviso sem linhas em avisos_lojas = todas as lojas), com quem
+// já leu (lido_em) e quem ainda está aguardando. Leitura automática do canal
+// grava em avisos_lidos, então "visto" = abriu o canal após a publicação.
+export async function listLeitoresDoAviso(db, avisoId) {
+  const lojasRows = await db.prepare(
+    "SELECT loja FROM avisos_lojas WHERE aviso_id = ?"
+  ).bind(avisoId).all();
+  const codigos = (lojasRows.results ?? []).map((row) => row.loja);
+  const alvo = codigos.length
+    ? " AND s.codigo IN (" + codigos.map(() => "?").join(",") + ")"
+    : "";
+  const publico = await db.prepare(
+    `SELECT u.id, u.nome, s.codigo AS loja
+       FROM usuarios u
+       JOIN lojas s ON s.id = u.loja_id
+      WHERE u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL${alvo}`
+  ).bind(...codigos).all();
+  const lidos = await db.prepare(
+    `SELECT l.usuario_id, l.lido_em
+       FROM avisos_lidos l
+       JOIN usuarios u ON u.id = l.usuario_id
+      WHERE l.aviso_id = ? AND u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL`
+  ).bind(avisoId).all();
+  const lidosMap = new Map((lidos.results ?? []).map((row) => [row.usuario_id, row.lido_em]));
+  const vistos = [];
+  const faltantes = [];
+  for (const pessoa of publico.results ?? []) {
+    const lidoEm = lidosMap.get(pessoa.id) ?? null;
+    const registro = { id: pessoa.id, nome: pessoa.nome, lidoEm, loja: pessoa.loja };
+    if (lidoEm) vistos.push(registro);
+    else faltantes.push(registro);
+  }
+  vistos.sort((a, b) => (a.lidoEm ?? "").localeCompare(b.lidoEm ?? ""));
+  vistos.sort((a, b) => a.nome.localeCompare(b.nome));
+  faltantes.sort((a, b) => a.nome.localeCompare(b.nome));
+  return { vistos, faltantes };
+}
+
 // Statement reutilizável do evento automático, para dentro do db.batch da
-// operação. `guardAuditId`: só grava o aviso se a auditoria da operação
+// operação. \`guardAuditId\`: só grava o aviso se a auditoria da operação
 // registrou (padrão onlyIfPreviousWrite — falha silenciosa se a operação
 // não alterou nada). Urgência 0 e autor 'Sistema' vêm do DEFAULT de 0023.
 export function avisoEventoStatement(db, { titulo, mensagem, criadoEm, guardAuditId = null }) {
