@@ -6,13 +6,17 @@ import { createSessionToken } from "../../worker/lib/session.ts";
 import {
   avisoSchema,
   avisosResponseSchema,
-  publicarAvisoSchema
+  leitoresAvisoSchema,
+  publicarAvisoSchema,
+  publicarMensagemSchema
 } from "../../shared/avisos.ts";
 import {
   avisoEventoStatement,
+  listLeitoresDoAviso,
   markAvisoLido,
   markTodosAvisosLidos,
-  publishAvisoStatements
+  publishAvisoStatements,
+  publishMensagemStatements
 } from "../../worker/repositories/avisos.ts";
 import { importAgendaBatchAtomic } from "../../worker/repositories/agendas.ts";
 
@@ -95,6 +99,37 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
     assert.deepEqual(parsed.avisos[0].lojas, ["01", "07"]);
     assert.equal(parsed.avisos[1].lojas, null);
   });
+
+  it("publicarMensagemSchema aceita mensagem com trim e rejeita limites", () => {
+    const valida = publicarMensagemSchema.safeParse({ mensagem: "  Bom dia; doca 1 livre.  " });
+    assert.equal(valida.success, true);
+    assert.equal(valida.success && valida.data.mensagem, "Bom dia; doca 1 livre.");
+    assert.equal(publicarMensagemSchema.safeParse({ mensagem: "   " }).success, false);
+    assert.equal(publicarMensagemSchema.safeParse({ mensagem: "" }).success, false);
+    assert.equal(publicarMensagemSchema.safeParse({ mensagem: "x".repeat(2001) }).success, false);
+    assert.equal(publicarMensagemSchema.safeParse({ mensagem: 42 }).success, false);
+  });
+
+  it("avisoSchema aceita mensagem do canal com título nulo", () => {
+    const contrato = avisoSchema.safeParse({
+      id: "msg-1", tipo: "chat", titulo: null, mensagem: "Recado do canal.",
+      criadoEm: "2026-11-25T10:00:00.000Z", lido: false, urgente: false,
+      autor: "Conferente 1", lojas: null
+    });
+    assert.equal(contrato.success, true);
+    assert.equal(contrato.success && contrato.data.titulo, null);
+    assert.equal(contrato.success && contrato.data.tipo, "chat");
+  });
+
+  it("leitoresAvisoSchema valida a régua de quem viu o aviso oficial", () => {
+    const parsed = leitoresAvisoSchema.parse({
+      vistos: [{ id: "conf1", nome: "Conferente 1", lidoEm: "2026-11-25T12:10:00.000Z", loja: "01" }],
+      faltantes: [{ id: "conf2", nome: "Conferente 2", lidoEm: null, loja: "02" }]
+    });
+    assert.equal(parsed.vistos.length, 1);
+    assert.equal(parsed.vistos[0].lidoEm, "2026-11-25T12:10:00.000Z");
+    assert.equal(parsed.faltantes[0].lidoEm, null);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -163,9 +198,9 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
     assert.match(db.statements[0].sql, /INSERT OR IGNORE INTO avisos_lidos/);
     assert.match(db.statements[0].sql, /avisos_lojas/);
     assert.doesNotMatch(db.statements[1].sql, /avisos_lojas x WHERE x.aviso_id = a.id AND x.loja/);
-    // Sem eventos: o filtro por tipo entra na cláusula WHERE.
-    assert.match(db.statements[2].sql, /a\.tipo = 'aviso'/);
-    assert.doesNotMatch(db.statements[3].sql, /a\.tipo = 'aviso'/);
+    // Sem eventos: o filtro por tipo cobre aviso oficial E mensagem do canal.
+    assert.match(db.statements[2].sql, /a\.tipo IN \('aviso', 'chat'\)/);
+    assert.doesNotMatch(db.statements[3].sql, /a\.tipo IN \('aviso', 'chat'\)/);
   });
 
   it("markAvisoLido tem arity exata com e sem filtro de loja/tipo", async () => {
@@ -174,12 +209,26 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
     await markAvisoLido(db, "a1", "adm1", "t0", null, true);
     assert.equal(db.statements.length, 2);
     assert.match(db.statements[0].sql, /INSERT OR IGNORE INTO avisos_lidos/);
-    // Conferente: filtro por tipo e por loja dentro do EXISTS de visibilidade.
-    assert.match(db.statements[0].sql, /a\.tipo = 'aviso'/);
+    // Conferente: filtro por tipo (aviso + chat) e por loja dentro do EXISTS.
+    assert.match(db.statements[0].sql, /a\.tipo IN \('aviso', 'chat'\)/);
     assert.match(db.statements[0].sql, /avisos_lojas/);
     // Admin/visualizador: enxerga tudo, só exige que o aviso exista.
-    assert.doesNotMatch(db.statements[1].sql, /a\.tipo = 'aviso'/);
+    assert.doesNotMatch(db.statements[1].sql, /a\.tipo IN \('aviso', 'chat'\)/);
     assert.doesNotMatch(db.statements[1].sql, /avisos_lojas/);
+  });
+
+  it("publishMensagemStatements e listLeitoresDoAviso têm arity exata", async () => {
+    const db = arityDb();
+    const statement = publishMensagemStatements(db, {
+      id: "msg-1", mensagem: "M", criadoPor: "conf1", autor: "Conferente 1", criadoEm: "t0"
+    });
+    assert.equal(statement.values.length, 5);
+    assert.equal(statement.values[0], "msg-1");
+    assert.equal(statement.values[1], "M");
+    assert.match(statement.sql, /VALUES \(\?, 'chat', NULL/);
+    // Aviso global: o público é "todas as lojas" e não adiciona binds.
+    const leitores = await listLeitoresDoAviso(db, "msg-1");
+    assert.deepEqual(leitores, { vistos: [], faltantes: [] });
   });
 
   it("avisoEventoStatement com e sem guard têm arity exata", () => {
@@ -228,7 +277,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 // (mesmo padrão do recebimento-api-integrated).
 // ---------------------------------------------------------------------------
 
-function fixture() {
+function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
     "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
@@ -239,7 +288,7 @@ function fixture() {
     "CREATE TABLE historico_status (id TEXT PRIMARY KEY, agendamento_id TEXT, usuario_id TEXT, status_anterior TEXT, status_novo TEXT, observacao TEXT, alterado_em TEXT)",
     "CREATE TABLE historico_agenda (id TEXT PRIMARY KEY, agenda_id TEXT, usuario_id TEXT, acao TEXT, detalhes TEXT, alterado_em TEXT)",
     "CREATE TABLE auditoria (id TEXT PRIMARY KEY, usuario_id TEXT, acao TEXT, entidade TEXT, entidade_id TEXT, loja_id TEXT, agenda_id TEXT, agendamento_id TEXT, antes TEXT, depois TEXT, detalhes TEXT, criado_em TEXT)",
-    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento')), titulo TEXT NOT NULL, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0 CHECK (urgente IN (0,1)), autor TEXT NOT NULL DEFAULT 'Sistema')",
+    "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento','chat')), titulo TEXT, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0 CHECK (urgente IN (0,1)), autor TEXT NOT NULL DEFAULT 'Sistema')",
     "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))",
     "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))"
   ].join(";\n") + ";");
@@ -284,7 +333,15 @@ function fixture() {
       }
     }
   };
-  const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
+  // O canal reutiliza o limitador do login no POST /api/avisos; sem limitador
+  // a rota falha fechado com 503, então o padrão é um limitador sintético
+  // que sempre libera — cada teste injeta o comportamento que quiser.
+  const env = {
+    DB: db,
+    SESSION_SECRET: SECRET,
+    REALTIME_MODE: "off",
+    ...(limiter === null ? {} : { LOGIN_RATE_LIMITER: limiter })
+  };
   async function call(userId, path, { method = "GET", body } = {}) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
@@ -394,7 +451,8 @@ describe("Rotas de avisos integradas", () => {
         body: { titulo: "Aviso do admin", mensagem: "Somente recados do admin chegam ao conferente." }
       });
       // Conferente: só o aviso — o evento não entra na lista nem no badge
-      // (decisão de 12/11/2026: o conferente recebe apenas avisos do admin).
+      // (o conferente recebe avisos do admin e mensagens do canal; eventos
+      // automáticos ficam com admin e visualizador — decisão de 12/11).
       const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
       assert.equal(visaoConf.avisos.length, 1);
       assert.equal(visaoConf.avisos.every((aviso) => aviso.tipo === "aviso"), true, "nenhum evento na lista do conferente");
@@ -519,6 +577,14 @@ describe("Rotas de avisos integradas", () => {
     try {
       assert.equal((await app.request("http://localhost/api/avisos")).status, 401);
       assert.equal(
+        (await app.request("http://localhost/api/avisos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: "http://localhost" },
+          body: JSON.stringify({ mensagem: "Sem sessão." })
+        })).status,
+        401
+      );
+      assert.equal(
         (await f.call("conf1", "/api/admin/avisos", { method: "POST", body: { titulo: "T", mensagem: "M" } })).status,
         403
       );
@@ -640,4 +706,131 @@ describe("Rotas de avisos integradas", () => {
     }
   });
 
+  it("conferente publica mensagem no canal; visualizador só acompanha", async () => {
+    const f = fixture();
+    try {
+      const envio = await f.call("conf1", "/api/avisos", {
+        method: "POST",
+        body: { mensagem: " Bom dia; a doca 1 está livre. " }
+      });
+      assert.equal(envio.status, 201);
+      const mensagem = await envio.json();
+      // Contrato: a resposta é um aviso completo de tipo chat, sem título.
+      const contrato = avisoSchema.safeParse(mensagem);
+      assert.equal(contrato.success, true);
+      assert.equal(contrato.success && contrato.data.tipo, "chat");
+      assert.equal(contrato.success && contrato.data.titulo, null);
+      assert.equal(contrato.success && contrato.data.mensagem, "Bom dia; a doca 1 está livre.");
+      assert.equal(contrato.success && contrato.data.autor, "Conferente 1");
+      assert.equal(contrato.success && contrato.data.urgente, false);
+      assert.equal(contrato.success && contrato.data.lojas, null);
+      assert.equal(contrato.success && contrato.data.lido, false);
+      assert.equal(f.auditCount("mensagem_do_canal_publicada"), 1);
+      // Mensagem é global: entra na lista (e no badge) de todos os papéis.
+      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      assert.equal(visaoConf2.naoLidos, 1);
+      assert.equal(visaoConf2.avisos[0].tipo, "chat");
+      assert.equal(visaoConf2.avisos[0].titulo, null);
+      assert.equal(visaoConf2.avisos[0].autor, "Conferente 1");
+      const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(visaoAdm.naoLidos, 1);
+      const visaoView = await (await f.call("view1", "/api/avisos")).json();
+      assert.equal(visaoView.avisos.length, 1);
+      // Visualizador acompanha, mas não escreve no canal.
+      const negado = await f.call("view1", "/api/avisos", {
+        method: "POST", body: { mensagem: "Só observando." }
+      });
+      assert.equal(negado.status, 403);
+      assert.equal((await negado.json()).error, "SEM_PERMISSAO");
+      // Corpo inválido é rejeitado sem gravar nada.
+      const invalido = await f.call("conf1", "/api/avisos", {
+        method: "POST", body: { mensagem: "   " }
+      });
+      assert.equal(invalido.status, 400);
+      assert.equal(f.avisosCount(), 1, "uma única mensagem gravada");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("canal respeita o limitador: 429 quando limitado e 503 sem limitador", async () => {
+    const limitado = fixture({ limiter: { limit: async () => ({ success: false }) } });
+    try {
+      const resposta429 = await limitado.call("conf1", "/api/avisos", {
+        method: "POST", body: { mensagem: "Mensagem demais." }
+      });
+      assert.equal(resposta429.status, 429);
+      assert.equal((await resposta429.json()).error, "MUITAS_MENSAGENS");
+      assert.equal(limitado.avisosCount(), 0);
+    } finally {
+      limitado.sqlite.close();
+    }
+    const semLimitador = fixture({ limiter: null });
+    try {
+      // Falha fechado: sem limitador, nada é gravado.
+      const resposta503 = await semLimitador.call("conf1", "/api/avisos", {
+        method: "POST", body: { mensagem: "Mensagem." }
+      });
+      assert.equal(resposta503.status, 503);
+      assert.equal((await resposta503.json()).error, "INDISPONIVEL");
+      assert.equal(semLimitador.avisosCount(), 0);
+    } finally {
+      semLimitador.sqlite.close();
+    }
+  });
+
+  it("régua do admin mostra quem viu o aviso oficial e quem está pendente", async () => {
+    const f = fixture();
+    try {
+      // Mensagem do canal não tem régua: leitores é só do aviso oficial.
+      const envio = await f.call("conf1", "/api/avisos", { method: "POST", body: { mensagem: "Recado no canal." } });
+      const mensagemId = (await envio.json()).id;
+      const leitoresDaMensagem = await f.call("adm1", `/api/admin/avisos/${mensagemId}/leitores`);
+      assert.equal(leitoresDaMensagem.status, 404);
+
+      const publicacao = await f.call("adm1", "/api/admin/avisos", {
+        method: "POST",
+        body: { titulo: "Só loja 01", mensagem: "Recado interno.", lojas: ["01"] }
+      });
+      const aviso01 = (await publicacao.json()).id;
+      // Antes da leitura: o conferente destinatário é o público pendente.
+      const antes = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      assert.equal(leitoresAvisoSchema.safeParse(antes).success, true);
+      assert.deepEqual(antes.vistos, []);
+      assert.deepEqual(antes.faltantes, [
+        { id: "conf1", nome: "Conferente 1", lidoEm: null, loja: "01" }
+      ]);
+      // Publicação geral: os dois conferentes são o público.
+      const geral = await f.call("adm1", "/api/admin/avisos", {
+        method: "POST", body: { titulo: "Geral", mensagem: "Para todos." }
+      });
+      const avisoGeral = (await geral.json()).id;
+      // Conferente abre o canal: leitura automática (marcar-todos).
+      await f.call("conf2", "/api/avisos/marcar-todos", { method: "POST" });
+      const meio = await (await f.call("adm1", `/api/admin/avisos/${avisoGeral}/leitores`)).json();
+      assert.equal(meio.vistos.length, 1);
+      assert.equal(meio.vistos[0].id, "conf2");
+      assert.equal(meio.vistos[0].loja, "02");
+      assert.ok(meio.vistos[0].lidoEm);
+      assert.equal(meio.faltantes.length, 1);
+      assert.equal(meio.faltantes[0].id, "conf1");
+      // O direcionado à 01 não é visível ao conf2: marcar-todos dele não
+      // gravou leitura fora do que enxerga.
+      const direcionadoDepois = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      assert.deepEqual(direcionadoDepois.faltantes.map(p => p.id), ["conf1"]);
+      await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
+      const depois = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      assert.equal(depois.vistos.length, 1);
+      assert.equal(depois.vistos[0].id, "conf1");
+      assert.ok(depois.vistos[0].lidoEm);
+      assert.equal(depois.faltantes.length, 0);
+      // Conferente não acessa a régua: /api/admin/* exige admin.
+      const negado = await f.call("conf1", `/api/admin/avisos/${aviso01}/leitores`);
+      assert.equal(negado.status, 403);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
 });
+
