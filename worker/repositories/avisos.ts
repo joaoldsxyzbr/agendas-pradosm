@@ -25,7 +25,7 @@ function filtroTipo(verEventos) {
 
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
-// Limitado aos últimos \`limit\`. Admin/visualizador (loja null) veem tudo.
+// Limitado aos últimos `limit` itens. Admin/visualizador (loja null) veem tudo.
 export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null) {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
@@ -40,10 +40,13 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
     "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
-  const values = [userId, ...(loja ? [loja] : []),
+  // "proprio" alinha a mensagem do próprio autor à direita no chat sem
+  // depender de nome (homônimos); eventos (criado_por NULL) nunca são próprios.
+  const values = [userId, userId, ...(loja ? [loja] : []),
     ...(cursor ? [cursor.criadoEm, cursor.criadoEm, cursor.id] : []), limit + 1];
   const result = await db.prepare(
     `SELECT a.id, a.tipo, a.titulo, a.mensagem, a.criado_em, a.urgente, a.autor,
+            (a.criado_por = ?) AS proprio,
             ${lojasSelect},
             CASE WHEN l.usuario_id IS NULL THEN 0 ELSE 1 END AS lido
        FROM avisos a
@@ -119,6 +122,9 @@ export function avisoJson(row) {
     criadoEm: row.criado_em,
     lido: row.lido === 1,
     urgente: row.urgente === 1,
+    // Ausente (undefined) em respostas de publicação e tabelas sem a coluna:
+    // o contrato do schema é opcional justamente por isso.
+    ...(row.proprio === undefined ? {} : { proprio: row.proprio === 1 }),
     autor: row.autor ?? "Sistema",
     lojas: row.lojas ? String(row.lojas).split("\u001f") : null
   };
@@ -126,7 +132,7 @@ export function avisoJson(row) {
 
 // Statements de INSERT do aviso publicado pelo admin (com urgência, autor e
 // direcionamento por loja); entram no mesmo batch da auditoria
-// (aviso_publicado) na rota. O \`id\` opcional permite casar o INSERT com o
+// (aviso_publicado) na rota. O `id` opcional permite casar o INSERT com o
 // entityId gravado na auditoria.
 export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, autor, criadoEm, urgente, lojas }) {
   const avisoId = id ?? crypto.randomUUID();
@@ -186,14 +192,13 @@ export async function listLeitoresDoAviso(db, avisoId) {
     if (lidoEm) vistos.push(registro);
     else faltantes.push(registro);
   }
-  vistos.sort((a, b) => (a.lidoEm ?? "").localeCompare(b.lidoEm ?? ""));
   vistos.sort((a, b) => a.nome.localeCompare(b.nome));
   faltantes.sort((a, b) => a.nome.localeCompare(b.nome));
   return { vistos, faltantes };
 }
 
 // Statement reutilizável do evento automático, para dentro do db.batch da
-// operação. \`guardAuditId\`: só grava o aviso se a auditoria da operação
+// operação. `guardAuditId`: só grava o aviso se a auditoria da operação
 // registrou (padrão onlyIfPreviousWrite — falha silenciosa se a operação
 // não alterou nada). Urgência 0 e autor 'Sistema' vêm do DEFAULT de 0023.
 export function avisoEventoStatement(db, { titulo, mensagem, criadoEm, guardAuditId = null }) {
