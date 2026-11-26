@@ -57,7 +57,7 @@ adminUserRoutes.post("/", async (c) => {
     parsed.data.papel,
     parsed.data.lojaId
   );
-  if (!storeCheck.ok) {
+  if (storeCheck.ok === false) {
     return c.json(
       {
         error: storeCheck.reason === "missing" ? "LOJA_NAO_ENCONTRADA" : "LOJA_OBRIGATORIA",
@@ -113,7 +113,7 @@ adminUserRoutes.patch("/", async (c) => {
     papel,
     requestedStore
   );
-  if (!storeCheck.ok) {
+  if (storeCheck.ok === false) {
     return c.json(
       {
         error: storeCheck.reason === "missing" ? "LOJA_NAO_ENCONTRADA" : "LOJA_OBRIGATORIA",

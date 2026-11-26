@@ -31,10 +31,11 @@ diagnosticRoutes.post("/events", async c => {
   const parsed = DiagnosticInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "EVENTO_INVALIDO" }, 400);
   const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO" }, 401);
   const since = new Date(Date.now() - 60000).toISOString();
   const count = await c.env.DB.prepare(
     "SELECT COUNT(*) AS n FROM diagnosticos WHERE usuario_id = ? AND criado_em >= ?"
-  ).bind(user.id, since).first();
+  ).bind(user.id, since).first<{ n: number }>();
   if (Number(count?.n ?? 0) >= 30) return c.json({ error: "LIMITE_DE_EVENTOS" }, 429);
   await recordDiagnostic(c.env.DB, {
     ...parsed.data, origem: "browser", userId: user.id, storeId: user.lojaId ?? null

@@ -1,6 +1,11 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
+import type { HonoRequest } from "hono";
 import { z } from "zod";
+interface ReportRow { date: string; storeCode: string; storeName: string; dayStatus: string; total: number; aguardando: number; naoCompareceu: number; recebido: number; naoChegou: number; recusado: number; semAgenda: number; }
+interface SupplierRow { supplier: string; total: number; recebido: number; naoChegou: number; }
+interface ManualSupplierRow { supplier: string; vezes: number; ultima: string; }
+interface OccurrenceRow { date: string; storeCode: string; storeName: string; protocol: string; supplier: string; observation: string | null; origin: string; occurrenceType: string; classificationOrigin: string; }
 const adminReportRoutes = new Hono<AppEnv>();
 const DAY_MS = 864e5;
 const MAX_REPORT_DAYS = 93;
@@ -21,7 +26,7 @@ const reportFilters = z.object({
   },
   { message: "Selecione um intervalo de 1 a 93 dias." }
 );
-function parseFilters(req) {
+function parseFilters(req: HonoRequest) {
   return reportFilters.safeParse({
     start: req.query("start"),
     end: req.query("end"),
@@ -29,7 +34,7 @@ function parseFilters(req) {
     storeCodes: req.queries("storeCode") ?? []
   });
 }
-function storeFilter({ start, end, storeCodes }) {
+function storeFilter({ start, end, storeCodes }: z.infer<typeof reportFilters>) {
   const codes=[...new Set(storeCodes.map(code=>code.toLocaleUpperCase("pt-BR")))];
   const where=["a.data_agenda BETWEEN ? AND ?"];
   if(codes.length===1)where.push("AND l.codigo = ? COLLATE NOCASE");
@@ -58,7 +63,7 @@ adminReportRoutes.get("/", async (c) => {
     "WHERE",
     where,
     "GROUP BY a.id ORDER BY a.data_agenda ASC, l.codigo ASC"
-  ].join(" ")).bind(...filters).all(),
+  ].join(" ")).bind(...filters).all<ReportRow>(),
     c.env.DB.prepare([
     "SELECT ag.fornecedor AS supplier, COUNT(*) AS total,",
     "SUM(CASE WHEN ag.status = 'recebido' THEN 1 ELSE 0 END) AS recebido,",
@@ -72,7 +77,7 @@ adminReportRoutes.get("/", async (c) => {
     "GROUP BY ag.fornecedor",
     "HAVING naoChegou > 0",
     "ORDER BY naoChegou DESC, ag.fornecedor ASC LIMIT 12"
-  ].join(" ")).bind(...filters).all(),
+  ].join(" ")).bind(...filters).all<SupplierRow>(),
     // Fornecedores que mais entregam sem agenda: agendamentos de origem
     // "manual" (registrados na hora na conferência, sem importação prévia),
     // agrupados por fornecedor — alimenta o card "Fornecedores sem agenda".
@@ -86,14 +91,14 @@ adminReportRoutes.get("/", async (c) => {
     "AND ag.ativo = 1 AND ag.origem = 'manual'",
     "GROUP BY ag.fornecedor",
     "ORDER BY vezes DESC, ag.fornecedor ASC LIMIT 12"
-  ].join(" ")).bind(...filters).all()
+  ].join(" ")).bind(...filters).all<ManualSupplierRow>()
   ]);
   return c.json({
     start,
     end,
     storeCode: codes.length===1?codes[0]:null,
     storeCodes: codes,
-    rows: rows.results.map((row) => ({
+    rows: (rows.results ?? []).map((row) => ({
       ...row,
       total: Number(row.total),
       aguardando: Number(row.aguardando),
@@ -103,13 +108,13 @@ adminReportRoutes.get("/", async (c) => {
       recusado: Number(row.recusado),
       semAgenda: Number(row.semAgenda)
     })),
-    suppliers: suppliers.results.map((supplier) => ({
+    suppliers: (suppliers.results ?? []).map((supplier) => ({
       ...supplier,
       total: Number(supplier.total),
       recebido: Number(supplier.recebido),
       naoChegou: Number(supplier.naoChegou)
     })),
-    semAgendaSuppliers: semAgendaSuppliers.results.map((supplier) => ({
+    semAgendaSuppliers: (semAgendaSuppliers.results ?? []).map((supplier) => ({
       ...supplier,
       vezes: Number(supplier.vezes)
     }))
@@ -139,15 +144,16 @@ adminReportRoutes.get("/occurrences", async (c) => {
     where,
     "AND ag.ativo = 1 AND (ag.status = 'nao_chegou' OR (ag.status = 'aguardando' AND a.status_dia = 'concluido'))"
   ].join(" ");
-  const hasSearch = typeof paging.data.q === "string" && paging.data.q.length > 0;
+  const q = paging.data.q;
+  const hasSearch = typeof q === "string" && q.length > 0;
   // Substring literal, com a mesma comparação ASCII sem distinção de caixa
   // do LIKE padrão do SQLite. Evita o limite de bytes do padrão LIKE no D1.
   const searchClause = hasSearch
     ? " AND (instr(lower(ag.fornecedor), lower(?)) > 0 OR instr(lower(ag.protocolo), lower(?)) > 0)"
     : "";
-  const searchArgs = hasSearch ? [paging.data.q, paging.data.q] : [];
+  const searchArgs = hasSearch ? [q, q] : [];
   const [count, rows] = await Promise.all([
-    c.env.DB.prepare("SELECT COUNT(*) AS total " + base + searchClause).bind(...filters, ...searchArgs).first(),
+    c.env.DB.prepare("SELECT COUNT(*) AS total " + base + searchClause).bind(...filters, ...searchArgs).first<{ total: number }>(),
     c.env.DB.prepare([
       "SELECT a.data_agenda AS date, l.codigo AS storeCode,",
       "l.nome AS storeName, ag.protocolo AS protocol,",
@@ -159,13 +165,13 @@ adminReportRoutes.get("/occurrences", async (c) => {
       searchClause,
       "ORDER BY a.data_agenda DESC, l.codigo ASC, ag.horario_inicio ASC, ag.id ASC",
       "LIMIT ? OFFSET ?"
-    ].join(" ")).bind(...filters, ...searchArgs, paging.data.limit, paging.data.offset).all()
+    ].join(" ")).bind(...filters, ...searchArgs, paging.data.limit, paging.data.offset).all<OccurrenceRow>()
   ]);
   return c.json({
     total: Number(count?.total ?? 0),
     offset: paging.data.offset,
     limit: paging.data.limit,
-    rows: rows.results.map((row) => ({
+    rows: (rows.results ?? []).map((row) => ({
       ...row,
       protocol: row.origin === "manual" ? "Sem agenda" : row.protocol
     }))

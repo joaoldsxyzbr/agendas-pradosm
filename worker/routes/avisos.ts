@@ -1,3 +1,4 @@
+import type { AuthUser } from "../../shared/auth.ts";
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { auditStatement } from "../repositories/audit.ts";
@@ -35,11 +36,11 @@ avisoRoutes.use("*", async (c, next) => {
 
 // Conferente vê os avisos da sua loja (e os de todas); os demais papéis,
 // sem loja, veem todos os comunicados. Nenhum papel recebe eventos operacionais.
-function lojaDoUsuario(user) {
+function lojaDoUsuario(user: AuthUser) {
   return user.papel === "conferente" ? user.lojaCodigo : null;
 }
 
-function verEventosDoUsuario(_user) {
+function verEventosDoUsuario(_user: AuthUser) {
   // Eventos operacionais pertencem à auditoria, não ao canal de comunicação.
   return false;
 }
@@ -134,7 +135,8 @@ avisoRoutes.post("/", async (c) => {
 });
 
 avisoRoutes.put("/:id/reacao", async (c) => {
-  const user = c.get("authUser")!;
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
   const parsed = definirReacaoSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "REQUISICAO_INVALIDA", message: "Reação inválida." }, 400);
   const id = c.req.param("id");
@@ -213,7 +215,7 @@ adminAvisoRoutes.post("/", async (c) => {
   if (lojas) {
     const rows = await c.env.DB.prepare(
       "SELECT codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
-    ).all();
+    ).all<{ codigo: string }>();
     const validas = new Set((rows.results ?? []).map((row) => row.codigo));
     if (lojas.some((loja) => !validas.has(loja))) {
       return c.json(

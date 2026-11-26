@@ -102,3 +102,7 @@ Strict será critério obrigatório de encerramento da issue #259: frontend, Wor
 ### Tipagem de cadastros, autenticação e publicação de eventos
 
 Tipos explícitos de linhas de lojas/usuários, inputs derivados dos schemas compartilhados, parâmetros e resultados dos repositórios, nulabilidade de consultas, respostas administrativas e eventos de publicação realtime. O gate strict (também contra tipos oficiais do runtime) passa a abranger esses módulos. Não altera schema SQL nem a política de autorização. As rotas verificam a presença do usuário autenticado e resultados nulos antes de serializar. A PR #257 altera alguns dos mesmos arquivos: reconciliar os diffs e rodar CI após atualização da main, sem sobrepor as proteções de concorrência. CI do novo commit pendente.
+
+### Lote ampliado — avisos, diagnósticos, relatórios e importação
+
+Corrige o narrowing de StoreCheck em configuração mista strict/permissiva. Tipos de entradas, linhas SQL e saídas do canal, diagnósticos e relatórios; reação JSON validada com schema. Inclui todo shared/import no gate strict, isolando a declaração externa do parser PDF do runtime manual e usando unknown no retorno do parser. Nenhuma migration nova; a troca de destinos por ID continua na #257. CI do lote pendente; não declarar aprovação antes do resultado.

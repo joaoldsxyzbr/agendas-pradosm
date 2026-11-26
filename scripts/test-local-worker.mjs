@@ -88,7 +88,7 @@ try {
   const runtimePath = join(temp, "runtime.d.ts");
   command("types", runtimePath, "--include-env", "false");
   const strict = JSON.parse(await readFile(join(root, "worker/tsconfig.strict.json"), "utf8"));
-  const sources = strict.include.filter(path => !path.endsWith(".d.ts")).map(path => resolve(root, "worker", path));
+  const sources = strict.include.filter(path => path !== "./types.d.ts").map(path => resolve(root, "worker", path));
   const runtimeTsconfig = join(temp, "tsconfig.runtime.json");
   await writeFile(runtimeTsconfig, JSON.stringify({
     extends: join(root, "worker/tsconfig.strict.json"),

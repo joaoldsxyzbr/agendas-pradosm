@@ -30,6 +30,18 @@
     "./routes/admin-stores.ts",
     "./routes/admin-users.ts",
     "./services/realtime.ts",
-    "./routes/realtime.ts"
+    "./routes/realtime.ts",
+    "./pdf-types.d.ts",
+    "./repositories/avisos.ts",
+    "./routes/avisos.ts",
+    "./repositories/diagnostics.ts",
+    "./routes/diagnostics.ts",
+    "./routes/admin-reports.ts",
+    "../shared/import/extractPdfText.ts",
+    "../shared/import/parseAgendaBatch.ts",
+    "../shared/import/parseAgendaText.ts",
+    "../shared/import/pdf-engine-liteparse.ts",
+    "../shared/import/readCsvText.ts",
+    "../shared/import/validateImportBatch.ts"
   ]
 }
