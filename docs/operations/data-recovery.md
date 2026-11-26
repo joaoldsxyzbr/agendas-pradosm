@@ -4,7 +4,7 @@ Este runbook descreve como responder a perda, corrupção ou alteração operaci
 
 ## Princípios
 
-- O banco de produção é `agendas-prado`.
+- O banco de produção é `agendas-pradosm`.
 - Recuperação de dados é uma operação de incidente, não parte do fluxo normal de deploy.
 - Para erro localizado e reversível pela própria aplicação, prefira correção funcional/auditável em vez de restaurar o banco inteiro.
 - Não execute `DELETE`, `DROP`, alteração manual de schema ou restauração por tentativa e erro.
@@ -37,7 +37,7 @@ Se o incidente exigir indisponibilidade total para preservar consistência, trat
 Consulte o bookmark atual do D1 antes do restore:
 
 ```bash
-npx wrangler d1 time-travel info agendas-prado
+npx wrangler d1 time-travel info agendas-pradosm
 ```
 
 Copie para o registro do incidente:
@@ -53,7 +53,7 @@ Esse bookmark é o ponto de retorno caso seja necessário desfazer a restauraç�
 Escolha um timestamp imediatamente anterior ao evento que corrompeu os dados e peça ao D1 o bookmark correspondente:
 
 ```bash
-npx wrangler d1 time-travel info agendas-prado --timestamp="2026-09-30T12:00:00Z"
+npx wrangler d1 time-travel info agendas-pradosm --timestamp="2026-09-30T12:00:00Z"
 ```
 
 O timestamp deve ser documentado em UTC/RFC3339 para evitar ambiguidade.
@@ -65,13 +65,13 @@ Antes de restaurar, confirme que o ponto escolhido é anterior ao incidente e po
 A restauração sobrescreve o banco remoto no lugar. Execute somente depois da revisão do ponto de recuperação:
 
 ```bash
-npx wrangler d1 time-travel restore agendas-prado --timestamp="2026-09-30T12:00:00Z"
+npx wrangler d1 time-travel restore agendas-pradosm --timestamp="2026-09-30T12:00:00Z"
 ```
 
 Também é possível usar o bookmark resolvido:
 
 ```bash
-npx wrangler d1 time-travel restore agendas-prado --bookmark="<BOOKMARK>"
+npx wrangler d1 time-travel restore agendas-pradosm --bookmark="<BOOKMARK>"
 ```
 
 Registre o bookmark anterior informado pelo Wrangler ao concluir. Ele permite desfazer o restore se necessário.
@@ -99,7 +99,7 @@ Não tente “corrigir por cima” imediatamente.
 Use o bookmark preservado antes da restauração ou o bookmark de retorno informado pelo Wrangler:
 
 ```bash
-npx wrangler d1 time-travel restore agendas-prado --bookmark="<BOOKMARK_ANTERIOR>"
+npx wrangler d1 time-travel restore agendas-pradosm --bookmark="<BOOKMARK_ANTERIOR>"
 ```
 
 Depois reavalie a janela do incidente e escolha um novo ponto de recuperação.

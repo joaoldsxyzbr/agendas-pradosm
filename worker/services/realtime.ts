@@ -74,7 +74,7 @@ async function revokeRealtimeUser(env, userId, mode = "terminate") {
 async function publishAvisosChanged(env, avisoId) {
   if (env.REALTIME_MODE !== "on") return false;
   try {
-    const rows = await env.DB.prepare("SELECT s.id AS store_id FROM avisos_lojas a LEFT JOIN lojas s ON s.codigo = a.loja WHERE a.aviso_id = ?").bind(avisoId).all();
+    const rows = await env.DB.prepare("SELECT loja_id AS store_id FROM avisos_lojas WHERE aviso_id = ?").bind(avisoId).all();
     const lojas = rows.results ?? [];
     const storeIds = lojas.length ? lojas.map(row => row.store_id).filter(id => typeof id === "string") : null;
     const response = await env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("agenda-prado")).fetch(new Request("https://realtime.internal/internal/publish", {

@@ -75,6 +75,7 @@ adminUserRoutes.post("/", async (c) => {
     );
     return c.json(userJson(user), 201);
   } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "CONFLITO_ESTADO") return c.json({ error: "CONFLITO_ESTADO", message: "A loja foi removida. Atualize a lista e tente novamente." }, 409);
     if (isDuplicateLogin(error)) {
       return c.json(
         { error: "LOGIN_EM_USO", message: "Login j\xE1 est\xE1 em uso." },
