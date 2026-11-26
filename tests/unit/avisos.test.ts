@@ -359,8 +359,7 @@ function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) 
       headers: {
         "Content-Type": "application/json",
         Origin: "http://localhost",
-        Cookie: "agenda_session=" + token,
-        ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
+        Cookie: "agenda_session=" + token
       },
       ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
     }, env);
