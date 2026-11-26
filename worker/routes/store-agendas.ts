@@ -1,3 +1,6 @@
+import type { AuthUser } from "../../shared/auth.ts";
+import type { Context } from "hono";
+import type { AppointmentRow, AgendaDetailRow, AgendaSummaryRow } from "../repositories/agendas.ts";
 import type { AppEnv } from "../env.ts";
 import { normalizeObservation, validateStatusObservation } from "../../shared/observations.ts";
 import { Hono } from "hono";
@@ -37,35 +40,36 @@ const StoreHistoryPage = z.object({
 const ManualAppointmentInput = z.object({
   supplier: z.string().trim().min(1).max(160)
 });
-function storeUser(c) {
+type StoreUser = AuthUser & { papel: "conferente"; lojaId: string };
+function storeUser(c: Context<AppEnv>): StoreUser | null {
   const user = c.get("authUser");
-  if (user.papel !== "conferente" || !user.lojaId) return null;
+  if (!user || user.papel !== "conferente" || !user.lojaId) return null;
   return {
     ...user,
     papel: "conferente",
     lojaId: user.lojaId
   };
 }
-function forbidden(c) {
+function forbidden(c: Context<AppEnv>) {
   return c.json(
     { error: "ACESSO_NEGADO", message: "Acesso n\xE3o permitido." },
     403
   );
 }
-function conflictResponse(c, error) {
-  return error?.code === "CONFLITO_ESTADO"
+function conflictResponse(c: Context<AppEnv>, error: unknown) {
+  return (typeof error === "object" && error !== null && "code" in error && error.code === "CONFLITO_ESTADO")
     ? c.json({ error: "CONFLITO_ESTADO", message: "Este registro mudou. Atualize a tela e tente novamente." }, 409)
     : null;
 }
-function parseStringArray(value) {
+function parseStringArray(value: string | null): string[] {
   try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+    const parsed: unknown = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
   } catch {
     return [];
   }
 }
-function appointmentJson(appointment) {
+function appointmentJson(appointment: AppointmentRow) {
   const manual = appointment.origem === "manual";
   return {
     id: appointment.id,
@@ -87,7 +91,7 @@ function appointmentJson(appointment) {
     ativo: appointment.ativo === 1
   };
 }
-function agendaJson(agenda) {
+function agendaJson(agenda: AgendaDetailRow) {
   return {
     id: agenda.id,
     storeId: agenda.loja_id,
@@ -102,7 +106,7 @@ function agendaJson(agenda) {
     updatedAt: agenda.atualizado_em
   };
 }
-function summaryJson(agenda) {
+function summaryJson(agenda: AgendaSummaryRow) {
   return {
     ...agendaJson(agenda),
     total: Number(agenda.total ?? 0),
@@ -112,7 +116,7 @@ function summaryJson(agenda) {
     recusado: Number(agenda.recusado ?? 0)
   };
 }
-async function agendaDetails(db, storeId, date) {
+async function agendaDetails(db: D1Database, storeId: string, date: string) {
   const agenda = await findStoreAgendaByDate(db, storeId, date);
   if (!agenda) return null;
   const appointments = await listAppointmentsByAgenda(db, agenda.id);
@@ -130,7 +134,7 @@ storeAgendaRoutes.get("/today", async (c) => {
   }
   return c.json(result);
 });
-async function createManualForDate(c, user, date) {
+async function createManualForDate(c: Context<AppEnv>, user: StoreUser, date: string) {
   const parsed = ManualAppointmentInput.safeParse(
     await c.req.json().catch(() => null)
   );
@@ -287,11 +291,11 @@ storeAgendaRoutes.get("/history/:date", async (c) => {
   }
   return c.json(result);
 });
-async function editableAgendaForAppointment(db, appointment) {
+async function editableAgendaForAppointment(db: D1Database, appointment: AppointmentRow) {
   const agenda = await findAgendaById(db, appointment.agenda_id);
   return agenda?.status_dia === "aberto" ? agenda : null;
 }
-function concludedDay(c) {
+function concludedDay(c: Context<AppEnv>) {
   return c.json(
     {
       error: "DIA_CONCLUIDO",
@@ -500,9 +504,9 @@ storeAppointmentRoutes.patch("/:id/observation", async (c) => {
   if (!appointment) return c.json({ error: "AGENDAMENTO_NAO_ENCONTRADO", message: "Agendamento não encontrado." }, 404);
   const agenda = await editableAgendaForAppointment(c.env.DB, appointment);
   if (!agenda) return concludedDay(c);
-  let observation;
+  let observation: string | null;
   try {
-    observation = validateStatusObservation(appointment.status, parsed.data.observation);
+    observation = validateStatusObservation(appointment.status, parsed.data.observation ?? null);
   } catch (error) {
     return c.json({ error: "MOTIVO_INVALIDO", message: error instanceof Error ? error.message : "Motivo inválido." }, 400);
   }
@@ -550,8 +554,8 @@ storeAppointmentRoutes.patch("/:id/status", async (c) => {
   let observation;
   try {
     observation = parsed.data.status === "nao_chegou"
-      ? validateStatusObservation(parsed.data.status, parsed.data.observation)
-      : normalizeObservation(parsed.data.observation);
+      ? validateStatusObservation(parsed.data.status, parsed.data.observation ?? null)
+      : normalizeObservation(parsed.data.observation ?? null);
   } catch (error) {
     return c.json({ error: "MOTIVO_INVALIDO", message: error instanceof Error ? error.message : "Motivo inválido." }, 400);
   }

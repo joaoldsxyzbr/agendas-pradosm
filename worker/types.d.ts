@@ -33,7 +33,7 @@ interface R2Bucket {
   put(
     key: string,
     value: string | ReadableStream | ArrayBuffer | ArrayBufferView,
-    options?: { contentType?: string }
+    options?: { httpMetadata?: { contentType?: string } }
   ): Promise<{ key: string }>;
 }
 

@@ -7,7 +7,7 @@ const web = join(root, "apps", "web");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 // Descobre módulos novos automaticamente, sem manter um segundo inventário
 // manual de arquivos além do próprio diretório e do tsconfig.
-function sourceFiles(directory) {
+function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(path);
@@ -46,6 +46,4 @@ for (const file of listed) {
 const tsc = join(web, "node_modules", "typescript", "bin", "tsc");
 const check = spawnSync(process.execPath, [tsc, "-p", "worker"], { cwd: root, encoding: "utf8" });
 if (check.status !== 0) throw Error("TypeScript do Worker reprovado:\n" + (check.stderr || check.stdout));
-const strictCheck = spawnSync(process.execPath, [tsc, "-p", "worker/tsconfig.strict.json"], { cwd: root, encoding: "utf8" });
-if (strictCheck.status !== 0) throw Error("TypeScript estrito dos módulos consolidados reprovado:\n" + (strictCheck.stderr || strictCheck.stdout));
-console.log("Worker e contratos em TypeScript: " + count + " módulos com imports e tipos verificados; módulos de fronteira sob strict.");
+console.log("Worker e contratos em TypeScript: " + count + " módulos com imports e tipos verificados; todos os módulos sob strict.");

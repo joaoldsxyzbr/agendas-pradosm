@@ -1,3 +1,4 @@
+import type { Env } from "./env.ts";
 export { RealtimeHub } from "./realtime/RealtimeHub.ts";
 import { app } from "./app.ts";
 import { closePastOpenAgendas } from "./services/agenda-maintenance.ts";
@@ -8,9 +9,9 @@ import { pruneRevokedSessions } from "./repositories/users.ts";
 export default {
   fetch: app.fetch,
   async scheduled(
-    controller,
-    env,
-    _ctx,
+    controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
   ) {
     await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }

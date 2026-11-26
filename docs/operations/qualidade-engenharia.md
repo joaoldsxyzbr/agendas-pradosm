@@ -110,3 +110,7 @@ Corrige o narrowing de StoreCheck em configuração mista strict/permissiva. Tip
 ### Durable Object — contratos realtime
 
 Incluído RealtimeHub no gate strict. Validação Zod de mensagens, eventos internos e anexos de hibernação, com tipos explícitos de presença, conexão e alarmes; removido cast any do evento. Mantidos protocolo, tags, prazos e semântica de publicação. CI pendente; smoke anterior usa REALTIME_MODE=off, então comportamento de WebSocket real ainda precisa de teste dedicado.
+
+### Worker integral sob strict
+
+A configuração Worker agora usa strict: true para todos os módulos Worker/shared. Tipos de linhas D1, importação, histórico, mutações, rotas e manutenção; removido any da substituição de agendas. Verificação com tipos oficiais a partir do entrypoint Worker, sem confundir APIs DOM do parser de CSV (TextDecoder fatal) com APIs do runtime. A verificação DOM estrita de todo shared continua ativa. Não se reescrevem migrations nem regras de negócio. O caminho legado R2 não foi habilitado: apenas ajustada a forma tipada de httpMetadata; remoção segue #257. CI pendente; scripts/testes TypeScript ainda exigem configuração Node própria.

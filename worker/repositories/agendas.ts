@@ -1,17 +1,46 @@
+import type { z } from "zod";
+import type { ImportAgendaInput } from "../../shared/agenda.ts";
+type ImportInput = z.infer<typeof ImportAgendaInput>;
+type ImportedAppointment = ImportInput["appointments"][number];
+export type AppointmentStatus = "aguardando" | "recebido" | "nao_chegou" | "recusado";
+export type DayStatus = "aberto" | "concluido";
+export interface AgendaRow {
+  id: string; loja_id: string; data_agenda: string; arquivo_original: string;
+  criado_por: string; status_dia: DayStatus; concluido_em: string | null;
+  concluido_por: string | null; digitado_em: string | null; digitado_por: string | null;
+  criado_em: string; atualizado_em: string;
+}
+export interface AgendaDetailRow extends AgendaRow {
+  store_code: string; store_name: string; concluido_por_nome: string | null; digitado_por_nome?: string | null;
+}
+export interface AgendaSummaryRow extends AgendaDetailRow {
+  total: number; aguardando: number; recebido: number; nao_chegou: number; recusado: number; sem_agenda: number;
+}
+export interface AppointmentRow {
+  id: string; agenda_id: string; protocolo: string; horario_inicio: string; horario_fim: string; fornecedor: string;
+  itens: number | null; volumes: number | null; paletes: number | null; carga_batida: string | null;
+  tipo: string | null; nfe: string; pedidos: string; status: AppointmentStatus; trocas: number;
+  observacao: string | null; origem: "manual" | "importado"; ativo: number;
+  criado_em: string; atualizado_em: string; csv_campos: string | null;
+}
+interface HistoryRow { id: string; usuario_id: string | null; usuario_nome: string | null; alterado_em: string; }
+interface AppointmentHistoryRow extends HistoryRow { agendamento_id: string; status_anterior: string; status_novo: string; observacao: string | null; }
+interface AgendaHistoryRow extends HistoryRow { agenda_id: string; acao: string; detalhes: string | null; }
+export interface ImportEntry { existing: AgendaRow | null; input: ImportInput; storeId: string; }
 import { auditStatement } from "./audit.ts";
 const AGENDA_COLUMNS = "id, loja_id, data_agenda, arquivo_original, criado_por, status_dia, concluido_em, concluido_por, digitado_em, digitado_por, criado_em, atualizado_em";
 const APPOINTMENT_COLUMNS = "id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, trocas, observacao, origem, ativo, criado_em, atualizado_em, csv_campos";
-async function findStoreByCode(db, code) {
+async function findStoreByCode(db: D1Database, code: string) {
   return db.prepare(
     "SELECT id, codigo, nome FROM lojas WHERE codigo = ? COLLATE NOCASE AND ativo = 1 AND excluido_em IS NULL LIMIT 1"
-  ).bind(code).first();
+  ).bind(code).first<{ id: string; codigo: string; nome: string }>();
 }
-async function findAgendaByStoreDate(db, storeId, date) {
+async function findAgendaByStoreDate(db: D1Database, storeId: string, date: string) {
   return db.prepare(
     `SELECT ${AGENDA_COLUMNS} FROM agendas WHERE loja_id = ? AND data_agenda = ? LIMIT 1`
-  ).bind(storeId, date).first();
+  ).bind(storeId, date).first<AgendaRow>();
 }
-async function findAgendaById(db, id) {
+async function findAgendaById(db: D1Database, id: string) {
   return db.prepare(
     `SELECT a.${AGENDA_COLUMNS.replaceAll(", ", ", a.")},
               l.codigo AS store_code,
@@ -24,9 +53,9 @@ async function findAgendaById(db, id) {
        LEFT JOIN usuarios digitador ON digitador.id = a.digitado_por
        WHERE a.id = ?
        LIMIT 1`
-  ).bind(id).first();
+  ).bind(id).first<AgendaDetailRow>();
 }
-async function listAdminAgendas(db, filters: { date?: string; storeCode?: string } = {}) {
+async function listAdminAgendas(db: D1Database, filters: { date?: string; storeCode?: string } = {}) {
   const clauses = [];
   const values = [];
   if (filters.date) {
@@ -60,15 +89,15 @@ async function listAdminAgendas(db, filters: { date?: string; storeCode?: string
      GROUP BY a.id, l.codigo, l.nome, concluidor.nome, digitador.nome
      ORDER BY a.data_agenda DESC, l.codigo ASC`
   );
-  const result = await (values.length ? statement.bind(...values) : statement).all();
-  return result.results;
+  const result = await (values.length ? statement.bind(...values) : statement).all<AgendaSummaryRow>();
+  return result.results ?? [];
 }
 /**
  * Paginação opt-in para o Histórico administrativo. Seleciona as agendas da
  * página ANTES de agregar agendamentos, evitando GROUP BY da base inteira.
  * A listagem antiga permanece inalterada para Recebimento e outros clientes.
  */
-async function listAdminAgendasPage(db, filters: { date?: string; storeCode?: string } = {}, limit = 20, offset = 0) {
+async function listAdminAgendasPage(db: D1Database, filters: { date?: string; storeCode?: string } = {}, limit = 20, offset = 0) {
   const clauses = [];
   const values = [];
   if (filters.date) {
@@ -109,22 +138,22 @@ async function listAdminAgendasPage(db, filters: { date?: string; storeCode?: st
      LEFT JOIN agendamentos ag ON ag.agenda_id = a.id
      GROUP BY a.id, l.codigo, l.nome, concluidor.nome, digitador.nome
      ORDER BY p.sorted_date DESC, p.sorted_code ASC, a.id ASC`
-  ).bind(...values, limit + 1, offset).all();
+  ).bind(...values, limit + 1, offset).all<AgendaSummaryRow>();
   const rows = result.results ?? [];
   return { items: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
-async function listAppointmentsByAgenda(db, agendaId, activeOnly = true) {
+async function listAppointmentsByAgenda(db: D1Database, agendaId: string, activeOnly = true) {
   const query = activeOnly ? `SELECT ${APPOINTMENT_COLUMNS} FROM agendamentos WHERE agenda_id = ? AND ativo = 1 ORDER BY horario_inicio ASC, protocolo ASC` : `SELECT ${APPOINTMENT_COLUMNS} FROM agendamentos WHERE agenda_id = ? ORDER BY horario_inicio ASC, protocolo ASC`;
-  const result = await db.prepare(query).bind(agendaId).all();
-  return result.results;
+  const result = await db.prepare(query).bind(agendaId).all<AppointmentRow>();
+  return result.results ?? [];
 }
-async function findAppointmentById(db, id) {
+async function findAppointmentById(db: D1Database, id: string) {
   return db.prepare(
     `SELECT ${APPOINTMENT_COLUMNS} FROM agendamentos WHERE id = ? LIMIT 1`
-  ).bind(id).first();
+  ).bind(id).first<AppointmentRow>();
 }
-async function listAppointmentHistory(db, appointmentId) {
+async function listAppointmentHistory(db: D1Database, appointmentId: string) {
   const result = await db.prepare(
     `SELECT id, agendamento_id, usuario_id, usuario_nome, status_anterior, status_novo, observacao, alterado_em
        FROM (
@@ -141,10 +170,10 @@ async function listAppointmentHistory(db, appointmentId) {
          WHERE a.agendamento_id = ? AND a.acao = 'nao_compareceu_automaticamente'
        )
        ORDER BY alterado_em ASC, id ASC`
-  ).bind(appointmentId, appointmentId).all();
-  return result.results;
+  ).bind(appointmentId, appointmentId).all<AppointmentHistoryRow>();
+  return result.results ?? [];
 }
-function appointmentInsert(db, agendaId, appointment, now) {
+function appointmentInsert(db: D1Database, agendaId: string, appointment: ImportedAppointment, now: string) {
   return db.prepare(
     "INSERT INTO agendamentos (id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, origem, ativo, criado_em, atualizado_em, csv_campos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aguardando', 'importado', 1, ?, ?, ?)"
   ).bind(
@@ -166,7 +195,7 @@ function appointmentInsert(db, agendaId, appointment, now) {
     appointment.csvFields ? JSON.stringify(appointment.csvFields) : null
   );
 }
-async function createAgendaImport(db, storeId, createdBy, input, _storeName = null) {
+async function createAgendaImport(db: D1Database, storeId: string, createdBy: string, input: ImportInput, _storeName: string | null = null) {
   const agendaId = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [
@@ -212,16 +241,16 @@ async function createAgendaImport(db, storeId, createdBy, input, _storeName = nu
 // A versão de importação é lida antes dos agendamentos. Se uma substituição
 // concorrente gravar primeiro, a constraint da migration 0024 aborta TODO
 // o db.batch, incluindo inserções, inativações e auditoria.
-async function readAgendaImportVersion(db, agendaId) {
-  const row = await db.prepare("SELECT versao_importacao FROM agendas WHERE id = ?").bind(agendaId).first();
+async function readAgendaImportVersion(db: D1Database, agendaId: string) {
+  const row = await db.prepare("SELECT versao_importacao FROM agendas WHERE id = ?").bind(agendaId).first<{ versao_importacao: number }>();
   if (!row) throw Object.assign(new Error("Agenda alterada durante a importação."), { code: "CONFLITO_ESTADO" });
   return Number(row.versao_importacao);
 }
-function appendAgendaReplaceStatements(db, statements, agendaId, expectedVersion, existingAppointments, input, now) {
+function appendAgendaReplaceStatements(db: D1Database, statements: D1PreparedStatement[], agendaId: string, expectedVersion: number, existingAppointments: AppointmentRow[], input: ImportInput, now: string) {
   const importedExisting = existingAppointments.filter(
     (appointment) => appointment.origem !== "manual"
   );
-  const byProtocol = new Map<string, any>(
+  const byProtocol = new Map<string, AppointmentRow>(
     importedExisting.map((appointment) => [appointment.protocolo, appointment])
   );
   const incomingProtocols = new Set(
@@ -270,11 +299,11 @@ function appendAgendaReplaceStatements(db, statements, agendaId, expectedVersion
   }
   return importedExisting;
 }
-async function replaceAgendaImport(db, agenda, userId, input) {
+async function replaceAgendaImport(db: D1Database, agenda: AgendaRow, userId: string, input: ImportInput) {
   const expectedVersion = await readAgendaImportVersion(db, agenda.id);
   const existing = await listAppointmentsByAgenda(db, agenda.id, false);
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const statements = [];
+  const statements: D1PreparedStatement[] = [];
   const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, expectedVersion, existing, input, now);
   statements.push(
     auditStatement(db, {
@@ -299,7 +328,7 @@ async function replaceAgendaImport(db, agenda, userId, input) {
   await db.batch(statements);
 }
 class AgendaBatchQueryBudgetError extends Error {
-  constructor(statementCount) {
+  constructor(statementCount: number) {
     super(
       `O lote exige ${statementCount} opera\xE7\xF5es de banco e excede o limite seguro.`
     );
@@ -307,9 +336,9 @@ class AgendaBatchQueryBudgetError extends Error {
   }
 }
 const MAX_BATCH_WRITE_STATEMENTS = 800;
-async function importAgendaBatchAtomic(db, userId, entries) {
+async function importAgendaBatchAtomic(db: D1Database, userId: string, entries: ImportEntry[]) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const statements = [];
+  const statements: D1PreparedStatement[] = [];
   const results = [];
   for (const entry of entries) {
     const { existing, input, storeId } = entry;
@@ -405,7 +434,7 @@ async function importAgendaBatchAtomic(db, userId, entries) {
   await db.batch(statements);
   return results;
 }
-async function createManualAppointment(db, agenda, userId, supplier, businessHour, adminAdjustmentDetails, requireOpenDay = false) {
+async function createManualAppointment(db: D1Database, agenda: AgendaRow, userId: string, supplier: string, businessHour: string, adminAdjustmentDetails: string | null | undefined, requireOpenDay = false) {
   const id = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const auditId = crypto.randomUUID();
@@ -456,7 +485,7 @@ async function createManualAppointment(db, agenda, userId, supplier, businessHou
   if (!appointment) throw new Error("Fornecedor manual n\xE3o p\xF4de ser relido.");
   return appointment;
 }
-async function updateManualAppointmentSupplier(db, agenda, appointment, userId, supplier, adminAdjustmentDetails, requireOpenDay = false) {
+async function updateManualAppointmentSupplier(db: D1Database, agenda: AgendaRow, appointment: AppointmentRow, userId: string, supplier: string, adminAdjustmentDetails: string | null | undefined, requireOpenDay = false) {
   if (appointment.origem !== "manual" || appointment.ativo !== 1) {
     throw new Error("Agendamento manual inv\xE1lido.");
   }
@@ -499,7 +528,7 @@ async function updateManualAppointmentSupplier(db, agenda, appointment, userId, 
   if (!updated) throw new Error("Fornecedor manual atualizado n\xE3o p\xF4de ser relido.");
   return updated;
 }
-async function softDeleteManualAppointment(db, agenda, appointment, userId, adminAdjustmentDetails, requireOpenDay = false) {
+async function softDeleteManualAppointment(db: D1Database, agenda: AgendaRow, appointment: AppointmentRow, userId: string, adminAdjustmentDetails: string | null | undefined, requireOpenDay = false) {
   if (appointment.origem !== "manual" || appointment.ativo !== 1) {
     throw new Error("Agendamento manual inv\xE1lido.");
   }
@@ -538,7 +567,7 @@ async function softDeleteManualAppointment(db, agenda, appointment, userId, admi
   const result = await db.batch(statements);
   assertMutationApplied(result);
 }
-async function findStoreAgendaByDate(db, storeId, date) {
+async function findStoreAgendaByDate(db: D1Database, storeId: string, date: string) {
   return db.prepare(
     `SELECT a.${AGENDA_COLUMNS.replaceAll(", ", ", a.")},
               l.codigo AS store_code,
@@ -551,9 +580,9 @@ async function findStoreAgendaByDate(db, storeId, date) {
        LEFT JOIN usuarios digitador ON digitador.id = a.digitado_por
        WHERE a.loja_id = ? AND a.data_agenda = ?
        LIMIT 1`
-  ).bind(storeId, date).first();
+  ).bind(storeId, date).first<AgendaDetailRow>();
 }
-async function listStoreAgendas(db, storeId) {
+async function listStoreAgendas(db: D1Database, storeId: string) {
   const result = await db.prepare(
     `SELECT
          a.${AGENDA_COLUMNS.replaceAll(", ", ", a.")},
@@ -573,11 +602,11 @@ async function listStoreAgendas(db, storeId) {
        WHERE a.loja_id = ?
        GROUP BY a.id, l.codigo, l.nome, concluidor.nome
        ORDER BY a.data_agenda DESC`
-  ).bind(storeId).all();
-  return result.results;
+  ).bind(storeId).all<AgendaSummaryRow>();
+  return result.results ?? [];
 }
 /** Consulta opt-in de histórico de uma loja, com IDs limitados antes dos totais. */
-async function listStoreAgendasPage(db, storeId, limit = 20, offset = 0) {
+async function listStoreAgendasPage(db: D1Database, storeId: string, limit = 20, offset = 0) {
   const result = await db.prepare(
     `WITH selected AS (
        SELECT id, data_agenda FROM agendas
@@ -604,12 +633,12 @@ async function listStoreAgendasPage(db, storeId, limit = 20, offset = 0) {
      WHERE a.loja_id = ?
      GROUP BY a.id, l.codigo, l.nome, concluidor.nome
      ORDER BY p.data_agenda DESC, a.id ASC`
-  ).bind(storeId, limit + 1, offset, storeId).all();
+  ).bind(storeId, limit + 1, offset, storeId).all<AgendaSummaryRow>();
   const rows = result.results ?? [];
   return { items: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
-async function findAppointmentForStore(db, appointmentId, storeId) {
+async function findAppointmentForStore(db: D1Database, appointmentId: string, storeId: string) {
   const prefixedColumns = APPOINTMENT_COLUMNS.split(", ").map((column) => `ag.${column}`).join(", ");
   return db.prepare(
     `SELECT ${prefixedColumns}
@@ -617,9 +646,9 @@ async function findAppointmentForStore(db, appointmentId, storeId) {
        JOIN agendas a ON a.id = ag.agenda_id
        WHERE ag.id = ? AND a.loja_id = ? AND ag.ativo = 1
        LIMIT 1`
-  ).bind(appointmentId, storeId).first();
+  ).bind(appointmentId, storeId).first<AppointmentRow>();
 }
-function agendaAdminAdjustmentStatement(db, agenda, userId, details, changedAt, guardAuditId = null) {
+function agendaAdminAdjustmentStatement(db: D1Database, agenda: AgendaRow, userId: string, details: string | null | undefined, changedAt: string, guardAuditId: string | null = null) {
   if (!details || agenda.status_dia !== "concluido") return null;
   const insertion = guardAuditId
     ? "SELECT ?, ?, ?, 'ajuste_admin', ?, ? WHERE EXISTS (SELECT 1 FROM auditoria WHERE id = ?)"
@@ -631,15 +660,13 @@ function agendaAdminAdjustmentStatement(db, agenda, userId, details, changedAt, 
 
 // O D1 retorna changes por instrução do batch. Se houve atualização
 // concorrente, não registramos histórico ou auditoria fictícios.
-function assertMutationApplied(results) {
+function assertMutationApplied(results: D1Result[]) {
   if (results[0]?.meta?.changes !== 1) {
-    const error = new Error("O registro foi alterado por outra operação. Atualize a tela.");
-    (error as any).code = "CONFLITO_ESTADO";
-    throw error;
+    throw Object.assign(new Error("O registro foi alterado por outra operação. Atualize a tela."), { code: "CONFLITO_ESTADO" });
   }
 }
 
-async function changeAppointmentExchanges(db, appointment, userId, hasExchanges, adminAdjustmentDetails, requireOpenDay = false) {
+async function changeAppointmentExchanges(db: D1Database, appointment: AppointmentRow, userId: string, hasExchanges: boolean, adminAdjustmentDetails: string | null | undefined, requireOpenDay = false) {
   const exchanges = hasExchanges ? 1 : 0;
   if (appointment.trocas === exchanges) return appointment;
   const agenda = await findAgendaById(db, appointment.agenda_id);
@@ -677,7 +704,7 @@ async function changeAppointmentExchanges(db, appointment, userId, hasExchanges,
   return updated;
 }
 
-async function changeAppointmentStatus(db, appointment, userId, status, adminAdjustmentDetails, observation, requireOpenDay = false) {
+async function changeAppointmentStatus(db: D1Database, appointment: AppointmentRow, userId: string, status: AppointmentStatus, adminAdjustmentDetails: string | null | undefined, observation: string | null | undefined, requireOpenDay = false) {
   const previousObservation = appointment.observacao ?? null;
   const nextObservation = observation === undefined
     ? (status === appointment.status ? previousObservation : null)
@@ -727,7 +754,7 @@ async function changeAppointmentStatus(db, appointment, userId, status, adminAdj
 
 
 // Registra a classificação do sistema antes da mudança de estado.
-function nonattendanceStatements(db, agendaSelection, bindArgs, now) {
+function nonattendanceStatements(db: D1Database, agendaSelection: string, bindArgs: string[], now: string) {
   const pending = "ag.ativo = 1 AND ag.status = 'aguardando' AND ag.agenda_id IN (" + agendaSelection + ")";
   return [
     db.prepare(
@@ -744,7 +771,7 @@ function nonattendanceStatements(db, agendaSelection, bindArgs, now) {
   ];
 }
 
-async function changeAgendaDayStatus(db, agenda, userId, status) {
+async function changeAgendaDayStatus(db: D1Database, agenda: AgendaRow, userId: string, status: DayStatus) {
   if (agenda.status_dia === status) {
     const current = await findAgendaById(db, agenda.id);
     if (!current) throw new Error("Agenda não pôde ser relida.");
@@ -791,7 +818,7 @@ async function changeAgendaDayStatus(db, agenda, userId, status) {
 
 // Marcação interna do administrador: a agenda já foi digitada/repassada para o conferente.
 // Não altera o status do dia nem publica eventos de tempo real (invisível ao conferente).
-async function setAgendaDigitado(db, agenda, userId, digitado) {
+async function setAgendaDigitado(db: D1Database, agenda: AgendaRow, userId: string, digitado: boolean) {
   const alreadyDigitado = agenda.digitado_em != null;
   if (alreadyDigitado === digitado) {
     const current = await findAgendaById(db, agenda.id);
@@ -832,7 +859,7 @@ async function setAgendaDigitado(db, agenda, userId, digitado) {
   return updated;
 }
 
-async function listAgendaHistory(db, agendaId) {
+async function listAgendaHistory(db: D1Database, agendaId: string) {
   const result = await db.prepare(
     `SELECT id, agenda_id, usuario_id, usuario_nome, acao, detalhes, alterado_em
        FROM (
@@ -865,8 +892,8 @@ async function listAgendaHistory(db, agendaId) {
            AND a.acao = 'dia_concluido_automaticamente'
        )
        ORDER BY alterado_em ASC, id ASC`
-  ).bind(agendaId, agendaId).all();
-  return result.results;
+  ).bind(agendaId, agendaId).all<AgendaHistoryRow>();
+  return result.results ?? [];
 }
 export {
   nonattendanceStatements,

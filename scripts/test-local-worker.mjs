@@ -87,11 +87,12 @@ try {
   // carregar os tipos manuais nem importar a implementação inteira via Env.
   const runtimePath = join(temp, "runtime.d.ts");
   command("types", runtimePath, "--include-env", "false");
-  const strict = JSON.parse(await readFile(join(root, "worker/tsconfig.strict.json"), "utf8"));
-  const sources = strict.include.filter(path => path !== "./types.d.ts").map(path => resolve(root, "worker", path));
+  // Worker + dependências transitivas: código exclusivo do navegador (CSV/PDF)
+  // é compilado em strict pelo tsconfig geral com DOM, não pelo runtime Workers.
+  const sources = [join(root, "worker/index.ts"), join(root, "worker/pdf-types.d.ts")];
   const runtimeTsconfig = join(temp, "tsconfig.runtime.json");
   await writeFile(runtimeTsconfig, JSON.stringify({
-    extends: join(root, "worker/tsconfig.strict.json"),
+    extends: join(root, "worker/tsconfig.json"),
     compilerOptions: { lib: ["ES2022"], types: [] },
     include: [], files: [runtimePath, ...sources]
   }));

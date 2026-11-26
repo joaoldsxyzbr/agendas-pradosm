@@ -28,16 +28,16 @@ const TABELAS_CONTAGEM = [
   "diagnosticos"
 ];
 
-function cortePara(now, dias) {
+function cortePara(now: Date, dias: number) {
   return new Date(now.getTime() - dias * DAY_MS).toISOString();
 }
 
-async function contar(db, sql, valores = []) {
-  const row = await db.prepare(sql).bind(...valores).first();
+async function contar(db: D1Database, sql: string, valores: string[] = []) {
+  const row = await db.prepare(sql).bind(...valores).first<{ total: number }>();
   return Number(row?.total ?? 0);
 }
 
-export async function retentionStatus(db) {
+export async function retentionStatus(db: D1Database) {
   const agora = new Date();
   const tabelas = [];
   for (const spec of TABELAS_RETENCAO) {
@@ -60,7 +60,7 @@ export async function retentionStatus(db) {
   return { geradoEm: agora.toISOString(), tabelas };
 }
 
-async function purgarTabela(db, bucket, spec, corte, runId) {
+async function purgarTabela(db: D1Database, bucket: R2Bucket, spec: typeof TABELAS_RETENCAO[number], corte: string, runId: string) {
   let exportados = 0;
   let purgados = 0;
   let lotes = 0;
@@ -68,7 +68,7 @@ async function purgarTabela(db, bucket, spec, corte, runId) {
     const resultado = await db.prepare(
       `SELECT * FROM ${spec.tabela} WHERE ${spec.colunaTempo} < ?
          ORDER BY ${spec.colunaTempo}, id LIMIT ${LOTE_EXPORTACAO}`
-    ).bind(corte).all();
+    ).bind(corte).all<{ id: string }>();
     const registros = resultado.results ?? [];
     if (!registros.length) break;
     lotes += 1;
@@ -82,7 +82,7 @@ async function purgarTabela(db, bucket, spec, corte, runId) {
       quantidade: registros.length,
       registros
     });
-    await bucket.put(chave, corpo, { contentType: "application/json" });
+    await bucket.put(chave, corpo, { httpMetadata: { contentType: "application/json" } });
     const ids = registros.map((registro) => registro.id);
     const placeholders = ids.map(() => "?").join(",");
     const exclusao = await db.prepare(
@@ -95,14 +95,18 @@ async function purgarTabela(db, bucket, spec, corte, runId) {
 }
 
 export async function runRetention(
-  db,
-  bucket,
+  db: D1Database,
+  bucket: R2Bucket | null,
   options: { now?: Date; runId?: string; rowWarningThreshold?: number } = {}
 ) {
   const agora = options.now ?? new Date();
   const runId = options.runId ?? crypto.randomUUID();
   const limiteAlertaLinhas = options.rowWarningThreshold ?? LIMITE_ALERTA_LINHAS_PADRAO;
-  const resumo = {
+  const resumo: {
+    runId: string; executadoEm: string; tabelas: Array<{ tabela: string; corte: string; exportados: number; purgados: number; lotes: number; pendentes: number; motivo?: string }>;
+    exportacaoPulada: boolean; totalLinhas: number; contagemTabelas: Record<string, number>;
+    alertaTamanhoBanco: { nivel: string; totalLinhas: number; limite: number } | null;
+  } = {
     runId,
     executadoEm: agora.toISOString(),
     tabelas: [],

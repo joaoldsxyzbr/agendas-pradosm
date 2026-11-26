@@ -8,8 +8,8 @@ function supplierKey(value: string): string {
 
 function parseArray(raw: string | null): string[] {
   try {
-    const result = JSON.parse(raw ?? "[]");
-    return Array.isArray(result) ? result.filter(v => typeof v === "string") : [];
+    const result: unknown = JSON.parse(raw ?? "[]");
+    return Array.isArray(result) ? result.filter((v): v is string => typeof v === "string") : [];
   } catch {
     return [];
   }
@@ -17,9 +17,9 @@ function parseArray(raw: string | null): string[] {
 
 function parseCsvFields(raw: string | null): Record<string, string> {
   try {
-    const value = JSON.parse(raw ?? "{}");
+    const value: unknown = JSON.parse(raw ?? "{}");
     return value && typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).filter(([key, cell]) => typeof key === "string" && typeof cell === "string")) as Record<string, string>
+      ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
       : {};
   } catch {
     return {};
@@ -96,7 +96,7 @@ async function listAgendaSuppliers(db: D1Database, agendaId: string) {
     listAppointmentsByAgenda(db, agendaId),
     listSupplierChecks(db, agendaId)
   ]);
-  const groups = groupRows(appointments as ImportedRow[]);
+  const groups = groupRows(appointments);
   return Promise.all(groups.map(async group => {
     const hash = await fingerprint(group.rows);
     const check = saved.get(group.key);
@@ -166,7 +166,7 @@ async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id
   supplier: string; hash: string; digitado: boolean; expectedDigitadoEm?: string | null;
 }) {
   const rows = await listAppointmentsByAgenda(db, agenda.id);
-  const group = groupRows(rows as ImportedRow[]).find(item => item.key === supplierKey(input.supplier));
+  const group = groupRows(rows).find(item => item.key === supplierKey(input.supplier));
   if (!group) return null;
   const hash = await fingerprint(group.rows);
   if (hash !== input.hash) throw stateConflict();
