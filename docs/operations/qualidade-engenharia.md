@@ -33,3 +33,39 @@ Baseline: main 79b4903, auditoria de 26/11/2026. Esta consolidação não altera
 ## Critérios de aceite
 
 CI e CodeQL verdes, ausência de regressão de API/esquema, nenhuma escrita em produção, documentação de riscos e limites, PR revisável. Mudanças estruturais futuras devem ser pequenas, com justificativa e testes próprios; não refatorar por número de linhas apenas.
+
+## Referências oficiais e avaliação de lacunas — 26/11/2026
+
+As referências orientam escolhas; não representam certificação nem comprovam capacidade de produção. Aplicar somente práticas proporcionais ao sistema.
+
+| Área | Referência oficial | Evidência atual e ação |
+| --- | --- | --- |
+| Workers | [Best practices](https://developers.cloudflare.com/workers/best-practices/workers-best-practices/) | Observabilidade já configurada. Revisar mensagens de erro, limites e compatibilidade do runtime de forma incremental. |
+| Tipagem | [Workers TypeScript](https://developers.cloudflare.com/workers/languages/typescript/) e [TypeScript strict](https://www.typescriptlang.org/tsconfig/strict) | worker/types.d.ts mantém tipos manuais de runtime e worker/tsconfig.json usa strict: false. Avaliar wrangler types com a configuração existente, sem segredos; migrar tipos de fronteira e resultados de D1 gradualmente. Frontend já usa strict. |
+| D1 | [Prepared statements](https://developers.cloudflare.com/d1/worker-api/prepared-statements/), [batch](https://developers.cloudflare.com/d1/worker-api/d1-database/), [índices](https://developers.cloudflare.com/d1/best-practices/use-indexes/) e [SQLite query planner](https://www.sqlite.org/queryplanner.html) | Manter SQL parametrizado e batches atômicos, medir índices com EXPLAIN QUERY PLAN e metadados rows_read/rows_written. Não adicionar ORM nem remodelar dados sem motivo comprovado. |
+| Realtime | [Durable Objects architecture](https://developers.cloudflare.com/durable-objects/best-practices/architecture-guidance/) e [WebSocket Hibernation](https://developers.cloudflare.com/durable-objects/best-practices/websockets/) | Hub único e dois hooks de conexão possuem risco de concentração/duplicação. Manter hibernation; medir e consolidar lifecycle, retry com backoff/jitter e reconciliação HTTP. Dividir por loja apenas se houver gargalo comprovado e desenho seguro do canal global. |
+| Frontend | [React state structure](https://react.dev/learn/choosing-the-state-structure) | Evitar duplicar estado remoto e local. Revisar cache por sessão/loja, cancelamento de consultas e erros. |
+| Segurança | [OWASP ASVS](https://owasp.org/projects/ASVS/), [Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), [Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) | Criar matriz de controles com evidência e testes negativos. Revisar acesso por recurso/loja, sessão, CSRF, injeção, limites de entrada e ausência de segredos nos logs. PBKDF2-HMAC-SHA256 atual usa 100 mil iterações; referência OWASP para PBKDF2-HMAC-SHA256 indica 600 mil ou mais. Não alterar custo nem invalidar senhas sem benchmark de runtime e estratégia compatível. |
+| Testes | [Workers testing](https://developers.cloudflare.com/workers/testing/) | Complementar testes Node/SQLite e Playwright mockado com fluxo integrado via Wrangler local, bindings locais e fixtures sintéticas. Não adicionar framework sem necessidade. |
+| Recuperação | [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) | Confirmar procedimentos, janela de recuperação e capacidade de restauração em ambiente isolado; não executar restore em produção para testar. |
+| Entrega | [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches) | Preservar ruleset e gate verify. PRs revisáveis, nenhuma publicação manual ou merge sem autorização. |
+
+## Orçamento de capacidade e limites da plataforma
+
+Consultar [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) e [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) antes de mudanças. Para o plano Free, em 26/11/2026: D1 até 500 MB por banco, 5 milhões de linhas lidas/dia, 100 mil escritas/dia por conta, 50 consultas por invocação, 100 parâmetros por statement e 7 dias de Time Travel; Workers até 100 mil requisições/dia e 10 ms de CPU por requisição HTTP. Quotas não são metas de capacidade. Não contratar serviços ou adicionar cartão.
+
+- Registrar baseline de p50/p95, erros, linhas lidas/escritas e volume; cenários sintéticos crescentes de agendas, histórico, avisos e concorrência por loja. Avaliar latência e CPU do ambiente real por telemetria passiva, sem teste de carga em produção.
+- Conferir limites de SQL também nos casos extremos. Achado estático: a busca de ocorrências em admin-reports.ts aceita 80 caracteres e usa LIKE, enquanto D1 documenta limite de 50 bytes para padrão LIKE/GLOB. Reproduzir com entradas longas/multibyte em ambiente local e ajustar preservando a semântica de busca literal; não declarar incidente de produção sem evidência.
+- Considerar o custo de polling, varreduras e reconexões repetidas. Monitorar a folga da quota diária, não apenas o tamanho do arquivo. A partir de setembro de 2026, o D1 Free rejeita consultas quando a quota diária de linhas é excedida.
+- Não afirmar suporte a um número de usuários simultâneos sem ensaio representativo. Definir metas de disponibilidade, recuperação e latência após baseline; registrar resultados e limites.
+
+## Ordem de execução recomendada
+
+1. Baseline e testes de caracterização; revisar resultados CI da primeira etapa.
+2. Tipos oficiais e contratos de fronteira, matriz de segurança e testes negativos.
+3. Fluxo integrado local Worker + D1 + navegador, com falhas e concorrência.
+4. Melhorias de consultas e lifecycle realtime fundamentadas em métricas.
+5. Refatorações pequenas por responsabilidade e revisão de documentação vigente.
+6. Revisão final independente, evidências de regressão e capacidade; atualizar main antes de validar, sem merge automático.
+
+As etapas acima são planejadas, não entregues. Não duplicar a PR #257 nem alterar o ambiente Preview.
