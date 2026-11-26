@@ -1,10 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { required, requestBody } from "./fixtures.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "adm", nome: "ADM Teste", papel: "admin" };
 const viewer = { id: "view", nome: "Visualizador", papel: "visualizador" };
 const conference = { id: "conf", nome: "Doca 01", papel: "conferente", lojaId: "1" };
 
-async function sessionMocks(page, initialUser = null) {
+async function sessionMocks(page: Page, initialUser: typeof admin | typeof conference | null = null) {
   let current = initialUser;
   await page.route("**/api/realtime/config", route => route.fulfill({ json: { mode: "off", protocolVersion: 1 } }));
   await page.route("**/api/avisos", route => route.fulfill({ json: { avisos: [], naoLidos: 0 } }));
@@ -32,7 +33,7 @@ async function sessionMocks(page, initialUser = null) {
       return route.fulfill({ json: current });
     }
     if (path === "/api/auth/login" && method === "POST") {
-      const body = route.request().postDataJSON();
+      const body = required(requestBody(route.request()));
       if (body.login !== "adm" || body.senha !== "senha-de-teste") {
         return route.fulfill({ status: 401, json: { error: "CREDENCIAIS_INVALIDAS", message: "Login ou senha inválidos." } });
       }

@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { required, requestBody, type CapturedRequest } from "./fixtures.ts";
+import { publicarAvisoSchema, publicarMensagemSchema, definirReacaoSchema, type Aviso, type AvisosResponse } from "../../../shared/avisos.ts";
+import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
 
 const admin = { id: "admin-sintetico", nome: "Administrador Teste", papel: "admin" };
 const conferente = { id: "c1", nome: "Conferente Doca", papel: "conferente", lojaId: "s1", lojaCodigo: "F03", lojaNome: "Loja Central" };
@@ -10,7 +12,7 @@ const stores = [
 
 // A API entrega o canal do mais recente para o mais antigo; a página do chat
 // inverte a ordem. "proprio" alinha a bolha do próprio autor à direita.
-function buildCanal() {
+function buildCanal(): AvisosResponse {
   return {
     avisos: [
       { id: "av1", tipo: "aviso", titulo: "Doca 3 fechada", mensagem: "A doca 3 fica fechada nesta semana.", criadoEm: "2026-11-11T11:00:00.000Z", lido: false, urgente: true, autor: "Administrador Teste", lojas: null, proprio: false },
@@ -23,10 +25,10 @@ function buildCanal() {
   };
 }
 
-async function setup(page, { role = "admin", paginated = false, realtime = false } = {}) {
+async function setup(page: Page, { role = "admin", paginated = false, realtime = false } = {}) {
   const user = role === "admin" ? admin : role === "visualizador" ? visualizador : conferente;
   const state = { data: buildCanal(), nextId: 0 };
-  const requests = [];
+  const requests: (Pick<CapturedRequest, "path" | "method" | "body"> & { search: string })[] = [];
   // Erros não tratados do app aparecem no log do job do CI; o boundary de erro
   // reporta o erro de render via POST /api/diagnostics/events — o mock no
   // handler imprime o corpo no log para diagnóstico.
@@ -35,8 +37,8 @@ async function setup(page, { role = "admin", paginated = false, realtime = false
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
-    const body = method === "GET" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body, search: url.search });
+    const rawBody = requestBody(route.request());
+    requests.push({ path, method, body: rawBody, search: url.search });
     // Diagnóstico do AppErrorBoundary: logar o corpo no job e responder 204.
     if (path === "/api/diagnostics/events") {
       console.log("DIAGNOSTICS-BODY:", route.request().postData() ?? "(vazio)");
@@ -61,7 +63,8 @@ async function setup(page, { role = "admin", paginated = false, realtime = false
     }
     if (path === "/api/avisos" && method === "POST") {
       // Mensagem comum do canal (tipo "chat"): sempre global e do próprio autor.
-      const created = {
+      const body = publicarMensagemSchema.parse(rawBody);
+      const created: Aviso = {
         id: "msg-nova-" + ++state.nextId, tipo: "chat", titulo: null, mensagem: body.mensagem,
         criadoEm: "2026-11-11T12:00:00.000Z", lido: true, urgente: false,
         autor: user.nome, lojas: null, proprio: true,
@@ -73,6 +76,7 @@ async function setup(page, { role = "admin", paginated = false, realtime = false
       const id = path.split("/")[3]!;
       const alvo = state.data.avisos.find(a => a.id === id);
       if (!alvo) return route.fulfill({ status: 404, json: {} });
+      const body = definirReacaoSchema.parse(rawBody);
       const reacoes = [...(alvo.reacoes ?? []).filter(r => !r.proprio), ...(body.emoji ? [{ emoji: body.emoji, nome: user.nome, proprio: true }] : [])];
       state.data = { ...state.data, avisos: state.data.avisos.map(a => a.id === id ? { ...a, reacoes } : a) };
       return route.fulfill({ json: { reacoes } });
@@ -96,7 +100,8 @@ async function setup(page, { role = "admin", paginated = false, realtime = false
       return route.fulfill({ json: { ok: true, marcados: naoLidos } });
     }
     if (path === "/api/admin/avisos" && method === "POST") {
-      const created = {
+      const body = publicarAvisoSchema.parse(rawBody);
+      const created: Aviso = {
         id: "av-novo-" + ++state.nextId, tipo: "aviso", titulo: body.titulo, mensagem: body.mensagem,
         criadoEm: "2026-11-11T12:00:00.000Z", lido: false, urgente: body.urgente ?? false,
         autor: "Administrador Teste", lojas: body.lojas ?? null, proprio: false,
@@ -297,39 +302,39 @@ test("Reage, troca e remove reação sem marcar aviso como lido", async ({ page 
   await aviso.getByRole("button", { name: "Acompanhando" }).click();
   await expect(aviso.getByText("👀 1")).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Doca 3 fechada" }).getByRole("button", { name: "Confirmar leitura" })).toBeVisible();
-  expect(requests.filter(r => r.path === "/api/avisos/av1/reacao").map(r => r.body.emoji)).toEqual(["👍", "👀", null]);
+  expect(requests.filter(r => r.path === "/api/avisos/av1/reacao").map(r => required(r.body).emoji)).toEqual(["👍", "👀", null]);
 });
 
 test("Toast realtime aparece uma vez para novo aviso fora da área visível", async ({ page }) => {
-  let socket;
+  const connection: { socket?: WebSocketRoute } = {};
   await page.routeWebSocket("**/api/realtime", ws => {
-    socket = ws;
+    connection.socket = ws;
     ws.onMessage(message => { if (message === "ping") ws.send("pong"); });
     ws.send(JSON.stringify({ version: 1, type: "realtime.ready" }));
   });
   const requests = await setup(page, { realtime: true });
   await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
-  await expect.poll(() => Boolean(socket)).toBe(true);
+  await expect.poll(() => Boolean(connection.socket)).toBe(true);
   await expect(page.getByTestId("aviso-toast")).toHaveCount(0);
   await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca 3");
   await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
   await expect(page.getByText("Resultados para:")).toBeVisible();
   await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
-  const aviso = { id: "av-realtime", tipo: "aviso", titulo: "Entrega urgente", mensagem: "Nova publicação operacional.", criadoEm: "2026-11-11T13:00:00.000Z", lido: false, urgente: true, autor: "Outro administrador", lojas: null, proprio: false };
+  const aviso: Aviso = { id: "av-realtime", tipo: "aviso", titulo: "Entrega urgente", mensagem: "Nova publicação operacional.", criadoEm: "2026-11-11T13:00:00.000Z", lido: false, urgente: true, autor: "Outro administrador", lojas: null, proprio: false };
   requests.state.data = { ...requests.state.data, avisos: [aviso, ...requests.state.data.avisos], naoLidos: 2 };
   const signal = JSON.stringify({ version: 1, type: "avisos.changed" });
-  socket.send(signal);
+  required(connection.socket).send(signal);
   const toast = page.getByTestId("aviso-toast");
   await expect(toast).toHaveCount(1);
   await expect(toast.getByText("Novo aviso urgente")).toBeVisible();
   await expect(toast.getByText("Entrega urgente")).toBeVisible();
   await toast.getByRole("button", { name: "Fechar notificação" }).click();
   const count = requests.filter(r => r.path === "/api/avisos" && r.method === "GET").length;
-  socket.send(signal);
+  required(connection.socket).send(signal);
   await expect.poll(() => requests.filter(r => r.path === "/api/avisos" && r.method === "GET").length).toBeGreaterThan(count);
   await expect(toast).toHaveCount(0);
   // Uma atualização exclusiva das reações não é uma nova publicação.
   requests.state.data = { ...requests.state.data, avisos: requests.state.data.avisos.map(a => a.id === aviso.id ? { ...a, reacoes: [{ emoji: "👀", nome: "Conferente", proprio: false }] } : a) };
-  socket.send(signal);
+  required(connection.socket).send(signal);
   await expect(toast).toHaveCount(0);
 });

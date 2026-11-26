@@ -1,12 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { required, requestBody } from "./fixtures.ts";
+import { z } from "zod";
+const payloadSchema = z.object({ agendas: z.array(z.object({ storeCode:z.string(), originalFileName:z.string(), replace:z.boolean().optional(), appointments:z.array(z.record(z.string(),z.unknown())) }).passthrough()) }).passthrough();
+import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
 const fixture = readFileSync(new URL("../../../tests/fixtures/agenda-todas-lojas-real-sanitizada.csv", import.meta.url));
 const admin = { id: "adm", nome: "Admin Teste", papel: "admin" };
 const viewer = { id: "view", nome: "Visualizador", papel: "visualizador" };
 
-async function setup(page, { conflict = false, missingStores = false, role = "admin" } = {}) {
-  const submissions = [];
+async function setup(page: Page, { conflict = false, missingStores = false, role = "admin" } = {}) {
+  const submissions: z.infer<typeof payloadSchema>[] = [];
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
@@ -17,7 +20,7 @@ async function setup(page, { conflict = false, missingStores = false, role = "ad
       return route.fulfill({ json: [] });
     }
     if (path === "/api/admin/agendas/import/bulk" && method === "POST") {
-      const payload = route.request().postDataJSON();
+      const payload = payloadSchema.parse(requestBody(route.request()));
       submissions.push(payload);
       if (missingStores) {
         return route.fulfill({ status: 422, json: {
@@ -44,7 +47,7 @@ async function setup(page, { conflict = false, missingStores = false, role = "ad
   }
   return submissions;
 }
-const upload = (page, { name = "agenda.csv", mimeType = "text/csv", buffer = fixture } = {}) =>
+const upload = (page: Page, { name = "agenda.csv", mimeType = "text/csv", buffer = fixture } = {}) =>
   page.getByLabel("Arquivo CSV ou PDF").setInputFiles({ name, mimeType, buffer });
 
 test("CSV React: prévia correta, sem gravar antes de confirmação", async ({ page }) => {
@@ -58,9 +61,9 @@ test("CSV React: prévia correta, sem gravar antes de confirmação", async ({ p
   await page.getByRole("button", { name: "Confirmar importação" }).click();
   await expect(page.getByRole("status", { name: "Importação concluída" })).toContainText("3 lojas");
   expect(submissions).toHaveLength(1);
-  expect(submissions[0].agendas.map(a => a.storeCode)).toEqual(["CD", "F01", "F08"]);
-  expect(submissions[0].agendas.every(a => a.originalFileName === "agenda.csv")).toBe(true);
-  expect(submissions[0].agendas.flatMap(a => a.appointments).every(a => !("status" in a))).toBe(true);
+  expect(required(submissions[0]).agendas.map(a => a.storeCode)).toEqual(["CD", "F01", "F08"]);
+  expect(required(submissions[0]).agendas.every(a => a.originalFileName === "agenda.csv")).toBe(true);
+  expect(required(submissions[0]).agendas.flatMap(a => a.appointments).every(a => !("status" in a))).toBe(true);
   await expect(page.getByRole("button", { name: "Confirmar importação" })).toHaveCount(0);
 });
 
@@ -70,11 +73,11 @@ test("CSV React: conflito 409 exige segunda confirmação explícita", async ({ 
   await page.getByRole("button", { name: "Confirmar importação" }).click();
   await expect(page.getByRole("alert", { name: "Confirmar substituição" })).toBeVisible();
   expect(submissions).toHaveLength(1);
-  expect(submissions[0].agendas.every(a => !a.replace)).toBe(true);
+  expect(required(submissions[0]).agendas.every(a => !a.replace)).toBe(true);
   await page.getByRole("button", { name: "Substituir agendas existentes" }).click();
   await expect(page.getByRole("status", { name: "Importação concluída" })).toBeVisible();
   expect(submissions).toHaveLength(2);
-  expect(submissions[1].agendas.every(a => a.replace === true)).toBe(true);
+  expect(required(submissions[1]).agendas.every(a => a.replace === true)).toBe(true);
 });
 
 test("CSV React: 422 lista as lojas do arquivo não cadastradas", async ({ page }) => {
@@ -173,6 +176,7 @@ test("Importação React mantém conteúdo dentro do viewport móvel", async ({ 
   await expect(page.getByRole("table", { name: "Prévia de agendamentos" })).toBeVisible();
   const sizes = await page.evaluate(() => {
     const t = document.querySelector('[data-testid="import-table-scroll"]');
+    if (!t) throw Error("Tabela de importação ausente");
     return { table: t.scrollWidth - t.clientWidth, page: document.documentElement.clientWidth };
   });
   expect(sizes.table).toBeGreaterThan(100);

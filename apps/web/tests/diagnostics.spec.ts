@@ -1,8 +1,9 @@
-import { test, expect } from "@playwright/test";
+import { required, type CapturedRequest } from "./fixtures.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "admin-sintetico", nome: "Administrador Teste", papel: "admin" };
 const viewer = { id: "viewer-sintetico", nome: "Visualizador Teste", papel: "visualizador" };
-const uuid = i => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
+const uuid = (i: number) => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
 
 const users = [
   { id: uuid(10), nome: "Maria Silva", login: "maria", papel: "conferente", lojaId: uuid(1), ativo: true },
@@ -39,9 +40,9 @@ const audit = [
     details: "Loja criada.", createdAt: "2026-10-28T11:00:00.000Z", user: null },
 ];
 
-async function setup(page, { role = "admin", failure = false } = {}) {
+async function setup(page: Page, { role = "admin", failure = false } = {}) {
   const current = role === "admin" ? admin : viewer;
-  const requests = [];
+  const requests: Pick<CapturedRequest, "path" | "method" | "params">[] = [];
   await page.route("**/api/**", route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
@@ -58,7 +59,7 @@ async function setup(page, { role = "admin", failure = false } = {}) {
       if (params.get("nivel")) list = list.filter(item => item.level === params.get("nivel"));
       if (params.get("origem")) list = list.filter(item => item.source === params.get("origem"));
       if (params.get("operacao")) list = list.filter(item => item.operation === params.get("operacao"));
-      if (params.get("date")) list = list.filter(item => item.createdAt.startsWith(params.get("date")));
+      if (params.get("date")) list = list.filter(item => item.createdAt.startsWith(required(params.get("date"))));
       if (params.get("userId")) list = list.filter(item => item.user?.id === params.get("userId"));
       if (params.get("storeId")) list = list.filter(item => item.storeId === params.get("storeId"));
       return route.fulfill({ json: list });
@@ -66,7 +67,7 @@ async function setup(page, { role = "admin", failure = false } = {}) {
     if (path === "/api/admin/audit") {
       const params = url.searchParams;
       let list = audit;
-      if (params.get("date")) list = list.filter(item => item.createdAt.startsWith(params.get("date")));
+      if (params.get("date")) list = list.filter(item => item.createdAt.startsWith(required(params.get("date"))));
       if (params.get("userId")) list = list.filter(item => item.user?.id === params.get("userId"));
       if (params.get("storeId")) list = list.filter(item => item.storeId === params.get("storeId"));
       return route.fulfill({ json: list });
@@ -88,8 +89,8 @@ test("Diagnósticos React abre na aba Erros com apenas falhas", async ({ page })
   await expect(table).toContainText("Arquivo não passou na validação");
   await expect(table).toContainText("Erro do JavaScript");
   const query = requests.find(r => r.path === "/api/admin/diagnostics");
-  expect(query.params.get("nivel")).toBe("error");
-  expect(query.params.get("limit")).toBe("100");
+  expect(required(query).params.get("nivel")).toBe("error");
+  expect(required(query).params.get("limit")).toBe("100");
 });
 
 test("Diagnósticos React separa operações dos erros", async ({ page }) => {
@@ -101,7 +102,7 @@ test("Diagnósticos React separa operações dos erros", async ({ page }) => {
   await expect(table).toContainText("Falha na leitura do arquivo");
   const queries = requests.filter(r => r.path === "/api/admin/diagnostics");
   const latest = queries.at(-1);
-  expect(latest.params.get("nivel")).toBeNull();
+  expect(required(latest).params.get("nivel")).toBeNull();
   await expect(page.getByText("2 registros nesta consulta (máximo de 100).")).toBeVisible();
 });
 
@@ -115,15 +116,15 @@ test("Diagnósticos React consulta auditoria com filtros de cadastro", async ({ 
   await expect(table).toContainText("usuario atualizado");
   await expect(table).toContainText("Sistema");
   const query = requests.find(r => r.path === "/api/admin/audit");
-  expect(query.params.get("limit")).toBe("100");
+  expect(required(query).params.get("limit")).toBe("100");
   await page.getByLabel("Data (UTC)").fill("2026-10-28");
   await page.getByLabel("Usuário").selectOption({ label: "Maria Silva" });
   await page.getByRole("button", { name: "Filtrar" }).click();
   await expect(table.locator("tbody tr")).toHaveCount(1);
   await expect(table).toContainText("Usuário atualizado.");
   const filtered = requests.filter(r => r.path === "/api/admin/audit").at(-1);
-  expect(filtered.params.get("date")).toBe("2026-10-28");
-  expect(filtered.params.get("userId")).toBe(uuid(10));
+  expect(required(filtered).params.get("date")).toBe("2026-10-28");
+  expect(required(filtered).params.get("userId")).toBe(uuid(10));
 });
 
 test("Diagnósticos React filtra erros por origem e área", async ({ page }) => {
@@ -135,9 +136,9 @@ test("Diagnósticos React filtra erros por origem e área", async ({ page }) => 
   await expect(table.locator("tbody tr")).toHaveCount(1);
   await expect(table).toContainText("Arquivo não passou na validação");
   const query = requests.filter(r => r.path === "/api/admin/diagnostics").at(-1);
-  expect(query.params.get("origem")).toBe("browser");
-  expect(query.params.get("operacao")).toBe("importacao");
-  expect(query.params.get("nivel")).toBe("error");
+  expect(required(query).params.get("origem")).toBe("browser");
+  expect(required(query).params.get("operacao")).toBe("importacao");
+  expect(required(query).params.get("nivel")).toBe("error");
 });
 
 test("Diagnósticos React trata falha com tentativa novamente", async ({ page }) => {

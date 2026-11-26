@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { required, requestBody, type AppointmentFixture } from "./fixtures.ts";
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
 
 const admin = { id: "adm", nome: "ADM de teste", papel: "admin" };
 const viewer = { id: "viewer", nome: "Visualizador de teste", papel: "visualizador" };
@@ -22,17 +24,17 @@ const detail = {
     { id: "a2", supplier: "Fornecedor Verde", protocol: "P002", startTime: "09:00", endTime: "10:00", status: "aguardando", type: "Nota fiscal", items: null, volumes: null, pallets: null, hasExchanges: false, origin: "imported" },
   ],
 };
-async function mock(page, role = "admin", options = {}) {
-  const requests = [];
+async function mock(page: Page, role = "admin", options: { realtime?: "on" | "off" | "shadow"; reopenConflict?: boolean; appointmentConflict?: boolean } = {}) {
+  const requests: { path:string; method:string; date:string|null }[] = [];
   let failAgenda = false;
   let agendasNow = structuredClone(agendas);
-  let detailsNow = structuredClone(detail);
+  let detailsNow: { agenda: typeof detail.agenda; appointments: AppointmentFixture[] } = structuredClone(detail);
   let completedAgenda0 = true;
   await page.route("**/api/**", async route => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     requests.push({ path, method: route.request().method(), date: url.searchParams.get("date") });
-    const json = data => route.fulfill({ json: data });
+    const json = (data: unknown) => route.fulfill({ json: data });
     if (path === "/api/auth/me") return json(role === "admin" ? admin : viewer);
     if (path === "/api/realtime/config") return json({ mode: options.realtime ?? "off", protocolVersion: 1 });
     if (path === "/api/admin/stores") return json(stores);
@@ -43,7 +45,7 @@ async function mock(page, role = "admin", options = {}) {
     }
     if ((path === "/api/admin/agendas/agenda1/status" || path === "/api/admin/agendas/agenda0/status") && route.request().method() === "PATCH") {
       if (options.reopenConflict) return route.fulfill({ status: 409, json: { error: "CONFLITO_ESTADO", message: "Este registro mudou. Atualize a tela e tente novamente." } });
-      const body = route.request().postDataJSON();
+      const body = z.object({status:z.string()}).parse(requestBody(route.request()));
       if (body.status !== "aberto") throw Error("Status de reabertura inesperado");
       const id = path.includes("agenda0") ? "agenda0" : "agenda1";
       if (id === "agenda0") completedAgenda0 = false;
@@ -52,7 +54,7 @@ async function mock(page, role = "admin", options = {}) {
       return json({ ...detailsNow.agenda, id, dayStatus: "aberto" });
     }
     if (path === "/api/admin/agendas/agenda1/manual" && route.request().method() === "POST") {
-      const body = route.request().postDataJSON();
+      const body = z.object({supplier:z.string()}).parse(requestBody(route.request()));
       if (!body.supplier?.trim()) return route.fulfill({ status: 400, json: { error: "REQUISICAO_INVALIDA", message: "Informe o fornecedor." } });
       const saved = { id: "manual3", supplier: body.supplier, protocol: "Sem agenda", startTime: "", endTime: "", status: "aguardando", origin: "manual", type: "Sem agenda", items: null, volumes: null, pallets: null };
       detailsNow.appointments = [...detailsNow.appointments, saved];
@@ -60,7 +62,7 @@ async function mock(page, role = "admin", options = {}) {
     }
     if (path === "/api/admin/appointments/manual3/manual") {
       if (route.request().method() === "PATCH") {
-        const body = route.request().postDataJSON();
+        const body = z.object({supplier:z.string()}).parse(requestBody(route.request()));
         detailsNow.appointments = detailsNow.appointments.map(x => x.id === "manual3" ? { ...x, supplier: body.supplier } : x);
         return json(detailsNow.appointments.find(x => x.id === "manual3"));
       }
@@ -76,13 +78,13 @@ async function mock(page, role = "admin", options = {}) {
         status: 409, json: { error: "CONFLITO_ESTADO", message: "Este registro mudou. Atualize a tela e tente novamente." },
       });
       const [, id, action] = appointmentMatch;
-      const payload = route.request().postDataJSON();
+      const payload = z.object({status:z.string().optional(),observation:z.string().nullable().optional(),hasExchanges:z.boolean().optional()}).parse(requestBody(route.request()));
       if (action === "status" && payload.status === "nao_chegou" && !payload.observation) {
         return route.fulfill({ status: 400, json: { error: "MOTIVO_INVALIDO", message: "Motivo obrigatório." } });
       }
       detailsNow.appointments = detailsNow.appointments.map(item => item.id !== id ? item : {
         ...item,
-        ...(action === "status" ? { status: payload.status, observation: payload.observation } : {}),
+        ...(action === "status" ? { status: required(payload.status), observation: payload.observation } : {}),
         ...(action === "exchanges" ? { hasExchanges: payload.hasExchanges } : {}),
         ...(action === "observation" ? { observation: payload.observation } : {}),
       });
@@ -102,7 +104,7 @@ async function mock(page, role = "admin", options = {}) {
     if(path==="/api/avisos")return route.fulfill({json:{avisos:[],naoLidos:0}});
     throw Error("API inesperada: " + path);
   });
-  return { requests, setFailAgenda: value => { failAgenda = value; }, setAgendas: value => { agendasNow = value; } };
+  return { requests, setFailAgenda: (value: boolean) => { failAgenda = value; }, setAgendas: (value: typeof agendas) => { agendasNow = value; } };
 }
 
 test("Recebimento React mantém cinco indicadores, seis colunas e estados", async ({ page }) => {
@@ -120,8 +122,11 @@ test("Recebimento React mantém cinco indicadores, seis colunas e estados", asyn
   await expect(page.getByLabel("Situação do dia").locator("strong")).toHaveCount(5);
   await expect(page.getByLabel("Situação do dia").locator("strong")).toHaveText(["8","7","6","1","1"]);
   const size = await page.evaluate(() => {
-    const summary = document.querySelector('[aria-label="Situação do dia"]').getBoundingClientRect();
-    const row = document.querySelector("tbody tr").getBoundingClientRect();
+    const summaryElement = document.querySelector('[aria-label="Situação do dia"]');
+    const rowElement = document.querySelector("tbody tr");
+    if (!summaryElement || !rowElement) throw Error("Resumo ou linha ausente");
+    const summary = summaryElement.getBoundingClientRect();
+    const row = rowElement.getBoundingClientRect();
     return { summary: summary.height, row: row.height, overflow: document.documentElement.scrollWidth - innerWidth };
   });
   expect(size.summary).toBeLessThanOrEqual(90);
@@ -223,6 +228,7 @@ test("Recebimento React mantém rolagem somente na tabela em tela móvel", async
   const behavior = await page.evaluate(() => {
     const table = document.querySelector('[data-testid="receiving-table-scroll"]');
     const menu = document.querySelector('[data-testid="mobile-navigation"]');
+    if (!table || !menu) throw Error("Tabela ou menu ausente");
     const tableScrollable = table.scrollWidth - table.clientWidth;
     const menuScrollable = menu.scrollWidth - menu.clientWidth;
     table.scrollLeft = 120;
@@ -253,47 +259,33 @@ test("Recebimento React mantém rolagem somente na tabela em tela móvel", async
 });
 
 test("Recebimento React atualiza presença e agenda por eventos WebSocket validados", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.WebSocket = class FakeRealtimeSocket {
-      static CONNECTING = 0;
-      static OPEN = 1;
-      readyState = 0;
-      constructor() {
-        window.__fakeRealtimeSocket = this;
-        setTimeout(() => {
-          this.readyState = 1;
-          this.onopen?.();
-          this.onmessage?.({ data: JSON.stringify({ version: 1, type: "realtime.ready" }) });
-        }, 0);
-      }
-      send() {}
-      close(code = 1000) {
-        this.readyState = 3;
-        this.onclose?.({ code });
-      }
-    };
-    window.__emitRealtime = event => window.__fakeRealtimeSocket?.onmessage?.({ data: JSON.stringify(event) });
+  const connection: {socket?: WebSocketRoute} = {};
+  await page.routeWebSocket("**/api/realtime", ws => {
+    connection.socket = ws;
+    ws.onMessage(message => { if (message === "ping") ws.send("pong"); });
+    ws.send(JSON.stringify({version:1,type:"realtime.ready"}));
   });
+  const emit = (event: unknown) => required(connection.socket).send(JSON.stringify(event));
   const controls = await mock(page, "admin", { realtime: "on" });
   await page.goto("/admin");
   await page.getByLabel("Data da agenda").fill("2026-10-30");
   await expect(page.getByText("Tempo real conectado")).toBeVisible();
   await expect(page.getByTestId("receiving-store-F03").getByText("Offline")).toBeVisible();
 
-  await page.evaluate(() => window.__emitRealtime({ version: 1, type: "presence.changed", storeId: "s2", status: "online" }));
+  emit({ version: 1, type: "presence.changed", storeId: "s2", status: "online" });
   await expect(page.getByTestId("receiving-store-F03").getByText("Online")).toBeVisible();
   // Eventos incompletos não devem substituir dados válidos.
-  await page.evaluate(() => window.__emitRealtime({ version: 1, type: "presence.changed", status: "offline" }));
+  emit({ version: 1, type: "presence.changed", status: "offline" });
   await expect(page.getByTestId("receiving-store-F03").getByText("Online")).toBeVisible();
 
   const changed = agendas.map((agenda, i) => i === 1
     ? { ...agenda, dayStatus: "concluido", recebido: 20, aguardando: 0 }
     : agenda);
   controls.setAgendas(changed);
-  await page.evaluate(() => window.__emitRealtime({
+  emit({
     version: 1, type: "agenda.changed", agendaId: "agenda1",
     storeId: "s1", date: "2026-10-30", reason: "status",
-  }));
+  });
   await expect(page.getByLabel("Situação do dia").locator("strong")).toHaveText(["8", "7", "5", "2", "1"]);
   await expect(page.getByTestId("receiving-store-F02").getByText("Concluído")).toBeVisible();
 });

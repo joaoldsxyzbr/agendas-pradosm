@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const user = { id: "user-1", nome: "Visualizador de Teste", papel: "visualizador" };
 const stores = [
@@ -32,8 +32,8 @@ const semAgendaSuppliers = [
   { supplier: "Fornecedor Zeta", vezes: 1, ultima: "2026-10-26" },
   { supplier: "Fornecedor Ômega", vezes: 1, ultima: "2026-10-25" },
 ];
-async function mock(page, options = {}) {
-  const requests = [];
+async function mock(page: Page, options: { failOnce?: boolean } = {}) {
+  const requests: {path:string;stores:string[];start:string|null;end:string|null;offset:string|null;search:string|null}[] = [];
   let failed = false;
   await page.route("**/api/auth/me", route => route.fulfill({ json: user }));
   await page.route("**/api/avisos", route => route.fulfill({ json: { avisos: [], naoLidos: 0 } }));

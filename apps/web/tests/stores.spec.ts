@@ -1,22 +1,24 @@
-import { test, expect } from "@playwright/test";
+import { requestBody, type CapturedRequest } from "./fixtures.ts";
+import { CreateStoreInput, UpdateStoreInput } from "../../../shared/api.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "admin-sintetico", nome: "Administrador Teste", papel: "admin" };
 const viewer = { id: "viewer-sintetico", nome: "Visualizador Teste", papel: "visualizador" };
-const uuid = i => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
+const uuid = (i: number) => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
 
-async function setup(page, { role = "admin", duplicate = false, hasUsers = false, auditError = false, listingError = false } = {}) {
+async function setup(page: Page, { role = "admin", duplicate = false, hasUsers = false, auditError = false, listingError = false } = {}) {
   let current = role === "admin" ? admin : viewer;
   let stores = [
     { id: uuid(1), codigo: "F01", nome: "Unidade Central", ativo: true, temConferenteAtivo: true },
     { id: uuid(2), codigo: "F02", nome: "Unidade Sul", ativo: false, temConferenteAtivo: false },
   ];
-  const requests = [];
+  const requests: CapturedRequest[] = [];
   await page.route("**/api/**", route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
-    const body = method === "GET" || method === "DELETE" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body, params: url.searchParams });
+    const rawBody = requestBody(route.request());
+    requests.push({ path, method, body: rawBody, params: url.searchParams });
     if (path === "/api/auth/me") return route.fulfill({ json: current });
     if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
     if (path === "/api/admin/stores" && method === "GET") {
@@ -25,13 +27,15 @@ async function setup(page, { role = "admin", duplicate = false, hasUsers = false
     }
     if (path === "/api/admin/stores" && method === "POST") {
       if (duplicate) return route.fulfill({ status: 409, json: { error: "CODIGO_LOJA_EM_USO", message: "Código de loja já está em uso." } });
+      const body = CreateStoreInput.parse(rawBody);
       const store = { id: uuid(3), codigo: body.codigo, nome: body.nome, ativo: true, temConferenteAtivo: false };
       stores = [...stores, store]; return route.fulfill({ status: 201, json: store });
     }
     if (path === "/api/admin/stores" && method === "PATCH") {
       if (duplicate) return route.fulfill({ status: 409, json: { error: "CODIGO_LOJA_EM_USO", message: "Código de loja já está em uso." } });
-      let edited = null;
-      stores = stores.map(s => s.id === body.id ? (edited = { ...s, codigo: body.codigo, nome: body.nome, ativo: body.ativo }) : s);
+      const body = UpdateStoreInput.parse(rawBody);
+      let edited: typeof stores[number] | null = null;
+      stores = stores.map(s => s.id === body.id ? (edited = { ...s, codigo: body.codigo ?? s.codigo, nome: body.nome ?? s.nome, ativo: body.ativo ?? s.ativo }) : s);
       return route.fulfill({ json: edited });
     }
     if (path === "/api/admin/stores/" + uuid(1) && method === "DELETE") {
@@ -81,7 +85,7 @@ test("Lojas React cadastra sem gravar antes de confirmação e normaliza o códi
   await dialog.getByRole("button", { name: "Cadastrar loja" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("table", { name: "Lojas cadastradas" })).toContainText("Nova unidade");
-  expect(state.requests.some(r => r.method === "POST" && r.body.codigo === "F03" && r.body.nome === "Nova unidade")).toBe(true);
+  expect(state.requests.some(r => r.method === "POST" && r.body?.codigo === "F03" && r.body?.nome === "Nova unidade")).toBe(true);
 });
 
 test("Lojas React edita status e mostra histórico somente ao consultar", async ({ page }) => {
@@ -99,7 +103,7 @@ test("Lojas React edita status e mostra histórico somente ao consultar", async 
   await expect(dialog).toHaveCount(0);
   await expect(page.getByTestId("store-F01")).toContainText("Unidade Central Nova");
   await expect(page.getByTestId("store-F01")).toContainText("Inativa");
-  expect(state.requests.some(r => r.method === "PATCH" && r.body.id === uuid(1) && r.body.ativo === false)).toBe(true);
+  expect(state.requests.some(r => r.method === "PATCH" && r.body?.id === uuid(1) && r.body?.ativo === false)).toBe(true);
 });
 
 test("Lojas React não remove loja sem confirmação nem quando há usuários vinculados", async ({ page }) => {

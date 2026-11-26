@@ -1,4 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { z } from "zod";
+import { required, requestBody, type CapturedRequest } from "./fixtures.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "adm", nome: "ADM de teste", papel: "admin" };
 const viewer = { id: "viewer", nome: "Visualizador", papel: "visualizador" };
@@ -28,14 +30,14 @@ const appointments = [
     nfe: ["99999"], orders: [], csvFields: {} }
 ];
 
-async function mock(page, role = "admin", options = {}) {
-  const requests = [];
-  let rows = {
+async function mock(page: Page, role = "admin", options: { multipleSuppliers?: boolean; patchDelay?: number; conflict?: boolean } = {}) {
+  const requests: Pick<CapturedRequest, "path" | "method" | "body">[] = [];
+  const rows: Record<string, Array<{ supplier: string; hash: string; digitadoEm: string | null; digitadoPor: { id: string; name: string } | null; appointments: typeof appointments }>> = {
     agenda0: [{ supplier: "Fornecedor Azul", hash: hashA, digitadoEm: null, digitadoPor: null, appointments: appointments.slice(0, 2) }],
     agenda1: [{ supplier: "Fornecedor Verde", hash: hashB, digitadoEm: null, digitadoPor: null, appointments: appointments.slice(2) }]
   };
   if (options.multipleSuppliers) {
-    rows.agenda0.push({
+    required(rows.agenda0).push({
       supplier: "Fornecedor Laranja", hash: "c".repeat(64),
       digitadoEm: null, digitadoPor: null,
       appointments: [{ ...appointments[2], id: "c1", protocol: "123459", supplier: "Fornecedor Laranja" }]
@@ -44,17 +46,17 @@ async function mock(page, role = "admin", options = {}) {
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
-    const body = method === "GET" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body });
-    const json = data => route.fulfill({ json: data });
+    const rawBody = requestBody(route.request());
+    requests.push({ path, method, body: rawBody });
+    const json = (data: unknown) => route.fulfill({ json: data });
     if (path === "/api/auth/me") return json(role === "viewer" ? viewer : admin);
     if (path === "/api/realtime/config") return json({ mode: "off", protocolVersion: 1 });
     if (["/api/admin/stores", "/api/admin/presence"].includes(path)) return json([]);
     if (path === "/api/admin/agendas" && method === "GET") {
       return json(boards.map(board => ({
         ...board,
-        digitadas: rows[board.id].filter(supplier => supplier.digitadoEm).length,
-        fornecedores: rows[board.id].length
+        digitadas: required(rows[board.id]).filter(supplier => supplier.digitadoEm).length,
+        fornecedores: required(rows[board.id]).length
       })));
     }
     const id = /^\/api\/admin\/agendas\/(agenda[01])\/digitacao$/.exec(path)?.[1];
@@ -62,10 +64,11 @@ async function mock(page, role = "admin", options = {}) {
     if (id && method === "PATCH") {
       if (options.conflict) return route.fulfill({ status: 409, json: { error: "CONFLITO_ESTADO", message: "Este fornecedor mudou" } });
       if (options.patchDelay) await new Promise(resolve => setTimeout(resolve, options.patchDelay));
+      const body = z.object({supplier:z.string(), hash:z.string(), digitado:z.boolean()}).parse(rawBody);
       const updated = { supplier: body.supplier, hash: body.hash,
         digitadoEm: body.digitado ? "2026-11-03T11:00:00.000Z" : null,
         digitadoPor: body.digitado ? { id: "adm", name: "Administrador" } : null };
-      rows[id] = rows[id].map(item => item.supplier === body.supplier ? { ...item, ...updated } : item);
+      rows[id] = required(rows[id]).map(item => item.supplier === body.supplier ? { ...item, ...updated } : item);
       return json(updated);
     }
     if(path==="/api/avisos")return route.fulfill({json:{avisos:[],naoLidos:0}});
@@ -111,10 +114,10 @@ test("Fornecedores aparecem em linhas compactas únicas, com detalhes sob demand
     const { x, y, height } = node.getBoundingClientRect();
     return { x, y, height };
   }));
-  expect(rects[0].height).toBeLessThan(54);
-  expect(rects[1].height).toBeLessThan(54);
-  expect(rects[1].y).toBeGreaterThan(rects[0].y);
-  expect(rects[1].x).toBe(rects[0].x);
+  expect(required(rects[0]).height).toBeLessThan(54);
+  expect(required(rects[1]).height).toBeLessThan(54);
+  expect(required(rects[1]).y).toBeGreaterThan(required(rects[0]).y);
+  expect(required(rects[1]).x).toBe(required(rects[0]).x);
   await section.getByRole("button", { name: "Detalhes de Fornecedor Azul" }).click();
   await expect(section.getByTestId("agendas-protocol-123456")).toBeVisible();
   await expect(section.getByRole("button", { name: "Detalhes de Fornecedor Azul" })).toHaveAttribute("aria-expanded", "true");
@@ -190,7 +193,7 @@ test("Check é por fornecedor, independente dos protocolos e dos status", async 
   await expect(check).not.toBeChecked();
   await expect(page.getByTestId("agendas-progress-F01")).toContainText("0/1 digitadas");
   const calls = spy.requests.filter(call => call.method === "PATCH" && call.path.endsWith("/digitacao"));
-  expect(calls.map(call => ({ supplier: call.body.supplier, digitado: call.body.digitado })))
+  expect(calls.map(call => ({ supplier: required(call.body).supplier, digitado: required(call.body).digitado })))
     .toEqual([{ supplier: "Fornecedor Azul", digitado: true }, { supplier: "Fornecedor Azul", digitado: false }]);
   expect(spy.requests.filter(call => /\/status$/.test(call.path))).toHaveLength(0);
 });
@@ -209,7 +212,7 @@ test("Marcações seguidas não esperam uma pela outra", async ({ page }) => {
   expect(Date.now() - start).toBeLessThan(1500);
   await expect(page.getByTestId("agendas-details-F01")).toContainText("2 de 2 digitados");
   const calls = spy.requests.filter(call => call.method === "PATCH" && call.path.endsWith("/digitacao"));
-  expect(calls.map(call => call.body.supplier).sort())
+  expect(calls.map(call => required(call.body).supplier).sort())
     .toEqual(["Fornecedor Azul", "Fornecedor Laranja"]);
 });
 
