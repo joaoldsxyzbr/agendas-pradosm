@@ -6,16 +6,16 @@ import { DatabaseSync } from "node:sqlite";
 
 // Somente SQLite em memória: nunca consulta ou escreve no D1 de produção.
 describe("Release candidata: migrations sobre schema de produção", () => {
-  it("aplica a sequência 0001–0025 mais 0029–0030 sem remover campos operacionais", () => {
+  it("aplica a sequência 0001–0025 mais 0029–0031 sem remover campos operacionais", () => {
     const files = readdirSync("migrations")
       .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
       .sort();
     // 0026–0028 são reservadas ao #248 na preview: chegam à main depois,
     // sem colisão em d1_migrations (que registra por nome de arquivo).
     const expected = Array.from({ length: 25 }, (_, i) => String(i + 1).padStart(4, "0"));
-    expected.push("0029", "0030");
+    expected.push("0029", "0030", "0031");
     assert.deepEqual(files.map(name => name.slice(0, 4)), expected,
-      "A candidata deve conter migrations 0001–0025 e 0029–0030 (0026–0028 reservadas à #248)");
+      "A candidata deve conter migrations 0001–0025 e 0029–0031 (0026–0028 reservadas à #248)");
 
     const db = new DatabaseSync(":memory:");
     try {
@@ -58,7 +58,7 @@ describe("Release candidata: migrations sobre schema de produção", () => {
       assert.match(urgente.sql, /urgente INTEGER NOT NULL DEFAULT 0 CHECK \(urgente IN \(0, 1\)\)/);
       assert.match(urgente.sql, /autor TEXT NOT NULL DEFAULT 'Sistema'/);
       const avisosLojas = names("avisos_lojas");
-      for (const field of ["aviso_id", "loja"])
+      for (const field of ["aviso_id", "loja", "loja_id"])
         assert.ok(avisosLojas.includes(field), "Coluna de direcionamento ausente: " + field);
       const lojaPk = db.prepare("PRAGMA table_info(avisos_lojas)").all().filter(row => Number(row.pk) > 0);
       assert.deepEqual(lojaPk.map(row => row.name).sort(), ["aviso_id", "loja"],

@@ -119,7 +119,7 @@ try {
   const seed = [
     "INSERT INTO lojas (id,codigo,nome,criado_em,atualizado_em) VALUES (" + values(ids.store1,"01","Loja sintética 1",now,now) + ");",
     "INSERT INTO lojas (id,codigo,nome,criado_em,atualizado_em) VALUES (" + values(ids.store2,"02","Loja sintética 2",now,now) + ");",
-    ...[["admin",null,"admin"],["viewer",null,"visualizador"],["conf1",ids.store1,"conferente"],["conf2",ids.store2,"conferente"]].map(([key,store,role]) =>
+    ...([["admin",null,"admin"],["viewer",null,"visualizador"],["conf1",ids.store1,"conferente"],["conf2",ids.store2,"conferente"]] as const).map(([key,store,role]) =>
       "INSERT INTO usuarios (id,loja_id,nome,login,senha_hash,papel,ativo,criado_em,atualizado_em) VALUES (" + values(ids[key],store,key,key,hash,role,1,now,now) + ");"),
     "INSERT INTO agendas (id,loja_id,data_agenda,arquivo_original,criado_por,status_dia,criado_em,atualizado_em) VALUES (" + values(ids.agenda,ids.store1,today,"sintetico.csv",ids.admin,"aberto",now,now) + ");",
     "INSERT INTO agendamentos (id,agenda_id,protocolo,horario_inicio,horario_fim,fornecedor,ativo,status,origem,criado_em,atualizado_em) VALUES (" + values(ids.appointment,ids.agenda,"P001","08:00","09:00","Fornecedor sintético",1,"aguardando","importado",now,now) + ");"

@@ -25,7 +25,7 @@ interface MensagemInput {
 interface AvisoInput extends MensagemInput {
   titulo: string;
   urgente: boolean;
-  lojas: string[] | null;
+  lojas: { id: string; codigo: string }[] | null;
 }
 const reacaoRowSchema = z.object({ emoji: reacaoEmojiSchema, nome: z.string(), proprio: z.number() });
 
@@ -43,7 +43,7 @@ const reacaoRowSchema = z.object({ emoji: reacaoEmojiSchema, nome: z.string(), p
 function visibilidadePorLoja(loja: string | null) {
   return loja
     ? "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id = a.id) = 0 " +
-        "OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = a.id AND x.loja = ?)"
+        "OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = a.id AND x.loja_id = ?)"
     : "";
 }
 
@@ -56,7 +56,7 @@ function filtroTipo(verEventos: boolean) {
 
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
-// Limitado aos últimos `limit` itens. Admin/visualizador (loja null) veem tudo.
+// Limitado aos últimos `limit` itens. Admin (loja null) vê tudo.
 export async function listAvisos(db: D1Database, userId: string, loja: string | null = null, verEventos = true, limit = 50, cursor: AvisoCursor | null = null, tipoAviso: string | undefined = undefined, busca = "") {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
@@ -72,7 +72,7 @@ export async function listAvisos(db: D1Database, userId: string, loja: string | 
   // Separador char(31) (unit separator): código de loja com vírgula não pode
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
-    "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
+    "(SELECT GROUP_CONCAT(COALESCE(s.codigo, x.loja), char(31)) FROM avisos_lojas x LEFT JOIN lojas s ON s.id = x.loja_id WHERE x.aviso_id = a.id) AS lojas";
   // "proprio" alinha a mensagem do próprio autor à direita no chat sem
   // depender de nome (homônimos); eventos (criado_por NULL) nunca são próprios.
   const values = [userId, userId, userId, userId, ...(loja ? [loja] : []), ...(busca ? [busca] : []),
@@ -180,7 +180,7 @@ export function publishAvisoStatements(db: D1Database, { id, titulo, mensagem, c
   ];
   for (const loja of lojas ?? []) {
     statements.push(
-      db.prepare("INSERT INTO avisos_lojas (aviso_id, loja) VALUES (?, ?)").bind(avisoId, loja)
+      db.prepare("INSERT INTO avisos_lojas (aviso_id, loja, loja_id) VALUES (?, ?, ?)").bind(avisoId, loja.codigo, loja.id)
     );
   }
   return statements;
@@ -201,19 +201,14 @@ export function publishMensagemStatements(db: D1Database, { id, mensagem, criado
 // já leu (lido_em) e quem ainda está aguardando. Leitura automática do canal
 // grava em avisos_lidos, então "visto" = abriu o canal após a publicação.
 export async function listLeitoresDoAviso(db: D1Database, avisoId: string) {
-  const lojasRows = await db.prepare(
-    "SELECT loja FROM avisos_lojas WHERE aviso_id = ?"
-  ).bind(avisoId).all<{ loja: string }>();
-  const codigos = (lojasRows.results ?? []).map((row) => row.loja);
-  const alvo = codigos.length
-    ? " AND s.codigo IN (" + codigos.map(() => "?").join(",") + ")"
-    : "";
+  // EXISTS evita listas IN variáveis e mantém destinos não resolvidos fechados.
   const publico = await db.prepare(
     `SELECT u.id, u.nome, s.codigo AS loja
-       FROM usuarios u
-       JOIN lojas s ON s.id = u.loja_id
-      WHERE u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL${alvo}`
-  ).bind(...codigos).all<{ id: string; nome: string; loja: string }>();
+       FROM usuarios u JOIN lojas s ON s.id = u.loja_id
+      WHERE u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL
+        AND (NOT EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = ?)
+          OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = ? AND x.loja_id = s.id))`
+  ).bind(avisoId, avisoId).all<{ id: string; nome: string; loja: string }>();
   const lidos = await db.prepare(
     `SELECT l.usuario_id, l.lido_em
        FROM avisos_lidos l

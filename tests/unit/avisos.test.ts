@@ -159,12 +159,13 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
   it("publishAvisoStatements têm arity exata com e sem lojas", () => {
     const db = arityDb();
     publishAvisoStatements(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: true, lojas: null });
-    publishAvisoStatements(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: false, lojas: ["01", "02"] });
+    publishAvisoStatements(db, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: false, lojas: [{id:"loja1",codigo:"01"},{id:"loja2",codigo:"02"}] });
     // 1 INSERT do aviso + 2 INSERTs de direcionamento + 1 INSERT + 0.
     assert.equal(db.statements.length, 4);
     assert.match(db.statements[0].sql, /INSERT INTO avisos/);
     assert.match(db.statements[2].sql, /INSERT INTO avisos_lojas/);
     assert.equal(db.statements[2].values[1], "01");
+    assert.equal(db.statements[2].values[2], "loja1");
     assert.equal(db.statements[3].values[1], "02");
     const semLojas = arityDb();
     publishAvisoStatements(semLojas, { titulo: "T", mensagem: "M", criadoPor: "adm1", autor: "Administrador", criadoEm: "t0", urgente: false, lojas: null });
@@ -275,7 +276,7 @@ function fixture({ limiter = { limit: async () => ({ success: true }) } }: { lim
     "CREATE TABLE auditoria (id TEXT PRIMARY KEY, usuario_id TEXT, acao TEXT, entidade TEXT, entidade_id TEXT, loja_id TEXT, agenda_id TEXT, agendamento_id TEXT, antes TEXT, depois TEXT, detalhes TEXT, criado_em TEXT)",
     "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento','chat')), titulo TEXT, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0 CHECK (urgente IN (0,1)), autor TEXT NOT NULL DEFAULT 'Sistema')",
     "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))",
-    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))",
+    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, loja_id TEXT, PRIMARY KEY (aviso_id, loja))",
     "CREATE TABLE avisos_reacoes (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, emoji TEXT NOT NULL CHECK (emoji IN ('👍', '👀', '😂')), atualizado_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))"
   ].join(";\n") + ";");
   const now = "2026-11-11T12:00:00.000Z";
@@ -629,7 +630,7 @@ describe("Rotas de avisos integradas", () => {
       }
       f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('evento','evento','Evento','Sintético','2026-11-20T10:00:00.000Z')").run();
       f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('so-loja-02','aviso','Direcionado','Sintético','2026-11-20T10:00:00.000Z')").run();
-      f.sqlite.prepare("INSERT INTO avisos_lojas VALUES ('so-loja-02','02')").run();
+      f.sqlite.prepare("INSERT INTO avisos_lojas VALUES ('so-loja-02','02','loja2')").run();
       const primeira = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(primeira.avisos.length, 50);
       assert.equal(primeira.naoLidos, 62);
@@ -835,6 +836,28 @@ describe("Reações do canal", () => {
         assert.equal((await f.call("conf2", "/api/avisos/" + target + "/reacao", { method: "PUT", body: { emoji: "👍" } })).status, 404);
       }
       assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get()?.n, 0);
+    } finally { f.sqlite.close(); }
+  });
+});
+
+ describe("Identidade imutável de destino", () => {
+  it("preserva destinatário quando o código da loja é renomeado e reutilizado", async () => {
+    const f = fixture();
+    try {
+      const res = await f.call("adm1", "/api/admin/avisos", { method:"POST",body:{titulo:"Destino",mensagem:"Teste",lojas:["01"]} });
+      assert.equal(res.status,201);
+      const {id}=avisoSchema.parse(await res.json());
+      f.sqlite.prepare("UPDATE lojas SET codigo = '99' WHERE id = 'loja1'").run();
+      f.sqlite.prepare("UPDATE lojas SET codigo = '01' WHERE id = 'loja2'").run();
+      const conf1=avisosResponseSchema.parse(await (await f.call("conf1","/api/avisos")).json());
+      assert.deepEqual(conf1.avisos.map(a=>a.id),[id]);
+      assert.deepEqual(conf1.avisos[0].lojas,["99"]);
+      const conf2=avisosResponseSchema.parse(await (await f.call("conf2","/api/avisos")).json());
+      assert.equal(conf2.avisos.length,0);
+      assert.equal((await f.call("conf1","/api/avisos/"+id+"/reacao",{method:"PUT",body:{emoji:"👍"}})).status,200);
+      assert.equal((await f.call("conf2","/api/avisos/"+id+"/reacao",{method:"PUT",body:{emoji:"👍"}})).status,404);
+      const leitores=leitoresAvisoSchema.parse(await (await f.call("adm1","/api/admin/avisos/"+id+"/leitores")).json());
+      assert.deepEqual(leitores.faltantes.map(p=>p.id),["conf1"]);
     } finally { f.sqlite.close(); }
   });
 });

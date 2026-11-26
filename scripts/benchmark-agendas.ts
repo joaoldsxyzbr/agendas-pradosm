@@ -218,20 +218,20 @@ async function measureReports(total:number) {
 async function measureNotices(total:number) {
   const visible=total+Math.ceil(total/2);
   const unread=visible-Math.ceil(total/4);
-  const first=await listAvisos(adapter,"u2","01",false,50);
+  const first=await listAvisos(adapter,"u2","l0",false,50);
   assert.ok(first.nextCursor);
   const cursor=first.nextCursor;
   const ids=new Set(first.avisos.map(row=>row.id));
   return [
     await measureScenario("Avisos: primeira página e badge",async()=>{
-      const data=await listAvisos(adapter,"u2","01",false,50);
+      const data=await listAvisos(adapter,"u2","l0",false,50);
       assert.equal(data.avisos.length,50);
       assert.equal(data.naoLidos,unread);
       assert.equal(data.urgenteNaoLido,true);
       return data.avisos.length;
     }),
     await measureScenario("Avisos: segunda página por cursor",async()=>{
-      const data=await listAvisos(adapter,"u2","01",false,50,cursor);
+      const data=await listAvisos(adapter,"u2","l0",false,50,cursor);
       assert.equal(data.avisos.length,Math.min(50,visible-50));
       assert.equal(data.naoLidos,unread);
       assert.ok(data.avisos.every(row=>!ids.has(row.id)));
@@ -239,7 +239,7 @@ async function measureNotices(total:number) {
     }),
     await measureScenario("Avisos: página profunda por cursor",async()=>{
       // A fixture usa timestamp único; g-000020 precede exatamente 20 IDs globais.
-      const data=await listAvisos(adapter,"u2","01",false,50,{criadoEm:fixedNow,id:"g-000020"});
+      const data=await listAvisos(adapter,"u2","l0",false,50,{criadoEm:fixedNow,id:"g-000020"});
       assert.equal(data.avisos.length,20);
       assert.equal(data.hasMore,false);
       assert.equal(data.naoLidos,unread);
