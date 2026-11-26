@@ -1,9 +1,10 @@
+import { findStoreById, updateStore, softDeleteStore } from "../../worker/repositories/stores.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findUserById, updateUser } from "../../worker/repositories/users.ts";
+import { findUserById, updateUser, createUser } from "../../worker/repositories/users.ts";
 import {
   changeAgendaDayStatus,
   changeAppointmentExchanges,
@@ -224,6 +225,37 @@ describe("Guardas integradas de concorrência", () => {
       assert.equal(f.agenda("agenda2").versao_importacao, 1);
       assert.equal(f.agenda("agenda2").arquivo_original, "agenda2-primeira.csv");
       assert.equal(f.auditCount("agenda_substituida"), 1);
+    } finally { f.sqlite.close(); }
+  });
+});
+
+describe("Concorrência no cadastro de lojas", () => {
+  it("não sobrescreve alterações concorrentes nem audita operações rejeitadas", async () => {
+    const f = fixture();
+    try {
+      const stale = await findStoreById(f.db, "store1");
+      await updateStore(f.db, stale, { nome: "Nome atualizado" }, "adm");
+      await assert.rejects(updateStore(f.db, stale, { codigo: "F99" }, "adm"), conflict);
+      const current = await findStoreById(f.db, "store1");
+      assert.equal(current.nome, "Nome atualizado");
+      assert.equal(current.codigo, "F01");
+      assert.equal(f.auditCount("loja_atualizada"), 1);
+      assert.equal(await softDeleteStore(f.db, current, "adm"), false);
+      assert.equal(f.auditCount("loja_removida"), 0);
+    } finally { f.sqlite.close(); }
+  });
+  it("não permite vincular usuários a loja excluída após leitura", async () => {
+    const f = fixture();
+    try {
+      const now = new Date().toISOString();
+      f.sqlite.prepare("INSERT INTO lojas (id,codigo,nome,criado_em,atualizado_em) VALUES (?,?,?,?,?)").run("store2","F02","Loja 2",now,now);
+      const store = await findStoreById(f.db, "store2");
+      assert.equal(await softDeleteStore(f.db, store, "adm"), true);
+      await assert.rejects(updateUser(f.db, await findUserById(f.db, "conf1"), { lojaId: "store2" }, "adm"), conflict);
+      await assert.rejects(createUser(f.db, { nome: "Novo", login: "novo", senha: "SenhaSintetica2026!", papel: "conferente", lojaId: "store2" }, "adm"), conflict);
+      assert.equal(f.user().loja_id, "store1");
+      assert.equal(f.auditCount("usuario_atualizado"), 0);
+      assert.equal(f.auditCount("usuario_criado"), 0);
     } finally { f.sqlite.close(); }
   });
 });
