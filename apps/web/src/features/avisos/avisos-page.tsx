@@ -17,26 +17,29 @@ import { PublishAvisoDialog } from "./publish-aviso-dialog";
 
 // Página do canal de Avisos (decisão do João, 25/11/2026): um chat único em
 // lugar do sino do cabeçalho. Mensagens comuns (tipo "chat") de admin e
-// conferente em bolhas — as próprias à direita —, aviso oficial do admin em
-// cartão destacado com a régua "quem viu", eventos do sistema como linhas
-// discretas (admin e visualizador). Leitura automática estilo WhatsApp:
-// abrir o canal marca tudo como visto via marcar-todos. O visualizador
-// acompanha sem escrever. O rodapé do compositor é sticky: acompanha a
-// rolagem da página (sem cálculo de altura, robusto no celular).
+// conferente em bolhas — as próprias à direita — e aviso oficial do admin em
+// cartão destacado com a régua "quem viu". Leitura automática estilo
+// WhatsApp: abrir o canal marca tudo como visto via marcar-todos. O
+// visualizador acompanha sem escrever. O rodapé do compositor é sticky e
+// alinhado à coluna do feed.
+//
+// Mudanças de 26/11/2026 (decisão do João):
+// 1. O canal é só conversa humana: eventos do sistema ("Dia concluído",
+//    "Agendas importadas em lote") não aparecem mais — o backend já entrega
+//    a lista sem eventos; esta página também filtra por defesa, para o caso
+//    de resposta antiga em cache.
+// 2. Rodapé sticky alinhado à coluna do feed: em vez de -mx-* que estica o
+//    footer além do max-w-3xl do conteúdo (o campo "sobrava pros lados"),
+//    o footer herda a largura da seção.
+// 3. Contador de caracteres (2000) visível quando o texto se aproxima do
+//    limite.
+// 4. Erro de envio restaura o texto no campo: 429/503 não pode apagar a
+//    mensagem que o usuário digitou.
 
 function DiaSeparador({ dia }: { dia: string }) {
   return <div role="separator" aria-label={dia}
     className="my-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
     {dia}
-  </div>;
-}
-
-function LinhaEvento({ aviso }: { aviso: Aviso }) {
-  // O título do evento é heading h3 (mesma hierarquia do título do aviso):
-  // a régua de eventos fica navegável por leitores de tela e pela busca
-  // por papel de heading dos testes. O "inline" preserva a pílula de uma linha.
-  return <div className="mx-auto max-w-xl rounded-full bg-slate-700/40 px-3 py-1 text-center text-[11px] text-slate-300">
-    <h3 className="inline text-[11px] font-semibold text-slate-200">{aviso.titulo}</h3> · {formatAvisoHora(aviso.criadoEm)} · por {aviso.autor}
   </div>;
 }
 
@@ -75,7 +78,7 @@ function LeitoresDoAviso({ avisoId }: { avisoId: string }) {
   return <details className="mt-1.5" onToggle={event => setAberto((event.target as HTMLDetailsElement).open)}
     data-testid={`leitores-${avisoId}`}>
     <summary className="cursor-pointer select-none text-[11px] font-semibold text-sky-300">
-      {leitores.isPending && aberto ? "Consultando quem viu…" : `Visto por ${vistos.length} de ${total}`}
+      {leitores.isPending && aberto ? "Consultando quem viu…" : `Aberto por ${vistos.length} de ${total}`}
     </summary>
     <div className="mt-1 space-y-1 text-[11px] text-slate-300">
       {leitores.isError && <p className="text-rose-300">Não foi possível carregar a lista de leitores.</p>}
@@ -110,6 +113,8 @@ function CartaoAviso({ aviso, isAdmin }: { aviso: Aviso; isAdmin: boolean }) {
     {isAdmin && <LeitoresDoAviso avisoId={aviso.id} />}
   </article>;
 }
+
+const LIMITE_MENSAGEM = 2000;
 
 export function AvisosPage() {
   // Sessão pelo hook canônico do app (o mesmo do LayoutRoute): a página não
@@ -167,7 +172,11 @@ export function AvisosPage() {
   const enviarTexto = (mensagem: string) => {
     if (!mensagem || enviar.isPending) return;
     setTexto("");
-    enviar.mutate({ mensagem });
+    enviar.mutate({ mensagem }, {
+      // Erro de envio (429, 503, rede): devolve o texto ao campo — a
+      // mensagem não pode se perder porque o servidor recusou.
+      onError: () => setTexto(mensagem),
+    });
   };
 
   // Carregar mensagens antigas é opt-in: o polling segue consultando só os
@@ -188,8 +197,10 @@ export function AvisosPage() {
   };
 
   // Ordem de exibição: o canal chega do mais recente para o mais antigo; o
-  // chat inverte para a mensagem mais nova ficar embaixo.
-  const listaDesc = [...(avisos.data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)];
+  // chat inverte para a mensagem mais nova ficar embaixo. Sem eventos: o
+  // backend já não os entrega, e o filtro defensivo cobre cache antigo.
+  const listaDesc = [...(avisos.data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)]
+    .filter(aviso => aviso.tipo !== "evento");
   const lista = [...new Map(listaDesc.map(aviso => [aviso.id, aviso] as const)).values()].reverse();
   const lastPage = olderPages.at(-1) ?? avisos.data;
   const hasMore = Boolean(lastPage?.hasMore && Boolean(lastPage?.nextCursor));
@@ -199,6 +210,8 @@ export function AvisosPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [ultimoId]);
+
+  const restante = LIMITE_MENSAGEM - texto.length;
 
   return <section aria-labelledby="avisos-heading" className="mx-auto flex w-full max-w-3xl flex-col">
     <div className="flex flex-wrap items-end justify-between gap-2 pb-2">
@@ -230,15 +243,13 @@ export function AvisosPage() {
         const diaAnterior = anterior ? formatAvisoDia(anterior.criadoEm) : null;
         return <div key={aviso.id} className="contents">
           {dia !== diaAnterior && <DiaSeparador dia={dia} />}
-          {aviso.tipo === "chat" ? <BolhaChat aviso={aviso} />
-            : aviso.tipo === "aviso" ? <CartaoAviso aviso={aviso} isAdmin={isAdmin} />
-            : <LinhaEvento aviso={aviso} />}
+          {aviso.tipo === "chat" ? <BolhaChat aviso={aviso} /> : <CartaoAviso aviso={aviso} isAdmin={isAdmin} />}
         </div>;
       })}
       <div ref={bottomRef} aria-hidden="true" />
     </div>
 
-    <footer className="sticky bottom-0 z-10 -mx-4 border-t border-[#2b415b] bg-[#142337]/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+    <footer className="sticky bottom-0 z-10 border-t border-[#2b415b] bg-[#142337]/95 py-3 backdrop-blur">
       {podeEscrever ? <form className="flex items-end gap-2" onSubmit={event => {
         event.preventDefault();
         enviarTexto(texto.trim());
@@ -255,12 +266,15 @@ export function AvisosPage() {
               }
             }}
             rows={1}
-            maxLength={2000}
+            maxLength={LIMITE_MENSAGEM}
             aria-label="Mensagem do canal"
             placeholder="Escreva uma mensagem para o canal…"
             disabled={enviar.isPending}
             className="max-h-32 w-full resize-none rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400"
           />
+          {restante < 200 && <span className="mt-1 block text-right text-[10px] text-slate-400" aria-live="polite">
+            {restante < 0 ? `${Math.abs(restante)} caracteres acima do limite` : `${restante} caracteres restantes`}
+          </span>}
         </label>
         <Button type="submit" size="sm" disabled={enviar.isPending || texto.trim().length === 0}>
           <Send size={14} aria-hidden="true" /> Enviar
