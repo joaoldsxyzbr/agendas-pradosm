@@ -14,7 +14,10 @@ describe("Benchmark SQL sintético nativo", () => {
     const output = z.object({
       agendas: z.number(), appointments: z.number(), engine: z.string(),
       schema_migrations: z.number(),
-      cases: z.array(z.object({ count: z.number(), median_ms: z.number(), plan: z.array(z.string()) }))
+      repetitions: z.number(), notice_rows: z.number(),
+      cases: z.array(z.object({ count: z.number(), median_ms: z.number(), p95_ms: z.number(), statements: z.number(), plan: z.array(z.string()) })),
+      reports: z.array(z.object({ count: z.number(), median_ms: z.number(), p95_ms: z.number(), statements: z.number(), plans: z.array(z.array(z.string())) })),
+      notices: z.array(z.object({ count: z.number(), median_ms: z.number(), p95_ms: z.number(), statements: z.number(), plans: z.array(z.array(z.string())) }))
     }).parse(JSON.parse(execution.stdout));
     assert.equal(output.agendas, 40);
     assert.equal(output.appointments, 600);
@@ -23,5 +26,11 @@ describe("Benchmark SQL sintético nativo", () => {
     assert.deepEqual(output.cases.map(c => c.count), [40, 10, 4, 20, 20, 4]);
     assert.ok(output.cases.every(c => c.median_ms >= 0));
     assert.ok(output.cases.every(c => Array.isArray(c.plan) && c.plan.length > 0));
+    assert.equal(output.notice_rows, 80);
+    assert.deepEqual(output.reports.map(c=>c.count), [40,50,40]);
+    assert.deepEqual(output.reports.map(c=>c.statements), [3,2,2]);
+    assert.deepEqual(output.notices.map(c=>c.count), [50,10]);
+    assert.deepEqual(output.notices.map(c=>c.statements), [2,2]);
+    assert.ok([...output.reports,...output.notices].every(c=>c.plans.length===c.statements && c.plans.every(p=>p.length>0) && c.p95_ms>=0));
   });
 });
