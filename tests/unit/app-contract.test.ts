@@ -1,14 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const source = path =>
+const source = (path: string) =>
   // Checkout no Windows usa CRLF; normaliza para comparar com os contratos em JSON (LF).
   readFileSync(new URL(path, import.meta.url), "utf8").replaceAll("\r\n", "\n");
 describe("Worker em JavaScript preserva a main", () => {
   it("conserva as rotas e a ordem dos middlewares", () => {
     const expected = JSON.parse(source("./legacy-route-contracts.json")).app;
     const js = source("../../worker/app.ts");
-    const paths = body => [...body.matchAll(/app\.(?:get|use|route)\(\s*["']([^"']+)["']/g)].map(hit => hit[0]);
+    const paths = (body: string) => [...body.matchAll(/app\.(?:get|use|route)\(\s*["']([^"']+)["']/g)].map(hit => hit[0]);
     assert.deepEqual(paths(js), expected);
     assert.match(js,/app\.route\("\/api\/admin\/reports"/);
     for (const forbidden of ["/api/auth/demo-login", "PREVIEW_DEMO_LOGIN"]) assert.equal(js.includes(forbidden), false);

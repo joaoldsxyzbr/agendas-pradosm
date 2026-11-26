@@ -58,7 +58,7 @@ describe("Contratos preservados na migração JS puro", () => {
       parseAgendaText("texto sem agenda"),
       parseAgendaCsv("texto sem colunas reconhecidas"),
       parseAgendaPdfText("texto sem agenda")
-    ];
+    ] as const;
     for (const item of parsed) {
       assert.ok(Array.isArray(item.blockingErrors));
       assert.ok(Array.isArray(item.warnings));

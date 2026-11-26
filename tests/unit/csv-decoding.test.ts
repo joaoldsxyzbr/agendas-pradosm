@@ -6,8 +6,8 @@ import { parseAgendaCsv } from "../../shared/import/parseAgendaBatch.ts";
 
 const source = readFileSync(new URL("../fixtures/agenda-todas-lojas-real-sanitizada.csv", import.meta.url));
 const sourceWithDock = readFileSync(new URL("../fixtures/agenda-todas-lojas-com-doca-sanitizada.csv", import.meta.url));
-const asFile = bytes => new Blob([bytes], { type: "text/csv" });
-const checkParsed = parsed => {
+const asFile = (bytes: Uint8Array) => new File([new Uint8Array(bytes)], "agenda.csv", { type: "text/csv" });
+const checkParsed = (parsed: ReturnType<typeof parseAgendaCsv>) => {
   assert.equal(parsed.totalAppointments, 4);
   assert.deepEqual(parsed.agendas.map(a => a.storeCode), ["CD", "F01", "F08"]);
   assert.deepEqual(parsed.blockingErrors, []);
@@ -44,6 +44,7 @@ describe("Compatibilidade CSV do importador — decodificação nativa", () => {
   it("mantém todos os campos do CSV para a consulta exclusiva do administrador", async () => {
     const parsed = parseAgendaCsv(await readCsvText(asFile(source)));
     const first = parsed.agendas.flatMap(agenda => agenda.appointments)[0];
+    assert.ok(first);
     assert.equal(first.csvFields?.Protocolo, "90000001");
     assert.equal(first.csvFields?.Pedidos, "47121");
     assert.equal(first.csvFields?.["N° NFe"], "45427");

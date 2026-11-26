@@ -118,3 +118,7 @@ A configuração Worker agora usa strict: true para todos os módulos Worker/sha
 ### Gate Node para scripts e testes
 
 CI do commit 43173b0: verify e CodeQL aprovados, inclusive integração Wrangler/D1 local e navegador. Worker e shared integralmente strict. Este incremento cria tsconfig.node.json, reutilizando TypeScript e @types/node já instalados em apps/web; todos os 11 scripts TypeScript entram no gate obrigatório. Adaptador SQL sintético tipado, com coerção restrita à fronteira dos resultados genéricos do SQLite. Os testes TypeScript serão acrescentados ao gate em lotes. CI do novo commit pendente. Nenhum bootstrap remoto foi executado.
+
+### Testes de contrato sob strict
+
+Primeiro lote de 12 dos 30 testes TypeScript incluído no gate Node: contratos de rotas/autenticação, paridade, parsers, validação de importação, senha, migrations, utilitários e benchmark. Fixtures File reais, verificações explícitas de ausência e validação do JSON de benchmark. Os outros testes, especialmente mocks e integrações D1, permanecem pendentes. CI ainda precisa validar os dois novos commits.

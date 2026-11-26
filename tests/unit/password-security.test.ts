@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DUMMY_HASH, PASSWORD_HASH_ITERATIONS, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../../worker/lib/password.ts";
 
 // Hash sintético gerado em teste, nunca obtido do D1 ou de credenciais reais.
-async function fixtureHash(password, iterations) {
+async function fixtureHash(password: string, iterations: number) {
   const salt = new Uint8Array(16).fill(19);
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]
