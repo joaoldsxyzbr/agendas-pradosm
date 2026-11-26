@@ -69,3 +69,9 @@ Consultar [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D
 6. Revisão final independente, evidências de regressão e capacidade; atualizar main antes de validar, sem merge automático.
 
 As etapas acima são planejadas, não entregues. Não duplicar a PR #257 nem alterar o ambiente Preview.
+
+## Execução inicial da issue #259
+
+- Gate estrito incremental para `worker/lib/session.ts` e `worker/lib/login-rate-limit.ts`, preservando o gate de todos os módulos. Payload de sessão validado em runtime; tokens com segmentos extras rejeitados; compatibilidade dos tokens legítimos e legados mantida. Não altera PBKDF2 ou duração das sessões.
+- Busca literal de ocorrências usa `instr(lower(...), lower(?))` em vez de LIKE com curingas escapados; preserva comparação ASCII do SQLite, remove dependência do limite de padrão LIKE e mantém parâmetros. Testes com Unicode, caracteres especiais e autorização.
+- Tipos oficiais Wrangler, demais módulos strict e smoke no workerd real ainda pendentes; não declarar etapa concluída antes do CI.

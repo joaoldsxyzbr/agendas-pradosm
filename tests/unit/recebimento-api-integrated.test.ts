@@ -181,3 +181,23 @@ describe("Recebimento integrado: Worker + SQLite sintético, sem mocks de endpoi
   });
 
 });
+describe("Busca literal do relatório gerencial sem limite de padrão LIKE", () => {
+  it("aceita termos longos UTF-8 e caracteres especiais sem tratá-los como curingas", async () => {
+    const f = createFixture();
+    try {
+      const supplier = "Fornecedor " + "á".repeat(35) + " %_\\ literal";
+      f.sqlite.prepare("UPDATE agendamentos SET fornecedor=?, status='nao_chegou' WHERE id='agend1'").run(supplier);
+      const base = "/api/admin/reports/occurrences?start=2026-10-21&end=2026-10-21&q=";
+      for (const term of ["FORNECEDOR", "á".repeat(35), "%_\\", supplier]) {
+        const response = await f.getAs("view1", base + encodeURIComponent(term));
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.equal(result.total, 1);
+        assert.equal(result.rows[0].supplier, supplier);
+      }
+      const missing = await f.getAs("adm1", base + encodeURIComponent("%%"));
+      assert.equal((await missing.json()).total, 0);
+      assert.equal((await f.getAs("conf1", base + "Fornecedor")).status, 403);
+    } finally { f.sqlite.close(); }
+  });
+});

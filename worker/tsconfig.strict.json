@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": [
+    "./types.d.ts",
+    "./lib/session.ts",
+    "./lib/login-rate-limit.ts"
+  ]
+}

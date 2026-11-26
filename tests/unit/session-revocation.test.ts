@@ -118,3 +118,15 @@ describe("Revogação individual de sessões com D1 sintético", () => {
     } finally { f.sqlite.close(); }
   });
 });
+
+describe("Formato e validade do token de sessão", () => {
+  it("rejeita segmentos extras e assinatura adulterada sem invalidar tokens legítimos", async () => {
+    const token = await createSessionToken("adm", 1, SECRET);
+    assert.ok(await verifySessionToken(token, SECRET));
+    assert.equal(await verifySessionToken(token + ".", SECRET), null);
+    const [payload, signature] = token.split(".");
+    const altered = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
+    assert.equal(await verifySessionToken(payload + "." + altered, SECRET), null);
+    assert.equal(await verifySessionToken(token, SECRET, Date.now() + 31 * 86400000), null);
+  });
+});

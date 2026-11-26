@@ -140,11 +140,12 @@ adminReportRoutes.get("/occurrences", async (c) => {
     "AND ag.ativo = 1 AND (ag.status = 'nao_chegou' OR (ag.status = 'aguardando' AND a.status_dia = 'concluido'))"
   ].join(" ");
   const hasSearch = typeof paging.data.q === "string" && paging.data.q.length > 0;
-  const like = hasSearch ? "%" + paging.data.q.replace(/[\\%_]/g, (char) => "\\" + char) + "%" : null;
+  // Substring literal, com a mesma comparação ASCII sem distinção de caixa
+  // do LIKE padrão do SQLite. Evita o limite de bytes do padrão LIKE no D1.
   const searchClause = hasSearch
-    ? " AND (ag.fornecedor LIKE ? ESCAPE '\\' OR ag.protocolo LIKE ? ESCAPE '\\')"
+    ? " AND (instr(lower(ag.fornecedor), lower(?)) > 0 OR instr(lower(ag.protocolo), lower(?)) > 0)"
     : "";
-  const searchArgs = hasSearch ? [like, like] : [];
+  const searchArgs = hasSearch ? [paging.data.q, paging.data.q] : [];
   const [count, rows] = await Promise.all([
     c.env.DB.prepare("SELECT COUNT(*) AS total " + base + searchClause).bind(...filters, ...searchArgs).first(),
     c.env.DB.prepare([
