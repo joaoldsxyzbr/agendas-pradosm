@@ -3,7 +3,9 @@ import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import type { Env } from "../../worker/env.ts";
 type Hooks = { prepare?: (sql: string) => void; afterFirst?: (sql: string) => void; beforeRun?: (sql: string) => void };
 function bindValue(value: unknown): SQLInputValue {
-  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint" || ArrayBuffer.isView(value)) return value;
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
+  // SQLite exige memória própria, não um ArrayBufferLike possivelmente compartilhado.
+  if (ArrayBuffer.isView(value)) return new Uint8Array(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
   throw new TypeError("Parâmetro SQLite incompatível.");
 }
 export function sqliteD1(sqlite: DatabaseSync, hooks: Hooks = {}): D1Database {
