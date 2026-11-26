@@ -11,6 +11,17 @@
     "./lib/http.ts",
     "./lib/presence.ts",
     "./lib/time.ts",
-    "../shared/time.ts"
+    "../shared/agenda.ts",
+    "../shared/api.ts",
+    "../shared/auth.ts",
+    "../shared/avisos.ts",
+    "../shared/observations.ts",
+    "../shared/realtime.ts",
+    "../shared/store.ts",
+    "../shared/time.ts",
+    "./repositories/audit.ts",
+    "./repositories/presence.ts",
+    "./routes/admin-audit.ts",
+    "./routes/presence.ts"
   ]
 }

@@ -1,4 +1,16 @@
-async function touchConferentePresence(db, input) {
+interface PresenceInput {
+  userId: string;
+  storeId: string;
+  interacted: boolean;
+  now: string;
+}
+interface PresenceRow {
+  usuario_id: string;
+  loja_id: string;
+  ultima_interacao_em: string | null;
+  ultimo_sinal_em: string;
+}
+async function touchConferentePresence(db: D1Database, input: PresenceInput): Promise<void> {
   const interactionAt = input.interacted ? input.now : null;
   await db.prepare(
     `INSERT INTO conferente_presenca (
@@ -28,10 +40,10 @@ async function touchConferentePresence(db, input) {
     input.now
   ).run();
 }
-async function clearConferentePresence(db, userId) {
+async function clearConferentePresence(db: D1Database, userId: string): Promise<void> {
   await db.prepare("DELETE FROM conferente_presenca WHERE usuario_id = ?").bind(userId).run();
 }
-async function listActiveConferentePresence(db) {
+async function listActiveConferentePresence(db: D1Database): Promise<PresenceRow[]> {
   const result = await db.prepare(
     `SELECT
         p.usuario_id,
@@ -45,8 +57,8 @@ async function listActiveConferentePresence(db) {
       WHERE u.papel = 'conferente'
         AND u.ativo = 1
         AND u.excluido_em IS NULL`
-  ).all();
-  return result.results;
+  ).all<PresenceRow>();
+  return result.results ?? [];
 }
 export {
   clearConferentePresence,
