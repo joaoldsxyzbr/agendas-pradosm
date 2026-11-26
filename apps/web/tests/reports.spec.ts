@@ -195,3 +195,20 @@ test("Rosca do relatório mantém o rótulo central dentro do anel colorido", as
   });
   expect(inside).toBe(true);
 });
+
+
+test("Período rápido mantém os filtros aplicados e o formulário sincronizados", async ({ page }) => {
+  await mock(page);
+  await page.goto("/admin/reports");
+  await expect(page.getByLabel("Indicadores gerenciais")).toContainText("66,7%");
+  const summary = page.locator('summary[aria-label="Editar período e lojas"]');
+  await summary.click();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await page.locator('input[type="checkbox"][value="F01"]').check();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await page.getByRole("button", { name: "Últimos 7 dias" }).click();
+  await expect(summary).toContainText("Todas as lojas");
+  await summary.click();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await expect(page.locator('input[type="checkbox"][value="F01"]')).not.toBeChecked();
+});

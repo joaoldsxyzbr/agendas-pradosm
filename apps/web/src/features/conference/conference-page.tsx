@@ -42,7 +42,7 @@ export type ConferenceApi = {
   patchObservation: (id: string, observation: string | null) => Promise<StoreAppointment>;
   patchManual: (id: string, supplier: string) => Promise<StoreAppointment>;
   deleteManual: (id: string) => Promise<void>;
-  getDetail: (id: string) => Promise<StoreAppointmentDetail>;
+  getDetail: (id: string, signal?: AbortSignal) => Promise<StoreAppointmentDetail>;
 };
 
 export function ManualSupplierDialog({ target, api, onClose, onSaved, onDeleted }: {
@@ -129,11 +129,11 @@ export function ManualSupplierDialog({ target, api, onClose, onSaved, onDeleted 
   </dialog>;
 }
 
-export function AppointmentDetailsDialog({ appointmentId, getDetail, onClose }: { appointmentId: string; getDetail: (id: string) => Promise<StoreAppointmentDetail>; onClose: () => void }) {
+export function AppointmentDetailsDialog({ appointmentId, getDetail, onClose }: { appointmentId: string; getDetail: (id: string, signal?: AbortSignal) => Promise<StoreAppointmentDetail>; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const query = useQuery({
     queryKey: ["conference", "detail", appointmentId],
-    queryFn: () => getDetail(appointmentId),
+    queryFn: ({ signal }) => getDetail(appointmentId, signal),
     staleTime: 10_000, refetchOnWindowFocus: true,
   });
   useEffect(() => {
@@ -464,7 +464,7 @@ export function ConferencePage(){
   },[today]);
   const query=useQuery({
     queryKey:["conference","agenda",date,today],
-    queryFn:()=>loadStoreAgenda(date,today),
+    queryFn:({ signal })=>loadStoreAgenda(date,today,signal),
     refetchInterval:30000, refetchOnWindowFocus:true,
   });
   const agendaQueryKey=["conference","agenda",date,today] as const;

@@ -4,14 +4,14 @@ import { getStores } from "@/features/receiving/api";
 import { occurrencesSchema, reportParams, reportSchema, type ReportFilters } from "./model";
 
 export { getStores };
-export async function getReport(filters: Pick<ReportFilters, "start" | "end" | "stores">) {
-  return reportSchema.parse(await apiFetch<unknown>("/api/admin/reports?" + reportParams(filters)));
+export async function getReport(filters: Pick<ReportFilters, "start" | "end" | "stores">, signal?: AbortSignal) {
+  return reportSchema.parse(await apiFetch<unknown>("/api/admin/reports?" + reportParams(filters), { signal }));
 }
-export async function getOccurrences(filters: ReportFilters, offset: number, query: string) {
+export async function getOccurrences(filters: ReportFilters, offset: number, query: string, signal?: AbortSignal) {
   const params = reportParams(filters);
   params.set("limit", "50");
   params.set("offset", String(offset));
   if (query) params.set("q", query);
-  return occurrencesSchema.parse(await apiFetch<unknown>("/api/admin/reports/occurrences?" + params));
+  return occurrencesSchema.parse(await apiFetch<unknown>("/api/admin/reports/occurrences?" + params, { signal }));
 }
 export const storeFilterSchema = z.array(z.object({ codigo: z.string(), nome: z.string(), ativo: z.boolean() }));

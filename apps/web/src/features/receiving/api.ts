@@ -15,9 +15,9 @@ export async function getAgendas(date: string, signal?: AbortSignal) {
 export async function getPresence() {
   return z.array(presenceSchema).parse(await apiFetch<unknown>("/api/admin/presence"));
 }
-export async function getAgendaDetail(id: string) {
+export async function getAgendaDetail(id: string, signal?: AbortSignal) {
   return detailSchema.parse(await apiFetch<unknown>(
-    `/api/admin/agendas/${encodeURIComponent(id)}`,
+    `/api/admin/agendas/${encodeURIComponent(id)}`, { signal },
   ));
 }
 

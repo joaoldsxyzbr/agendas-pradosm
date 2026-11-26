@@ -40,23 +40,23 @@ export const historyDetailKey = ["admin", "history", "agenda"] as const;
 export const historyDayEventsKey = ["admin", "history", "day-events"] as const;
 export const historyStatusEventsKey = ["admin", "history", "status-events"] as const;
 
-export async function listHistoryAgendas(storeCode: string, date: string, page: number) {
+export async function listHistoryAgendas(storeCode: string, date: string, page: number, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (date) params.set("date", date);
   if (storeCode) params.set("storeCode", storeCode);
   params.set("limit", String(HISTORY_PAGE_SIZE));
   params.set("offset", String(page * HISTORY_PAGE_SIZE));
-  return historyPageSchema.parse(await apiFetch<unknown>(`/api/admin/agendas?${params}`));
+  return historyPageSchema.parse(await apiFetch<unknown>(`/api/admin/agendas?${params}`, { signal }));
 }
 
-export async function listDayEvents(agendaId: string) {
+export async function listDayEvents(agendaId: string, signal?: AbortSignal) {
   return z.array(dayEventSchema).parse(await apiFetch<unknown>(
-    `/api/admin/agendas/${encodeURIComponent(agendaId)}/history`,
+    `/api/admin/agendas/${encodeURIComponent(agendaId)}/history`, { signal },
   ));
 }
 
-export async function listStatusEvents(appointmentId: string) {
+export async function listStatusEvents(appointmentId: string, signal?: AbortSignal) {
   return z.array(statusEventSchema).parse(await apiFetch<unknown>(
-    `/api/admin/appointments/${encodeURIComponent(appointmentId)}/history`,
+    `/api/admin/appointments/${encodeURIComponent(appointmentId)}/history`, { signal },
   ));
 }
