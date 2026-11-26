@@ -12,13 +12,15 @@ Configuração confirmada em 29/09/2026:
 - build command: `npm run verify:production`;
 - deploy command: `npm run deploy:cloudflare`;
 - diretório raiz: `/`;
-- previews de PR: habilitados com recursos isolados da produção.
+- previews de PR: configuração histórica preservada; D1 Preview não está em uso desde novembro de 2026, e o check remoto pode falhar com 10181. Validação obrigatória é o CI com ambiente local.
 
 O deploy command do Workers Builds deve permanecer **`npm run deploy:cloudflare`**. O build command já executa `npm run verify:production`, portanto o caminho Cloudflare aplica apenas o gate de migrations, as migrations remotas e a publicação, sem repetir testes e build. O comando local **`npm run deploy`** continua autocontido: primeiro verifica toda a aplicação e depois chama `deploy:cloudflare`.
 
 Referência oficial: https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 
-## Previews de pull request
+## Previews de pull request — histórico (fora do fluxo atual)
+
+Não recriar D1 Preview nem alterar bindings para produção. Os procedimentos seguintes são registro histórico, não instruções operacionais vigentes. O CI usa dados sintéticos locais.
 
 ### Diagnóstico de falha na autenticação da Preview (19/10/2026)
 
@@ -303,3 +305,6 @@ O comando local `npm run deploy` continua autocontido e executa a verificação 
 - Produção deve manter pelo menos dois administradores ativos quando houver um segundo responsável disponível. Nunca criar credenciais automaticamente ou registrar senha no GitHub.
 - A auditoria operacional deve ser preservada. Não executar limpeza automática de `auditoria`, `historico_status` ou `historico_agenda`; revisar volume e retenção quando o banco atingir crescimento material.
 - A visibilidade pública/privada do repositório é uma decisão operacional. Não alterar automaticamente, pois pode afetar integrações, previews e acesso de manutenção.
+## Cuidados para a expansão 0031
+
+Antes do release autorizado, conferir destinos sem correspondência por código, registrar bookmark e confirmar migrations pendentes. A nova coluna de destino preserva o código histórico e o trigger aceita escritas do Worker anterior durante a transição. Depois de renomear/reutilizar códigos de loja, rollback para código antigo pode voltar a resolver destinatários incorretamente: preferir correção à frente e validar visibilidade antes de rollback. Nunca restaurar o D1 automaticamente. Confirmar versão publicada e resultado da migration; não realizar deploy paralelo ao Workers Builds.

@@ -516,3 +516,34 @@ test("Admin consulta detalhes do agendamento com histórico, NF-e e pedidos",asy
   await expect(details).toHaveCount(0);
   await expect(dialog).toBeVisible();
 });
+
+test("Recebimento reconcilia o cache ao reconectar depois de perder um evento", async ({page}) => {
+  const connections: WebSocketRoute[] = [];
+  await page.routeWebSocket("**/api/realtime", ws => {
+    connections.push(ws);
+    ws.onMessage(message => { if(message==="ping") ws.send("pong"); });
+    // A segunda conexão só anuncia ready depois de verificarmos a ausência do socket anterior.
+    if(connections.length===1) ws.send(JSON.stringify({version:1,type:"realtime.ready"}));
+  });
+  const controls=await mock(page,"admin",{realtime:"on"});
+  await page.goto("/admin");
+  await page.getByLabel("Data da agenda").fill("2026-10-30");
+  await expect(page.getByText("Tempo real conectado")).toBeVisible();
+  await expect(page.getByTestId("receiving-store-F02").getByText("Concluído")).toHaveCount(0);
+  await required(connections[0]).close({code:1011,reason:"Falha sintética"});
+  await expect(page.getByText("Tempo real conectado")).toHaveCount(0);
+  controls.setAgendas(agendas.map((row,i)=>i===1?{...row,dayStatus:"concluido",recebido:20,aguardando:0}:row));
+  await expect.poll(()=>connections.length).toBe(2);
+  await required(connections[1]).send(JSON.stringify({version:1,type:"realtime.ready"}));
+  await expect(page.getByText("Tempo real conectado")).toBeVisible();
+  await expect(page.getByTestId("receiving-store-F02").getByText("Concluído")).toBeVisible();
+});
+
+test("Recebimento continua consultável se configuração realtime responder 503",async({page})=>{
+  await mock(page,"admin",{realtime:"on"});
+  await page.route("**/api/realtime/config",route=>route.fulfill({status:503,json:{error:"REALTIME_INDISPONIVEL"}}));
+  await page.goto("/admin");
+  await page.getByLabel("Data da agenda").fill("2026-10-30");
+  await expect(page.getByRole("table",{name:"Recebimento por loja"}).locator("tbody tr")).toHaveCount(8);
+  await expect(page.getByText("Tempo real conectado")).toHaveCount(0);
+});

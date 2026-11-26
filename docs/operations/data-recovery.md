@@ -125,3 +125,7 @@ Este documento não autoriza:
 - editar `d1_migrations` manualmente;
 - restaurar banco e publicar código incompatível com o schema resultante;
 - executar recuperação sem registrar previamente o ponto atual.
+
+## Exercício de recuperação local (CI)
+
+`tests/unit/data-recovery-local.test.ts` usa exclusivamente SQLite temporário com todas as migrations e fixture sintética. Gera snapshot consistente via VACUUM INTO, simula alteração posterior, reabre o snapshot somente leitura, compara dados e valida integrity_check, foreign_key_check, status, avisos por loja e saúde HTTP. O original é preservado até o fim do exercício. Não é teste do serviço Time Travel da Cloudflare e não autoriza restore remoto. Bookmark de produção foi consultado por leitura em 26/11/2026; janela e procedimento devem ser revalidados em cada incidente real.

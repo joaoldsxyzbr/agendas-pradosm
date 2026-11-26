@@ -65,3 +65,7 @@ O canal de comunicação possui um fluxo cronológico único de mensagens e avis
 `worker/repositories/agenda-queries.ts` concentra tipos de linhas e leituras SQL de agendas/agendamentos/históricos, sem dependência de mutações. `worker/repositories/agendas.ts` concentra importação, alterações e guardas transacionais, reexportando os contratos públicos existentes. A separação é por responsabilidade; nenhuma nova camada de abstração ou serviço externo.
 
 - O direcionamento dos avisos usa o ID permanente da loja (`0031_avisos_destino_estavel.sql`); o código original fica preservado e a API exibe o atual. Destinos legados não resolvidos não ampliam visibilidade.
+
+### Limites de responsabilidade consolidados
+
+`agenda-imports.ts` concentra preparação e execução atômica das importações e seu orçamento de statements; `agenda-queries.ts` contém leituras e contratos de linhas; `agendas.ts` mantém alterações operacionais e reexports compatíveis. Sem camada extra de serviço. No React, cancelamento das consultas de agenda por data evita trabalho obsoleto e eventos realtime invalidam também o detalhe administrativo da agenda afetada. Polling e foco permanecem como reconciliação.

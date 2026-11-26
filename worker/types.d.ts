@@ -1,5 +1,5 @@
-// Tipos ambientais do runtime Cloudflare Workers usados pelo Worker.
-// Subconjunto das APIs efetivamente usadas; sem dependências externas.
+// Subconjunto de tipos ambientais para mocks Node exclusivamente.
+// O Worker é compilado contra os tipos oficiais gerados pelo Wrangler.
 
 interface D1Result<T = unknown> {
   results?: T[];
@@ -27,8 +27,6 @@ interface RateLimitOutcome {
 interface RateLimit {
   limit(options: { key: string }): Promise<RateLimitOutcome>;
 }
-
-// Subconjunto do binding R2 usado pela retenção de dados (somente escrita).
 
 interface DurableObjectStorage {
   getAlarm(): Promise<number | null>;

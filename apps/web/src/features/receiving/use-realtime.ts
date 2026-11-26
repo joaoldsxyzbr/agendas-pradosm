@@ -17,11 +17,13 @@ export function useReceivingRealtime(sessionId: string | undefined, selectedDate
         if (event.type === "realtime.ready") {
           void client.invalidateQueries({ queryKey: ["avisos"] });
           refreshAgenda();
+          void client.invalidateQueries({ queryKey: ["conference", "admin-agenda"] });
           void client.invalidateQueries({ queryKey: ["receiving", "presence"], exact: true });
         } else if (event.type === "avisos.changed") {
           if (mode === "on") void client.invalidateQueries({ queryKey: ["avisos"] });
         } else if (event.type === "agenda.changed") {
           if (event.date === selectedDateRef.current) refreshAgenda();
+          if (mode === "on") void client.invalidateQueries({ queryKey: ["conference", "admin-agenda", event.agendaId], exact: true });
         } else if (mode === "on" && event.type === "presence.snapshot") {
           client.setQueryData(["receiving", "presence"], event.stores);
         } else if (mode === "on" && event.type === "presence.changed") {

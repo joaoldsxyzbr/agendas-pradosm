@@ -7,9 +7,9 @@ import {
 export async function getStores() {
   return z.array(storeSchema).parse(await apiFetch<unknown>("/api/admin/stores"));
 }
-export async function getAgendas(date: string) {
+export async function getAgendas(date: string, signal?: AbortSignal) {
   return z.array(summarySchema).parse(await apiFetch<unknown>(
-    `/api/admin/agendas?date=${encodeURIComponent(date)}`,
+    `/api/admin/agendas?date=${encodeURIComponent(date)}`, { signal },
   ));
 }
 export async function getPresence() {
