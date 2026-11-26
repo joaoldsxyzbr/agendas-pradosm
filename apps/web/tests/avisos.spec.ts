@@ -23,7 +23,7 @@ function buildCanal() {
   };
 }
 
-async function setup(page, { role = "admin", paginated = false } = {}) {
+async function setup(page, { role = "admin", paginated = false, realtime = false } = {}) {
   const user = role === "admin" ? admin : role === "visualizador" ? visualizador : conferente;
   const state = { data: buildCanal(), nextId: 0 };
   const requests = [];
@@ -43,7 +43,7 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
       return route.fulfill({ status: 204, body: "" });
     }
     if (path === "/api/auth/me") return route.fulfill({ json: user });
-    if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
+    if (path === "/api/realtime/config") return route.fulfill({ json: { mode: realtime ? "on" : "off", protocolVersion: 1 } });
     if (path === "/api/avisos" && method === "GET") {
       if (paginated && url.searchParams.has("before")) {
         return route.fulfill({ json: {
@@ -128,7 +128,7 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
     throw Error("Endpoint inesperado no teste de avisos: " + method + " " + path);
   });
   await page.goto(role === "conferente" ? "/app" : "/admin/avisos");
-  return requests;
+  return Object.assign(requests, { state });
 }
 
 test("Conferente lê mensagens, confirma aviso oficial e escreve", async ({ page }) => {
@@ -298,4 +298,38 @@ test("Reage, troca e remove reação sem marcar aviso como lido", async ({ page 
   await expect(aviso.getByText("👀 1")).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Doca 3 fechada" }).getByRole("button", { name: "Confirmar leitura" })).toBeVisible();
   expect(requests.filter(r => r.path === "/api/avisos/av1/reacao").map(r => r.body.emoji)).toEqual(["👍", "👀", null]);
+});
+
+test("Toast realtime aparece uma vez para novo aviso fora da área visível", async ({ page }) => {
+  let socket;
+  await page.routeWebSocket("**/api/realtime", ws => {
+    socket = ws;
+    ws.onMessage(message => { if (message === "ping") ws.send("pong"); });
+    ws.send(JSON.stringify({ version: 1, type: "realtime.ready" }));
+  });
+  const requests = await setup(page, { realtime: true });
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await expect.poll(() => Boolean(socket)).toBe(true);
+  await expect(page.getByTestId("aviso-toast")).toHaveCount(0);
+  await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca 3");
+  await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
+  await expect(page.getByText("Resultados para:")).toBeVisible();
+  await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
+  const aviso = { id: "av-realtime", tipo: "aviso", titulo: "Entrega urgente", mensagem: "Nova publicação operacional.", criadoEm: "2026-11-11T13:00:00.000Z", lido: false, urgente: true, autor: "Outro administrador", lojas: null, proprio: false };
+  requests.state.data = { ...requests.state.data, avisos: [aviso, ...requests.state.data.avisos], naoLidos: 2 };
+  const signal = JSON.stringify({ version: 1, type: "avisos.changed" });
+  socket.send(signal);
+  const toast = page.getByTestId("aviso-toast");
+  await expect(toast).toHaveCount(1);
+  await expect(toast.getByText("Novo aviso urgente")).toBeVisible();
+  await expect(toast.getByText("Entrega urgente")).toBeVisible();
+  await toast.getByRole("button", { name: "Fechar notificação" }).click();
+  const count = requests.filter(r => r.path === "/api/avisos" && r.method === "GET").length;
+  socket.send(signal);
+  await expect.poll(() => requests.filter(r => r.path === "/api/avisos" && r.method === "GET").length).toBeGreaterThan(count);
+  await expect(toast).toHaveCount(0);
+  // Uma atualização exclusiva das reações não é uma nova publicação.
+  requests.state.data = { ...requests.state.data, avisos: requests.state.data.avisos.map(a => a.id === aviso.id ? { ...a, reacoes: [{ emoji: "👀", nome: "Conferente", proprio: false }] } : a) };
+  socket.send(signal);
+  await expect(toast).toHaveCount(0);
 });
