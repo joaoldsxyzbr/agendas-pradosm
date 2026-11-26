@@ -225,3 +225,7 @@ Os planos e especificações técnicas ficam em `docs/superpowers/`.
 - O login usa rate limiter com comportamento fail-closed.
 - Códigos de loja são canonicalizados e possuem unicidade case-insensitive.
 - Mutações críticas usam operações atômicas no D1 quando o contrato exige.
+
+### Preservação de históricos
+
+O D1 de produção é `agendas-pradosm`. Históricos de agenda, status, auditoria e avisos são preservados integralmente; a rotina de retenção somente monitora volume e antiguidade, sem R2. Diagnósticos e sessões expiradas mantêm suas limpezas próprias. O D1 de Preview não faz parte do fluxo de uso atual; testes continuam isolados com dados sintéticos.

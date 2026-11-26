@@ -92,7 +92,7 @@ async function createUser(db, input, actorUserId) {
   const lojaId = input.papel === "conferente" ? input.lojaId : null;
   const statements = [
     db.prepare(
-      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"
+      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) SELECT ?, ?, ?, ?, ?, ?, 1, ?, ? WHERE ? IS NULL OR EXISTS (SELECT 1 FROM lojas WHERE id = ? AND excluido_em IS NULL)"
     ).bind(
       id,
       lojaId,
@@ -101,13 +101,16 @@ async function createUser(db, input, actorUserId) {
       passwordHash,
       input.papel,
       now,
-      now
+      now,
+      lojaId,
+      lojaId
     )
   ];
   statements.push(
     auditStatement(db, {
       userId: actorUserId,
       action: "usuario_criado",
+      onlyIfPreviousWrite: true,
       entity: "usuario",
       entityId: id,
       storeId: lojaId,
@@ -123,7 +126,8 @@ async function createUser(db, input, actorUserId) {
       createdAt: now
     })
   );
-  await db.batch(statements);
+  const [write] = await db.batch(statements);
+  if (write?.meta?.changes !== 1) throw Object.assign(new Error("Loja indisponível."), { code: "CONFLITO_ESTADO" });
   return await findUserById(db, id);
 }
 async function updateUser(db, current, input, actorUserId) {
@@ -143,7 +147,7 @@ async function updateUser(db, current, input, actorUserId) {
   const sessionVersion = current.session_version + (input.senha || statusChanged || identityChanged ? 1 : 0);
   const statements = [
     db.prepare(
-      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ?"
+      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM lojas WHERE id = ? AND excluido_em IS NULL))"
     ).bind(
       lojaId,
       nome,
@@ -160,7 +164,9 @@ async function updateUser(db, current, input, actorUserId) {
       current.papel,
       current.ativo,
       current.loja_id,
-      current.session_version
+      current.session_version,
+      lojaId,
+      lojaId
     )
   ];
   statements.push(

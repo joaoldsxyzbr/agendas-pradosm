@@ -52,14 +52,6 @@ function fixture() {
   return { sqlite, db };
 }
 
-function fakeR2() {
-  const objetos = new Map();
-  return {
-    objetos,
-    async put(key, value) { objetos.set(key, value); return { key }; }
-  };
-}
-
 function iso(diasAtras) {
   return new Date(AGORA.getTime() - diasAtras * DIA_MS).toISOString();
 }
@@ -82,80 +74,26 @@ function inserirAuditoria(sqlite, id, diasAtras) {
   ).run(id, "adm", "acao_sintetica", "agenda", "agenda1", iso(diasAtras));
 }
 
-describe("Retenção de dados com export para R2", () => {
-  it("exporta e purga somente registros além do corte, mantendo os recentes", async () => {
+describe("Monitoramento e preservação de históricos", () => {
+  it("preserva todos os registros, inclusive antigos, sem exportação ou purge", async () => {
     const { sqlite, db } = fixture();
-    const bucket = fakeR2();
     inserirHistoricoStatus(sqlite, "hs-antigo", 400);
     inserirHistoricoStatus(sqlite, "hs-recente", 10);
     inserirHistoricoAgenda(sqlite, "ha-antigo", 400);
     inserirHistoricoAgenda(sqlite, "ha-recente", 10);
     inserirAuditoria(sqlite, "au-antiga", 800);
     inserirAuditoria(sqlite, "au-recente", 100);
-
-    const resumo = await runRetention(db, bucket, { now: AGORA, runId: "run-teste" });
-
+    const resumo = await runRetention(db, { now: AGORA, runId: "run-teste" });
     assert.equal(resumo.runId, "run-teste");
-    assert.equal(resumo.exportacaoPulada, false);
-    const hs = resumo.tabelas.find((t) => t.tabela === "historico_status");
-    const ha = resumo.tabelas.find((t) => t.tabela === "historico_agenda");
-    const au = resumo.tabelas.find((t) => t.tabela === "auditoria");
-    assert.equal(hs.exportados, 1);
-    assert.equal(hs.purgados, 1);
-    assert.equal(ha.exportados, 1);
-    assert.equal(ha.purgados, 1);
-    assert.equal(au.exportados, 1);
-    assert.equal(au.purgados, 1);
-
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM historico_status WHERE id='hs-antigo'").get().n, 0
-    );
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM historico_status WHERE id='hs-recente'").get().n, 1
-    );
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM historico_agenda WHERE id='ha-antigo'").get().n, 0
-    );
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE id='au-antiga'").get().n, 0
-    );
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE id='au-recente'").get().n, 1
-    );
-
-    assert.equal(bucket.objetos.size, 3);
-    for (const [chave, corpo] of bucket.objetos) {
-      assert.match(chave, /^retencao\/(historico_status|historico_agenda|auditoria)\/run-teste\/0001\.json$/);
-      const lote = JSON.parse(corpo);
-      assert.ok(Array.isArray(lote.registros) && lote.registros.length === 1);
-      assert.equal(lote.quantidade, 1);
-    }
-    const lotes = [...bucket.objetos.values()].map((corpo) => JSON.parse(corpo));
-    const exportHs = lotes.find((l) => l.tabela === "historico_status");
-    assert.equal(exportHs.registros[0].id, "hs-antigo");
-    const exportAu = lotes.find((l) => l.tabela === "auditoria");
-    assert.equal(exportAu.registros[0].id, "au-antiga");
-    assert.match(exportAu.corte, /^2024-11-/);
-  });
-
-  it("nunca purga quando o bucket R2 não está disponível", async () => {
-    const { sqlite, db } = fixture();
-    inserirHistoricoStatus(sqlite, "hs-antigo", 400);
-    inserirAuditoria(sqlite, "au-antiga", 800);
-
-    const resumo = await runRetention(db, null, { now: AGORA, runId: "run-sempBucket" });
-
     assert.equal(resumo.exportacaoPulada, true);
-    const hs = resumo.tabelas.find((t) => t.tabela === "historico_status");
-    assert.equal(hs.motivo, "SEM_BUCKET_R2");
-    assert.equal(hs.pendentes, 1);
-    assert.equal(hs.purgados, 0);
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM historico_status WHERE id='hs-antigo'").get().n, 1
-    );
-    assert.equal(
-      sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE id='au-antiga'").get().n, 1
-    );
+    for (const item of resumo.tabelas) {
+      assert.equal(item.exportados, 0);
+      assert.equal(item.purgados, 0);
+      assert.equal(item.pendentes, 1);
+      assert.equal(item.motivo, "PRESERVACAO_HISTORICO");
+      assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM " + item.tabela).get().n, 2);
+    }
+    sqlite.close();
   });
 
   it("status expõe contagem e expiradas por tabela", async () => {
@@ -173,7 +111,7 @@ describe("Retenção de dados com export para R2", () => {
 
   it("alerta de tamanho dispara acima do limite configurado", async () => {
     const { db } = fixture();
-    const resumo = await runRetention(db, fakeR2(), {
+    const resumo = await runRetention(db, {
       now: AGORA, runId: "run-alerta", rowWarningThreshold: 1
     });
     assert.ok(resumo.alertaTamanhoBanco);

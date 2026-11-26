@@ -16,8 +16,8 @@ A UI legada foi substituída pelo React na raiz do aplicativo. Documentos em `do
 - `apps/web/src/app/routes.tsx`: rotas `/login`, `/admin`, `/admin/reports`, `/admin/history`, `/admin/stores`, `/admin/users`, `/admin/diagnostics` e `/app`. O Worker aplica a autorização efetiva por perfil.
 - `scripts/build-native.mjs`: compila `apps/web/` com Vite para `dist-modern/` e publica o React na raiz de `dist/`, junto aos arquivos de `public/` (ícone e cabeçalhos de segurança).
 - `worker/index.ts`: entrada do Cloudflare Worker, incluindo cron; `worker/app.ts`: Hono, middleware e rotas `/api/*`. O Worker serve o `dist/` com fallback de SPA para URLs profundas.
-- `worker/routes/`: autenticação, validação e autorização; `worker/repositories/`: D1; `worker/services/` e `worker/realtime/`: regras operacionais, retenção de dados com export para R2 e WebSockets/Durable Object.
-- O cron diário (03:05 UTC) fecha agendas passadas, expurga diagnósticos antigos (30 dias) e roda a retenção: `historico_status`/`historico_agenda` acima de 12 meses e `auditoria` acima de 24 meses, sempre exportadas em JSON para o bucket R2 antes do purge (política em `docs/operations/retencao-e-backup-2026-11-05.md`).
+- `worker/routes/`: autenticação, validação e autorização; `worker/repositories/`: D1; `worker/services/` e `worker/realtime/`: regras operacionais, monitoramento de tamanho do D1 e WebSockets/Durable Object.
+- O cron diário (03:05 UTC) fecha agendas passadas, expurga diagnósticos antigos (30 dias) e monitora o volume dos históricos e auditoria sem exclusão automática. O projeto não utiliza R2.
 - `shared/`: contratos, validações, datas e parser de importação CSV/PDF (incluindo WASM para PDF).
 - `migrations/`: sequência imutável de migrations aplicada pelo Wrangler; não reescrever arquivos já aplicados.
 - `tests/unit/`: contratos, segurança, parsers e lógica de Worker; `apps/web/tests/`: navegação e fluxos React no Chromium, com APIs simuladas.
@@ -59,3 +59,5 @@ O canal de comunicação possui um fluxo cronológico único de mensagens e avis
 
 - Reações: migration aditiva `0030_avisos_reacoes.sql`, chave composta por aviso e usuário, emojis 👍/👀/😂. A API `PUT /api/avisos/:id/reacao` define ou remove (emoji null), exige visibilidade e impede autoria própria. Visualizadores não acessam nenhuma rota do canal.
 - O evento realtime `avisos.changed` sinaliza atualização a administradores e conferentes destinatários (sem conteúdo); D1/API permanecem fonte de verdade. Toasts locais só para novas publicações de terceiros, sem alertar reações ou histórico inicial; polling de fallback preservado.
+
+- O direcionamento dos avisos usa o ID permanente da loja (`0031_avisos_destino_estavel.sql`); o código original fica preservado e a API exibe o código atual. Destinos legados não resolvidos não ampliam a visibilidade. Índice por data/ID suporta a paginação.

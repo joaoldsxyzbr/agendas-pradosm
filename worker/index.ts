@@ -23,7 +23,7 @@ export default {
       const rowWarningThreshold = Number.isFinite(limiteConfigurado) && limiteConfigurado > 0
         ? limiteConfigurado
         : undefined;
-      const resumo = await runRetention(env.DB, env.RETENTION_BUCKET ?? null, {
+      const resumo = await runRetention(env.DB, {
         now: new Date(controller.scheduledTime),
         ...(rowWarningThreshold ? { rowWarningThreshold } : {})
       });
