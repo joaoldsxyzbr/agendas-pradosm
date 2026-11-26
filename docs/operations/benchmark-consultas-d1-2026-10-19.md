@@ -33,3 +33,6 @@ O workflow não autentica usuários nem altera registros. Sucesso no HTTP compro
 5. Alterações por PR e CI, Preview isolada, smoke e deploy confirmado.
 
 Este diagnóstico não altera o schema nem endpoints de produção.
+## Atualização de 26/11/2026 — programa #259
+
+O diagnóstico de outubro acima é histórico. Na PR #258, o benchmark passa a usar as migrations reais e funções TypeScript de repositório e rotas gerenciais, com 20 repetições completas, mediana/p95 descritivo, quantidade de consultas e plano de cada statement. Inclui páginas iniciais e profundas, relatórios até 93 dias, ocorrências e avisos com cursor e badge. Volumes: 162, 1.000 e 5.000 agendas, 15 agendamentos e 2 avisos por agenda. O quick usa 40 agendas e duas repetições. CI executa os cenários completos em SQLite local; resultados não são medições remotas da Cloudflare. Preview não integra o escopo deste programa; não habilitar ou recriar D1 Preview. Nenhuma migration ou índice novo nesta etapa.

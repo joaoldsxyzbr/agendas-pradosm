@@ -39,7 +39,6 @@ jobs:
           set -euo pipefail
           node scripts/check-modern-boundary.mjs
           node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};for(const n of ["react","react-dom","react-router-dom","vite","vitest","typescript"])if(d[n])process.exit(1)'
-          node scripts/check-worker.mjs
       - name: Validar migrations e Worker
         run: npm run check:migrations
       - name: Testes JavaScript e bootstrap administrativo
@@ -55,10 +54,12 @@ jobs:
         run: npx wrangler deploy --dry-run --config wrangler.preview.jsonc
       - name: Dry-run do Worker de producao sem deploy
         run: npx wrangler deploy --dry-run --config wrangler.jsonc
-      - name: Integração real Worker e D1 local descartável
-        run: npm run test:integration:local
+      - name: Baseline SQL completo (SQLite local sintético)
+        run: npm run benchmark:agendas
       - name: Preparar Chromium
         run: npx playwright install --with-deps chromium
+      - name: Integração real Worker, D1, WebSocket e navegador local
+        run: npm run test:integration:local
       - name: E2E React isolado com dados sinteticos
         env:
           CI: "true"

@@ -1,6 +1,7 @@
 // Smoke HTTP contra o runtime real do Wrangler, exclusivamente local.
 // Não usa credenciais, D1 remoto, preview, nem o estado local do desenvolvedor.
 import assert from "node:assert/strict";
+import { chromium, expect } from "@playwright/test";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile, rm, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,6 +34,7 @@ const now = new Date().toISOString();
 const today = businessDate();
 const ids = Object.fromEntries(["admin","viewer","conf1","conf2","store1","store2","agenda","appointment"].map(key => [key, randomUUID()]));
 let worker;
+let browser;
 let logs = "";
 const command = (...args) => {
   const result = spawnSync(process.execPath, [wrangler, ...args, "--config", configPath], {
@@ -71,7 +73,7 @@ try {
     ratelimits: config.ratelimits,
     durable_objects: config.durable_objects,
     migrations: config.migrations,
-    vars: { REALTIME_MODE: "off", SESSION_SECRET: secret }
+    vars: { REALTIME_MODE: "on", SESSION_SECRET: secret }
   };
   await mkdir(persist);
   await writeFile(configPath, JSON.stringify(isolated));
@@ -149,6 +151,48 @@ try {
     cookies.set(user,cookie.split(";")[0]);
     assert.equal((await (await request("/api/auth/me",{user})).json()).id,ids[user]);
   }
+  // Browser real, com sessões independentes: nenhum mock de API ou WebSocket.
+  browser = await chromium.launch({ headless: true });
+  const peers = new Map();
+  async function connectPeer(user) {
+    const context = await browser.newContext();
+    const cookie = cookies.get(user);
+    const split = cookie.indexOf("=");
+    await context.addCookies([{ name: cookie.slice(0,split), value: cookie.slice(split+1), url: base, httpOnly: true, sameSite: "Strict" }]);
+    const page = await context.newPage();
+    await page.goto(base + "/api/health");
+    await page.evaluate(() => {
+      const events = [];
+      const state = { events, closeCode: null, socket: new WebSocket(location.origin.replace(/^http/, "ws") + "/api/realtime") };
+      window.__smokeRealtime = state;
+      state.socket.onmessage = event => {
+        if (event.data === "pong") { events.push({ type: "pong" }); return; }
+        try { events.push(JSON.parse(event.data)); } catch { /* ignore protocolo inválido */ }
+      };
+      state.socket.onclose = event => { state.closeCode = event.code; };
+    });
+    await page.waitForFunction(() => window.__smokeRealtime.events.some(e => e.type === "realtime.ready"), null, { timeout: 15_000 });
+    peers.set(user,{context,page});
+  }
+  async function waitEvent(user,type) {
+    await peers.get(user).page.waitForFunction(type => window.__smokeRealtime.events.some(e=>e.type===type),type,{timeout:10_000});
+  }
+  async function pingBarrier(user) {
+    const page=peers.get(user).page;
+    await page.evaluate(() => {
+      const state=window.__smokeRealtime;
+      for (let i=state.events.length-1;i>=0;i--) if(state.events[i].type==="pong") state.events.splice(i,1);
+    });
+    await page.evaluate(() => {
+      const state=window.__smokeRealtime;
+      state.socket.send("ping");
+    });
+    await waitEvent(user,"pong");
+  }
+  for (const user of ["admin","viewer","conf1","conf2"]) await connectPeer(user);
+  await peers.get("conf1").page.evaluate(() => window.__smokeRealtime.socket.send(JSON.stringify({version:1,type:"presence.set",status:"online"})));
+  await waitEvent("admin","presence.changed");
+  await pingBarrier("conf1");
   const agenda = await (await request("/api/store/today",{user:"conf1"})).json();
   assert.equal(agenda.agenda.id,ids.agenda);
   assert.equal(agenda.appointments[0].id,ids.appointment);
@@ -158,7 +202,15 @@ try {
   await request(path+"/status",{user:"conf1",method:"PATCH",origin:"https://cross-site.invalid",body:{status:"recebido"},status:403});
   await request(path+"/status",{user:"conf1",method:"PATCH",body:{status:"recebido"}});
   assert.equal((await (await request("/api/store/today",{user:"conf1"})).json()).appointments[0].status,"recebido");
+  await waitEvent("admin","agenda.changed");
+  await waitEvent("viewer","agenda.changed");
   const aviso = avisoSchema.parse(await (await request("/api/admin/avisos",{user:"admin",method:"POST",body:{titulo:"Aviso sintético",mensagem:"Integração local",lojas:["01"]},status:201})).json());
+  await waitEvent("admin","avisos.changed");
+  await waitEvent("conf1","avisos.changed");
+  for (const user of ["viewer","conf2"]) {
+    await pingBarrier(user);
+    assert.equal(await peers.get(user).page.evaluate(() => window.__smokeRealtime.events.some(e=>e.type==="avisos.changed")), false, "Evento direcionado vazou para "+user);
+  }
   const list = async user => avisosResponseSchema.parse(await (await request("/api/avisos",{user})).json());
   assert.ok((await list("conf1")).avisos.some(item=>item.id===aviso.id));
   assert.ok(!(await list("conf2")).avisos.some(item=>item.id===aviso.id));
@@ -173,12 +225,27 @@ try {
   assert.equal(readers.faltantes.length,0);
   await request("/api/auth/logout",{user:"conf1",method:"POST",status:204});
   await request("/api/auth/me",{user:"conf1",status:401});
-  console.log("Smoke HTTP local aprovado: migrations, login, perfis, isolamento, recebimento, avisos, reações, leitura idempotente e revogação.");
+  await peers.get("conf1").page.waitForFunction(() => window.__smokeRealtime.closeCode === 4003, null, {timeout:10_000});
+  for (const peer of peers.values()) await peer.context.close();
+  const ui = await browser.newContext();
+  const page = await ui.newPage();
+  await page.goto(base + "/login");
+  await page.getByRole("textbox", {name:"Login"}).fill("viewer");
+  await page.locator('input[name="senha"]').fill(password);
+  await page.getByRole("button",{name:"Entrar",exact:true}).click();
+  await expect(page).toHaveURL(/\/admin$/, {timeout:15_000});
+  await expect(page.getByRole("heading",{name:"Recebimento",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Avisos"})).toHaveCount(0);
+  await page.getByRole("button",{name:"Sair"}).click();
+  await expect(page).toHaveURL(/\/login$/, {timeout:15_000});
+  await ui.close();
+  console.log("Smoke local aprovado: migrations, HTTP, D1, Chromium sem mocks, WebSocket, isolamento, presença, avisos e revogação.");
 } catch (error) {
   // A saída só contém fixture sintética, mas evita divulgar o segredo efêmero.
   console.error(logs.replaceAll(secret,"[redigido]").replaceAll(password,"[redigido]"));
   throw error;
 } finally {
+  if (browser) await browser.close().catch(() => undefined);
   if (worker?.pid && worker.exitCode === null) {
     const exited = once(worker,"exit").catch(()=>{});
     try { if(process.platform !== "win32") process.kill(-worker.pid,"SIGTERM"); else worker.kill(); } catch {}

@@ -199,6 +199,13 @@ async function measureReports(total:number) {
       assert.equal(data.rows.length,Math.min(data.total,50));
       return data.rows.length;
     }),
+    await measureScenario("Ocorrências página profunda",async()=>{
+      const offset=Math.max(0,agendasInRange*4-50);
+      const data=occurrencesSchema.parse(await reportJson("/occurrences?"+query+"&limit=50&offset="+offset));
+      assert.equal(data.total,agendasInRange*4);
+      assert.equal(data.rows.length,Math.min(data.total,50));
+      return data.rows.length;
+    }),
     await measureScenario("Ocorrências com busca literal",async()=>{
       const data=occurrencesSchema.parse(await reportJson("/occurrences?"+query+"&limit=50&q=Fornecedor%202"));
       assert.equal(data.total,agendasInRange);
@@ -229,6 +236,15 @@ async function measureNotices(total:number) {
       assert.equal(data.naoLidos,unread);
       assert.ok(data.avisos.every(row=>!ids.has(row.id)));
       return data.avisos.length;
+    }),
+    await measureScenario("Avisos: página profunda por cursor",async()=>{
+      // A fixture usa timestamp único; g-000020 precede exatamente 20 IDs globais.
+      const data=await listAvisos(adapter,"u2","01",false,50,{criadoEm:fixedNow,id:"g-000020"});
+      assert.equal(data.avisos.length,20);
+      assert.equal(data.hasMore,false);
+      assert.equal(data.naoLidos,unread);
+      assert.ok(data.avisos.every(row=>row.id.startsWith("g-")));
+      return data.avisos.length;
     })
   ];
 }
@@ -245,7 +261,9 @@ for (const total of sizes) {
     await measure("Conferente/loja", () => listStoreAgendas(adapter, "l0"), Math.ceil(total / stores)),
     await measure("ADM página inicial", () => listAdminAgendasPage(adapter, {}, 20, 0), Math.min(total, 20), total > 20),
     await measure("ADM página seguinte", () => listAdminAgendasPage(adapter, {}, 20, 20), Math.min(Math.max(total - 20, 0), 20), total > 40),
-    await measure("Conferente página inicial", () => listStoreAgendasPage(adapter, "l0", 20, 0), Math.min(Math.ceil(total / stores), 20), Math.ceil(total / stores) > 20)
+    await measure("Conferente página inicial", () => listStoreAgendasPage(adapter, "l0", 20, 0), Math.min(Math.ceil(total / stores), 20), Math.ceil(total / stores) > 20),
+    await measure("ADM página profunda", () => listAdminAgendasPage(adapter, {}, 20, Math.max(0,total-20)), Math.min(total,20), false),
+    await measure("Conferente página profunda", () => listStoreAgendasPage(adapter, "l0", 20, Math.max(0,Math.ceil(total/stores)-20)), Math.min(Math.ceil(total/stores),20), false)
   ];
   const reports = await measureReports(total);
   const notices = await measureNotices(total);
