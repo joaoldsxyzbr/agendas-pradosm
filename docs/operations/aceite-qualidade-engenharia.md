@@ -21,7 +21,7 @@ Benchmarks SQLite sintético, não D1 remoto; PBKDF2 HTTP inclui overhead e não
 - Revisão direcionada das telas maiores de conferência, histórico e relatórios. Leituras passam a consumir AbortSignal do React Query; cancelamento no navegador não comprova cancelamento de SQL já iniciado no servidor. Contratos, mutações, polling e autorização permanecem. Filtros rápidos preservam filtros já aplicados e sincronizam formulário e persistência; troca do conjunto de lojas volta à primeira página. Não dividir componentes apenas por tamanho.
 - Os 12 arquivos .mjs de scripts são wrappers de importação para implementações TypeScript; manter nomes por compatibilidade. Ativar allowJs/checkJs nos gates correspondentes para verificar esses wrappers e a configuração Playwright sem adicionar dependência.
 - Atualizar arquitetura vigente, distinguir Preview histórica do fluxo local e reforçar runbook de recuperação. Preservar histórico.
-- Validação completa deste lote ainda depende do CI do novo head. Não declarar aprovação antecipada.
+- CI de 10fdd09e ([45908752480](https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45908752480)): 151 testes Node, strict inclusive JS, CodeQL, build, benchmarks e smoke real passaram; 128/129 E2E. Falhou o cenário de recuperação de relatório: mock falhava apenas a primeira requisição, que pode ser cancelada ou pertencer à comparação. A fixture agora mantém indisponibilidade até a tentativa explícita, desativa comparação nesse cenário e exige desaparecimento do alerta após retry. Corrigido também o caminho de upload dos diagnósticos Playwright. O novo head ainda precisa de CI completo; não declarar aprovação antecipada.
 
 ## Monitoramento operacional (não é SLA)
 

@@ -99,8 +99,8 @@ jobs:
         with:
           name: diagnosticos-js-puro
           path: |
-            playwright-report/
-            test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7
 
