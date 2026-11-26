@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { AgendaSummaryRow } from "../worker/repositories/agendas.ts";
 import { listAdminAgendas, listStoreAgendas, listAdminAgendasPage, listStoreAgendasPage } from "../worker/repositories/agendas.ts";
 
 const quick = process.argv.includes("--quick");
@@ -32,10 +33,10 @@ const insertAgenda = db.prepare(`INSERT INTO agendas
 const insertAppointment = db.prepare(`INSERT INTO agendamentos
   (id,agenda_id,protocolo,fornecedor,ativo,status,origem,horario_inicio,horario_fim,criado_em,atualizado_em)
   VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-function dateAt(index) {
+function dateAt(index: number) {
   return new Date(Date.UTC(2025, 0, 1 + index)).toISOString().slice(0, 10);
 }
-function addFixture(from, to) {
+function addFixture(from: number, to: number) {
   db.exec("BEGIN TRANSACTION");
   try {
     for (let i = from; i < to; i++) {
@@ -58,49 +59,68 @@ function addFixture(from, to) {
 
 // Adaptador restrito ao contrato .prepare().bind().all() do D1.
 // Roda as próprias consultas do repositório, não cópias de SQL.
-let lastQuery = null;
-const adapter = {
-  prepare(sql) {
+type BindValue = string | number | bigint | null;
+function sqliteValue(value: unknown): BindValue {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
+  throw new TypeError("Valor SQL não suportado pelo benchmark de leitura.");
+}
+let lastQuery: { sql: string; values: BindValue[] } | null = null;
+function unsupported(): never { throw Error("Benchmark usa somente consultas de leitura."); }
+const adapter: D1Database = {
+  prepare(sql: string): D1PreparedStatement {
     const statement = db.prepare(sql);
-    let values = [];
-    lastQuery = { sql, values };
-    return {
-      bind(...params) {
-        values = params;
-        lastQuery.values = params;
-        return this;
+    const query: { sql: string; values: BindValue[] } = { sql, values: [] };
+    lastQuery = query;
+    const prepared: D1PreparedStatement = {
+      bind(...params: unknown[]) {
+        query.values = params.map(sqliteValue);
+        lastQuery = query;
+        return prepared;
       },
-      async all() {
-        return { results: statement.all(...values) };
-      }
+      async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+        // Igual ao contrato genérico D1: o chamador define a projeção SQL.
+        // Coerção restrita à fronteira SQLite do benchmark, com resultados
+        // verificados por cardinalidade, IDs e totais.
+        return { success: true, results: statement.all(...query.values) as T[] };
+      },
+      async first() { return unsupported(); },
+      async run() { return unsupported(); },
+      async raw() { return unsupported(); }
     };
-  }
+    return prepared;
+  },
+  async batch() { return unsupported(); }
 };
-const median = values => {
+const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 };
-
-async function measure(label, fn, expected, expectedHasMore?: boolean) {
-  await fn(); // aquecimento sem contabilizar
-  const ms = [];
+type AgendaQueryResult = AgendaSummaryRow[] | { items: AgendaSummaryRow[]; hasMore: boolean };
+async function measure(label: string, fn: () => Promise<AgendaQueryResult>, expected: number, expectedHasMore?: boolean) {
+  await fn();
+  const ms: number[] = [];
   for (let i = 0; i < repetitions; i++) {
     const start = performance.now();
     const result = await fn();
     ms.push(performance.now() - start);
     const rows = Array.isArray(result) ? result : result.items;
     assert.equal(rows.length, expected, `Quantidade inesperada em ${label}`);
-    if (expectedHasMore !== undefined) assert.equal(result.hasMore, expectedHasMore, label);
+    if (expectedHasMore !== undefined) {
+      assert.ok(!Array.isArray(result), "Consulta paginada esperada: " + label);
+      assert.equal(result.hasMore, expectedHasMore, label);
+    }
     assert.equal(new Set(rows.map(row => row.id)).size, rows.length, "IDs duplicados: " + label);
     assert.ok(rows.every(row => row.total === appointmentsPerAgenda), "Totais divergentes: " + label);
   }
-  const plan = db.prepare("EXPLAIN QUERY PLAN " + lastQuery.sql).all(...lastQuery.values);
+  const query = lastQuery;
+  assert.ok(query, "Consulta não registrada.");
+  const plan = db.prepare("EXPLAIN QUERY PLAN " + query.sql).all(...query.values).map(row => String(row.detail));
   return {
     scenario: label,
     count: expected,
     median_ms: Number(median(ms).toFixed(2)),
-    uses_temporary_sort: plan.some(row => /USE TEMP B-TREE/.test(row.detail)),
-    plan: plan.map(row => row.detail)
+    uses_temporary_sort: plan.some(detail => /USE TEMP B-TREE/.test(detail)),
+    plan
   };
 }
 

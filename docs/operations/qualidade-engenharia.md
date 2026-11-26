@@ -114,3 +114,7 @@ Incluído RealtimeHub no gate strict. Validação Zod de mensagens, eventos inte
 ### Worker integral sob strict
 
 A configuração Worker agora usa strict: true para todos os módulos Worker/shared. Tipos de linhas D1, importação, histórico, mutações, rotas e manutenção; removido any da substituição de agendas. Verificação com tipos oficiais a partir do entrypoint Worker, sem confundir APIs DOM do parser de CSV (TextDecoder fatal) com APIs do runtime. A verificação DOM estrita de todo shared continua ativa. Não se reescrevem migrations nem regras de negócio. O caminho legado R2 não foi habilitado: apenas ajustada a forma tipada de httpMetadata; remoção segue #257. CI pendente; scripts/testes TypeScript ainda exigem configuração Node própria.
+
+### Gate Node para scripts e testes
+
+CI do commit 43173b0: verify e CodeQL aprovados, inclusive integração Wrangler/D1 local e navegador. Worker e shared integralmente strict. Este incremento cria tsconfig.node.json, reutilizando TypeScript e @types/node já instalados em apps/web; todos os 11 scripts TypeScript entram no gate obrigatório. Adaptador SQL sintético tipado, com coerção restrita à fronteira dos resultados genéricos do SQLite. Os testes TypeScript serão acrescentados ao gate em lotes. CI do novo commit pendente. Nenhum bootstrap remoto foi executado.

@@ -46,4 +46,7 @@ for (const file of listed) {
 const tsc = join(web, "node_modules", "typescript", "bin", "tsc");
 const check = spawnSync(process.execPath, [tsc, "-p", "worker"], { cwd: root, encoding: "utf8" });
 if (check.status !== 0) throw Error("TypeScript do Worker reprovado:\n" + (check.stderr || check.stdout));
+const nodeCheck = spawnSync(process.execPath, [tsc, "-p", "tsconfig.node.json"], { cwd: root, encoding: "utf8" });
+if (nodeCheck.status !== 0) throw Error("TypeScript Node estrito reprovado:\n" + (nodeCheck.stderr || nodeCheck.stdout));
+console.log("Scripts e testes consolidados sob strict.");
 console.log("Worker e contratos em TypeScript: " + count + " módulos com imports e tipos verificados; todos os módulos sob strict.");
