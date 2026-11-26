@@ -122,3 +122,7 @@ CI do commit 43173b0: verify e CodeQL aprovados, inclusive integração Wrangler
 ### Testes de contrato sob strict
 
 Primeiro lote de 12 dos 30 testes TypeScript incluído no gate Node: contratos de rotas/autenticação, paridade, parsers, validação de importação, senha, migrations, utilitários e benchmark. Fixtures File reais, verificações explícitas de ausência e validação do JSON de benchmark. Os outros testes, especialmente mocks e integrações D1, permanecem pendentes. CI ainda precisa validar os dois novos commits.
+
+### Segundo lote Node: integração e concorrência
+
+O CI de 8ce340b passou verify, CodeQL e integração local. Novo adaptador SQLite exclusivamente de teste, com transação e rollback, hooks restritos para simular concorrência e falha de auditoria, bindings sintéticos que falham se utilizados indevidamente. Nove arquivos adicionais no gate strict (paginação, concorrência, digitação, autenticação, diagnósticos, migrations, CSRF, recebimento e revogação). Mantidas as fixtures e asserções; coerções de projeções SQL ficam na fronteira de teste. Ainda faltam oito arquivos; CI deste lote pendente. Sem acesso remoto.

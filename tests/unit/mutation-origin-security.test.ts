@@ -1,10 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Hono } from "hono";
+import type { AppEnv } from "../../worker/env.ts";
 import { validateMutationOrigin } from "../../worker/lib/http.ts";
 
 function fixture() {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   app.use("/api/admin/*", validateMutationOrigin);
   app.post("/api/admin/example", (c) => c.json({ ok: true }));
   return app;

@@ -1,3 +1,4 @@
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -32,48 +33,19 @@ function createFixture() {
 
   let simulateAuditFailure = false;
   let simulateConcurrentUpdate = false;
-  const db = {
-    prepare(sql) {
-      const statement = sqlite.prepare(sql);
-      let bindings = [];
-      const request = {
-        sql,
-        bind(...values) { bindings = values; return request; },
-        async first() {
-          const row = statement.get(...bindings) ?? null;
-          // Replica outra solicitação que grava após a leitura da primeira.
-          if (simulateConcurrentUpdate && sql.includes("FROM agendamentos ag")) {
-            simulateConcurrentUpdate = false;
-            sqlite.prepare("UPDATE agendamentos SET status='recusado' WHERE id='agend1'").run();
-          }
-          return row;
-        },
-        async all() { return { results: statement.all(...bindings) }; },
-        async run() {
-          if (simulateAuditFailure && sql.includes("INSERT INTO auditoria")) {
-            throw new Error("falha de auditoria sintética");
-          }
-          const result = statement.run(...bindings);
-          return { success: true, meta: { changes: Number(result.changes) } };
-        }
-      };
-      return request;
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
+  const db = sqliteD1(sqlite, {
+    afterFirst(sql) {
+      if (simulateConcurrentUpdate && sql.includes("FROM agendamentos ag")) {
+        simulateConcurrentUpdate = false;
+        sqlite.prepare("UPDATE agendamentos SET status='recusado' WHERE id='agend1'").run();
       }
+    },
+    beforeRun(sql) {
+      if (simulateAuditFailure && sql.includes("INSERT INTO auditoria")) throw new Error("falha de auditoria sintética");
     }
-  };
-  const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-  async function callAs(userId, path, body, extraHeaders = {}) {
+  });
+  const env = testEnv(db, SECRET);
+  async function callAs(userId: string, path: string, body: unknown, extraHeaders: Record<string, string> = {}) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method: "PATCH",
@@ -86,7 +58,7 @@ function createFixture() {
       body: JSON.stringify(body)
     }, env);
   }
-  async function getAs(userId, path) {
+  async function getAs(userId: string, path: string) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method: "GET",
@@ -97,8 +69,8 @@ function createFixture() {
     }, env);
   }
   const status = () => ({ ...sqlite.prepare("SELECT status,observacao FROM agendamentos WHERE id='agend1'").get() });
-  const historyCount = () => sqlite.prepare("SELECT count(*) AS n FROM historico_status").get().n;
-  const auditCount = () => sqlite.prepare("SELECT count(*) AS n FROM auditoria").get().n;
+  const historyCount = () => sqlite.prepare("SELECT count(*) AS n FROM historico_status").get()?.n;
+  const auditCount = () => sqlite.prepare("SELECT count(*) AS n FROM auditoria").get()?.n;
   return {
     sqlite, callAs, getAs, status, historyCount, auditCount,
     failAudit: () => { simulateAuditFailure = true; },

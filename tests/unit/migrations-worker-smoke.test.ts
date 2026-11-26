@@ -1,3 +1,7 @@
+import { z } from "zod";
+const rowSchema = z.object({ id: z.string(), storeId: z.string(), total: z.number(), recebido: z.number() });
+const pageSchema = z.object({ items: z.array(rowSchema), hasMore: z.boolean() });
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -21,7 +25,7 @@ function fixture() {
       sqlite.exec(readFileSync(join(migrationsDir, name), "utf8"));
     }
     const integrity = sqlite.prepare("PRAGMA integrity_check").get();
-    assert.equal(integrity.integrity_check, "ok");
+    assert.equal(integrity?.integrity_check, "ok");
     const index = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_agendamentos_agenda_horario'").get();
     assert.ok(index);
 
@@ -48,36 +52,9 @@ function fixture() {
       }
     }
     assert.equal(sqlite.prepare("PRAGMA foreign_key_check").all().length, 0);
-    const db = {
-      prepare(sql) {
-        const stmt = sqlite.prepare(sql);
-        let params = [];
-        const request = {
-          bind(...values) { params = values; return request; },
-          async first() { return stmt.get(...params) ?? null; },
-          async all() { return { results: stmt.all(...params) }; },
-          async run() {
-            const result = stmt.run(...params);
-            return { success: true, meta: { changes: Number(result.changes) } };
-          }
-        };
-        return request;
-      },
-      async batch(statements) {
-        sqlite.exec("BEGIN");
-        try {
-          const result = [];
-          for (const stmt of statements) result.push(await stmt.run());
-          sqlite.exec("COMMIT");
-          return result;
-        } catch (error) {
-          sqlite.exec("ROLLBACK");
-          throw error;
-        }
-      }
-    };
-    const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-    async function get(userId, path) {
+    const db = sqliteD1(sqlite);
+    const env = testEnv(db, SECRET);
+    async function get(userId: string, path: string) {
       const token = await createSessionToken(userId, 1, SECRET);
       return app.request("http://localhost" + path, {
         method: "GET", headers: { Cookie: "agenda_session=" + token }
@@ -96,14 +73,14 @@ describe("Integração de consultas com todas as migrations reais e SQLite em me
     try {
       const legacy = await f.get("conf1", "/api/store/history");
       assert.equal(legacy.status, 200);
-      const rows = await legacy.json();
+      const rows = z.array(rowSchema).parse(await legacy.json());
       assert.equal(rows.length, 25);
       assert.ok(rows.every(row => row.storeId === "store1"));
       const gathered = [];
       for (const offset of [0, 10, 20, 30]) {
         const res = await f.get("conf1", `/api/store/history?limit=10&offset=${offset}`);
         assert.equal(res.status, 200);
-        const page = await res.json();
+        const page = pageSchema.parse(await res.json());
         assert.equal(page.hasMore, offset + 10 < 25);
         gathered.push(...page.items);
       }
@@ -112,7 +89,7 @@ describe("Integração de consultas com todas as migrations reais e SQLite em me
       assert.ok(gathered.every(row => row.total === 1 && row.recebido === 1));
       const other = await f.get("conf2", "/api/store/history?limit=10&offset=0");
       assert.equal(other.status, 200);
-      assert.ok((await other.json()).items.every(row => row.storeId === "store2"));
+      assert.ok(pageSchema.parse(await other.json()).items.every(row => row.storeId === "store2"));
       assert.equal((await f.get("adm", "/api/store/history?limit=10")).status, 403);
       for (const query of ["limit=0", "limit=51", "limit=xyz", "offset=5", "limit=10&offset=-1"]) {
         const res = await f.get("conf1", "/api/store/history?" + query);
@@ -129,13 +106,13 @@ describe("Integração de consultas com todas as migrations reais e SQLite em me
     try {
       const legacy = await f.get("adm", "/api/admin/agendas");
       assert.equal(legacy.status, 200);
-      const rows = await legacy.json();
+      const rows = z.array(rowSchema).parse(await legacy.json());
       assert.equal(rows.length, 50);
       const found = [];
       for (const offset of [0, 20, 40]) {
         const res = await f.get("adm", `/api/admin/agendas?limit=20&offset=${offset}`);
         assert.equal(res.status, 200);
-        const data = await res.json();
+        const data = pageSchema.parse(await res.json());
         assert.equal(data.hasMore, offset < 40);
         found.push(...data.items);
       }

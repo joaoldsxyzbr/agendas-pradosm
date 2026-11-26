@@ -34,6 +34,16 @@
     "tests/unit/routes-parity.test.ts",
     "tests/unit/auth-contract.test.ts",
     "tests/unit/agenda-routes-parity.test.ts",
-    "tests/unit/validate-import-batch.test.ts"
+    "tests/unit/validate-import-batch.test.ts",
+    "tests/helpers/**/*.ts",
+    "tests/unit/admin-agendas-pagination.test.ts",
+    "tests/unit/agenda-concurrency-integrated.test.ts",
+    "tests/unit/agenda-digitacao-fornecedor.test.ts",
+    "tests/unit/auth-integration-synthetic.test.ts",
+    "tests/unit/diagnostics.test.ts",
+    "tests/unit/migrations-worker-smoke.test.ts",
+    "tests/unit/mutation-origin-security.test.ts",
+    "tests/unit/recebimento-api-integrated.test.ts",
+    "tests/unit/session-revocation.test.ts"
   ]
 }
