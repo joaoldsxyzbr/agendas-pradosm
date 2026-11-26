@@ -172,3 +172,7 @@ A compilação do Worker passa a usar diretamente os tipos oficiais gerados pelo
 ### Segurança de fronteira em runtime real
 
 O mesmo lote acrescenta checagens HTTP de papéis sem permissão para publicação oficial, rejeição de importação superior ao limite e renderização literal de HTML sintético persistido. Requer aprovação do novo CI; não afirmar cobertura exaustiva nem validação de produção.
+
+### Reconciliação #257 na #258
+
+Portados os hardenings de identidade de destino, guardas concorrentes de lojas/usuários, manutenção independente, fallback 503 realtime, preservação permanente dos históricos e eliminação do R2. A migration 0031 é aditiva e preserva código original, backfill e trigger de compatibilidade; histórico anterior não é reescrito. Teste adicional usa banco já populado e destino não resolvido; não há garantia de reconstrução de destinatários se um código foi reutilizado antes do backfill. A página de avisos reconcilia histórico a cada 60 s em sequência, cancelando apenas ao trocar busca/desmontar e descartando resultados concorrentes com reação local. O erro TS2538 da fixture do smoke foi corrigido por tuplas const. PR #257 permanece aberta e independente; não mesclar as duas separadamente sem revisão, pois #258 contém os hardenings. CI pendente, execução local completa indisponível.

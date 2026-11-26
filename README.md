@@ -200,7 +200,7 @@ O Worker possui Cron Trigger:
 5 3 * * *
 ```
 
-Ele executa às 03:05 UTC, equivalente a 00:05 em `America/Sao_Paulo`, para fechar agendas anteriores à data operacional. As requisições HTTP mantêm o mesmo fechamento como fallback idempotente. Na mesma execução, o job de retenção exporta para o R2 e depois purga `historico_status`/`historico_agenda` com mais de 12 meses e `auditoria` com mais de 24 meses; sem o bucket de retenção configurado, nada é purgado (política e endpoints em `docs/operations/retencao-e-backup-2026-11-05.md`).
+Ele executa às 03:05 UTC, equivalente a 00:05 em `America/Sao_Paulo`, para fechar agendas anteriores à data operacional. As requisições HTTP mantêm o mesmo fechamento como fallback idempotente. Na mesma execução, a rotina monitora volume e antiguidade dos históricos, sem exclusão automática e sem R2. md`).
 
 ## Produção
 
@@ -225,3 +225,7 @@ Os planos e especificações técnicas ficam em `docs/superpowers/`.
 - O login usa rate limiter com comportamento fail-closed.
 - Códigos de loja são canonicalizados e possuem unicidade case-insensitive.
 - Mutações críticas usam operações atômicas no D1 quando o contrato exige.
+
+### Preservação de históricos
+
+O banco D1 de produção chama-se `agendas-pradosm` (binding `DB`). Históricos e avisos são preservados integralmente. Diagnósticos e sessões expiradas têm limpezas independentes. A Preview está fora do fluxo atual; testes são locais e sintéticos.

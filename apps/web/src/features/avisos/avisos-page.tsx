@@ -111,6 +111,7 @@ export function AvisosPage() {
   const [busca, setBusca] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
   const olderCursors = useRef<AvisoCursor[]>([]);
+  const olderRevision = useRef(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
@@ -130,23 +131,36 @@ export function AvisosPage() {
     refetchOnWindowFocus: true,
   });
 
-  // Reconciliar também as páginas antigas já abertas quando chegam alterações.
+  // Páginas antigas: uma reconciliação por minuto, sem reiniciar/cancelar
+  // quando a primeira página recebe eventos. Leitura sequencial evita rajadas.
   useEffect(() => {
-    if (!avisos.dataUpdatedAt || !olderCursors.current.length) return;
-    let cancelled = false;
-    const cursors = [...olderCursors.current];
-    void Promise.all(cursors.map(cursor => getAvisos(cursor, { busca }))).then(pages => {
-      if (cancelled) return;
-      const fresh = new Map(pages.flatMap(page => page.avisos).map(aviso => [aviso.id, aviso]));
-      setOlderPages(current => current.map(page => ({ ...page, avisos: page.avisos.map(aviso => {
-        const next = fresh.get(aviso.id);
-        return next ? { ...aviso, reacoes: next.reacoes, lido: aviso.lido || next.lido } : aviso;
-      }) })));
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [avisos.dataUpdatedAt, busca]);
+    const controller = new AbortController();
+    let refreshing = false;
+    async function refresh() {
+      if (refreshing || controller.signal.aborted || !olderCursors.current.length || document.hidden) return;
+      refreshing = true;
+      const revision = olderRevision.current;
+      const fresh = new Map<string, Aviso>();
+      try {
+        for (const cursor of [...olderCursors.current]) {
+          const page = await getAvisos(cursor, { busca }, controller.signal);
+          if (controller.signal.aborted || revision !== olderRevision.current) return;
+          for (const aviso of page.avisos) fresh.set(aviso.id, aviso);
+        }
+        if (!controller.signal.aborted && revision === olderRevision.current)
+          setOlderPages(current => current.map(page => ({ ...page, avisos: page.avisos.map(aviso => {
+            const next = fresh.get(aviso.id);
+            return next ? { ...aviso, reacoes: next.reacoes, lido: aviso.lido || next.lido } : aviso;
+          }) })));
+      } catch { /* HTTP normal e a próxima rodada mantêm reconciliação */ }
+      finally { refreshing = false; }
+    }
+    const timer = window.setInterval(() => { void refresh(); }, 60_000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [busca]);
 
   const updateReacoes = (id: string, reacoes: Reacao[]) => {
+    olderRevision.current++;
     const update = (page: AvisosResponse) => ({ ...page, avisos: page.avisos.map(aviso => aviso.id === id ? { ...aviso, reacoes } : aviso) });
     setOlderPages(current => current.map(update));
     client.setQueriesData<AvisosResponse>({ predicate: q => q.queryKey[0] === "avisos" && (q.queryKey.length === 1 || q.queryKey[1] === "filtro") }, current => current ? update(current) : current);
@@ -189,6 +203,7 @@ export function AvisosPage() {
   const trocarBusca = (nextBusca: string) => {
     if (nextBusca === busca) return;
     generation.current++;
+    olderRevision.current++;
     olderCursors.current = [];
     setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
     prependHeight.current = null; previousLatest.current = undefined; nearBottom.current = true; setNewMessages(false);

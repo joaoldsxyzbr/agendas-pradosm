@@ -24,3 +24,7 @@ CI do c538a49: verify, CodeQL, 126 cenários de navegador e smoke real passaram.
 ### Cenários adicionais no smoke local (CI pendente)
 
 Publicação oficial rejeitada para visitante, visualizador e conferente; payload de importação acima de 1 MiB rejeitado no runtime real com 413 e código estável; conteúdo HTML sintético persistido e exibido literalmente no Chromium, sem elemento HTML correspondente no DOM. Não é teste exaustivo de XSS ou autorização. Todos os dados descartáveis; nenhuma execução ou mudança em produção.
+
+### Reconciliação de integridade
+
+Guardas SQL de cadastro impedem atualização concorrente perdida e exclusão/vínculo de loja incompatíveis; auditoria depende da gravação efetiva. Avisos vinculados por ID permanente, testes de renomeação/reutilização de código e migration com dados anteriores. Removido caminho de purge R2; testes comprovam preservação de registros antigos e recentes quando aprovados no CI. Fallback 503 para indisponibilidade realtime não comprova causa raiz dos erros antigos. CI pendente.

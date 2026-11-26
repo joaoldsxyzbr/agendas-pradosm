@@ -16,8 +16,8 @@ A UI legada foi substituída pelo React na raiz do aplicativo. Documentos em `do
 - `apps/web/src/app/routes.tsx`: rotas `/login`, `/admin`, `/admin/reports`, `/admin/history`, `/admin/stores`, `/admin/users`, `/admin/diagnostics` e `/app`. O Worker aplica a autorização efetiva por perfil.
 - `scripts/build-native.mjs`: compila `apps/web/` com Vite para `dist-modern/` e publica o React na raiz de `dist/`, junto aos arquivos de `public/` (ícone e cabeçalhos de segurança).
 - `worker/index.ts`: entrada do Cloudflare Worker, incluindo cron; `worker/app.ts`: Hono, middleware e rotas `/api/*`. O Worker serve o `dist/` com fallback de SPA para URLs profundas.
-- `worker/routes/`: autenticação, validação e autorização; `worker/repositories/`: D1; `worker/services/` e `worker/realtime/`: regras operacionais, retenção de dados com export para R2 e WebSockets/Durable Object.
-- O cron diário (03:05 UTC) fecha agendas passadas, expurga diagnósticos antigos (30 dias) e roda a retenção: `historico_status`/`historico_agenda` acima de 12 meses e `auditoria` acima de 24 meses, sempre exportadas em JSON para o bucket R2 antes do purge (política em `docs/operations/retencao-e-backup-2026-11-05.md`).
+- `worker/routes/`: autenticação, validação e autorização; `worker/repositories/`: D1; `worker/services/` e `worker/realtime/`: regras operacionais, monitoramento de volume do D1 e WebSockets/Durable Object.
+- O cron diário (03:05 UTC) fecha agendas passadas, expurga diagnósticos antigos (30 dias), limpa sessões expiradas e monitora históricos sem exclusão automática. Sem R2.
 - `shared/`: contratos, validações, datas e parser de importação CSV/PDF (incluindo WASM para PDF).
 - `migrations/`: sequência imutável de migrations aplicada pelo Wrangler; não reescrever arquivos já aplicados.
 - `tests/unit/`: contratos, segurança, parsers e lógica de Worker; `apps/web/tests/`: navegação e fluxos React no Chromium, com APIs simuladas.
@@ -63,3 +63,5 @@ O canal de comunicação possui um fluxo cronológico único de mensagens e avis
 ### Organização de consultas de agendas (PR #258)
 
 `worker/repositories/agenda-queries.ts` concentra tipos de linhas e leituras SQL de agendas/agendamentos/históricos, sem dependência de mutações. `worker/repositories/agendas.ts` concentra importação, alterações e guardas transacionais, reexportando os contratos públicos existentes. A separação é por responsabilidade; nenhuma nova camada de abstração ou serviço externo.
+
+- O direcionamento dos avisos usa o ID permanente da loja (`0031_avisos_destino_estavel.sql`); o código original fica preservado e a API exibe o atual. Destinos legados não resolvidos não ampliam visibilidade.

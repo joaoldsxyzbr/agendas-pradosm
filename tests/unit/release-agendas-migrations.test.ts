@@ -75,3 +75,26 @@ describe("Release candidata: migrations sobre schema de produção", () => {
     }
   });
 });
+
+// Testa a expansão sobre registros existentes e a janela de compatibilidade
+// com o Worker antigo; nenhuma migration histórica é modificada.
+it("0031 preserva destinos existentes e não transforma destino desconhecido em global", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys=ON");
+    for (const file of readdirSync("migrations").filter(n=>/^\d{4}_.*\.sql$/.test(n)&&!n.startsWith("0031_")).sort())
+      db.exec(readFileSync(join("migrations",file),"utf8"));
+    const now="2026-11-26T00:00:00Z";
+    db.prepare("INSERT INTO lojas(id,codigo,nome,criado_em,atualizado_em) VALUES (?,?,?,?,?)").run("l1","01","Loja",now,now);
+    for (const id of ["legado","desconhecido","compat"]) db.prepare("INSERT INTO avisos(id,tipo,titulo,mensagem,criado_em) VALUES (?,'aviso','T','M',?)").run(id,now);
+    db.prepare("INSERT INTO avisos_lojas(aviso_id,loja) VALUES (?,?)").run("legado","01");
+    db.prepare("INSERT INTO avisos_lojas(aviso_id,loja) VALUES (?,?)").run("desconhecido","99");
+    db.exec(readFileSync("migrations/0031_avisos_destino_estavel.sql","utf8"));
+    db.prepare("INSERT INTO avisos_lojas(aviso_id,loja) VALUES (?,?)").run("compat","01");
+    const rows=db.prepare("SELECT aviso_id,loja,loja_id FROM avisos_lojas ORDER BY aviso_id").all().map(r=>[r.aviso_id,r.loja,r.loja_id]);
+    assert.deepEqual(rows,[["compat","01","l1"],["desconhecido","99",null],["legado","01","l1"]]);
+    db.prepare("UPDATE lojas SET codigo='02' WHERE id='l1'").run();
+    assert.equal(db.prepare("SELECT loja_id FROM avisos_lojas WHERE aviso_id='legado'").get()?.loja_id,"l1");
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(),[]);
+  } finally { db.close(); }
+});
