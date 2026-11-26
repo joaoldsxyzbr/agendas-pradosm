@@ -51,3 +51,7 @@ Fontes oficiais: [Workers limits](https://developers.cloudflare.com/workers/plat
 - ASVS é referência de controle, não certificação nem auditoria exaustiva. Política PBKDF2 mantida por restrição operacional; não aumentar iterações automaticamente.
 - Causa histórica de erros não comprovada, observabilidade e acompanhamento permanecem necessários.
 - Aceite de implementação depende de CI e revisão da candidata; monitoramento e recuperação são responsabilidades permanentes, não justificam esconder lacunas ou criar operações perigosas.
+
+## Validação de 00c9e29 e lacuna PDF local
+
+[CI 45910032673](https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45910032673): 151 testes Node, 129 E2E, smoke real, verify e CodeQL verdes. Logs ainda indicam HTTP 403 no WASM LiteParse do Vite dev, fora da allowlist padrão. O teste de PDF inválido não distinguia falha de inicialização de documento inválido. A correção permite apenas o arquivo WASM da dependência instalada na raiz, preservando a raiz da UI, strict e denylist padrão (referência: https://vite.dev/config/server-options.html#server-fs-allow). Adicionado E2E com PDF sintético legível e sem agenda, exigindo erro de domínio e nenhuma gravação. Não comprova importação de um layout real de fornecedor. Novo CI pendente; nenhuma configuração de produção, dependência ou dados alterados.
