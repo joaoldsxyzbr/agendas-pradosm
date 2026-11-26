@@ -7,10 +7,7 @@ import { cn } from "@/lib/utils";
 import { logout, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
 
-// O canal de Avisos virou página própria com badge na navegação (decisão de
-// 25/11/2026): o item "Avisos (Desenvolvimento)" carrega a contagem de não
-// lidos — o rótulo "(Desenvolvimento)" é removível quando o canal for
-// promovido a recurso oficial.
+// O canal de Avisos tem página própria e badge de não lidos na navegação.
 const menu = [
   { path: "/admin", label: "Recebimento", icon: ClipboardCheck, roles: ["admin", "visualizador"] },
   { path: "/admin/reports", label: "Relatório Gerencial", icon: FileBarChart, roles: ["admin", "visualizador"] },
@@ -19,9 +16,9 @@ const menu = [
   { path: "/admin/stores", label: "Lojas", icon: Store, roles: ["admin"] },
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },
   { path: "/admin/diagnostics", label: "Logs e Auditoria", icon: Settings2, roles: ["admin"] },
-  { path: "/admin/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["admin", "visualizador"] },
+  { path: "/admin/avisos", label: "Avisos", icon: Megaphone, roles: ["admin", "visualizador"] },
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
-  { path: "/app/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["conferente"] },
+  { path: "/app/avisos", label: "Avisos", icon: Megaphone, roles: ["conferente"] },
 ] as const;
 
 const labels: Record<Role, string> = {
@@ -120,7 +117,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       </header>
       <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] shrink-0 overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
-      <main className={cn("w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-6", canal && "flex min-h-0 flex-col overflow-hidden p-2 md:p-4")}><Outlet /></main>
+      <main className={cn("w-full min-w-0 max-w-full flex-1", canal ? "flex min-h-0 flex-col overflow-hidden" : "overflow-x-clip p-4 md:p-6")}><Outlet /></main>
     </div>
   </div>;
 }

@@ -3,8 +3,8 @@ import { getAvisos } from "./api";
 
 // Badge de não lidos do item "Avisos" do menu (decisão de 25/11/2026): o sino
 // saiu do cabeçalho e a contagem migrou para a navegação. Pulsante em
-// vermelho enquanto houver aviso urgente não lido — a leitura automática da
-// página do canal zera a contagem. Consulta a mesma chave ["avisos"] da
+// vermelho enquanto houver aviso urgente não lido. Mensagens visíveis são lidas
+// individualmente e avisos exigem confirmação. Consulta a mesma chave ["avisos"] da
 // página do canal: uma única requisição serve os dois componentes.
 export function AvisosMenuBadge() {
   const avisos = useQuery({
