@@ -156,7 +156,7 @@ test("Importação React rejeita arquivo vazio, formato estranho e arquivo maior
 });
 
 // PDF ASCII válido, com texto real e xref calculado; nenhum dado de produção.
-function textPdf(): Buffer {
+function textPdf() {
   const stream = "BT /F1 18 Tf 72 720 Td (Documento sintetico sem agendamentos) Tj ET\n";
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
