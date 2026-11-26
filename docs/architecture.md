@@ -59,3 +59,7 @@ O canal de comunicação possui um fluxo cronológico único de mensagens e avis
 
 - Reações: migration aditiva `0030_avisos_reacoes.sql`, chave composta por aviso e usuário, emojis 👍/👀/😂. A API `PUT /api/avisos/:id/reacao` define ou remove (emoji null), exige visibilidade e impede autoria própria. Visualizadores não acessam nenhuma rota do canal.
 - O evento realtime `avisos.changed` sinaliza atualização a administradores e conferentes destinatários (sem conteúdo); D1/API permanecem fonte de verdade. Toasts locais só para novas publicações de terceiros, sem alertar reações ou histórico inicial; polling de fallback preservado.
+
+### Organização de consultas de agendas (PR #258)
+
+`worker/repositories/agenda-queries.ts` concentra tipos de linhas e leituras SQL de agendas/agendamentos/históricos, sem dependência de mutações. `worker/repositories/agendas.ts` concentra importação, alterações e guardas transacionais, reexportando os contratos públicos existentes. A separação é por responsabilidade; nenhuma nova camada de abstração ou serviço externo.

@@ -40,7 +40,7 @@ async function mock(page: Page, role = "admin", options: { multipleSuppliers?: b
     required(rows.agenda0).push({
       supplier: "Fornecedor Laranja", hash: "c".repeat(64),
       digitadoEm: null, digitadoPor: null,
-      appointments: [{ ...appointments[2], id: "c1", protocol: "123459", supplier: "Fornecedor Laranja" }]
+      appointments: [{ ...required(appointments[2]), id: "c1", protocol: "123459", supplier: "Fornecedor Laranja" }]
     });
   }
   await page.route("**/api/**", async route => {

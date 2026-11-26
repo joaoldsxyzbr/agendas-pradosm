@@ -95,7 +95,7 @@ test("React: administrador pode navegar nas rotas sem dados operacionais falsos"
     ["/admin/reports", "Relatório Gerencial"],
     ["/admin/agendas", "Agendas"],
     ["/admin/diagnostics", "Logs e Auditoria"],
-  ]) {
+  ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     if (path === "/admin") {
