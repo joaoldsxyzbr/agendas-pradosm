@@ -666,7 +666,7 @@ function assertMutationApplied(results: D1Result[]) {
   }
 }
 
-async function changeAppointmentExchanges(db: D1Database, appointment: AppointmentRow, userId: string, hasExchanges: boolean, adminAdjustmentDetails: string | null | undefined, requireOpenDay = false) {
+async function changeAppointmentExchanges(db: D1Database, appointment: AppointmentRow, userId: string, hasExchanges: boolean, adminAdjustmentDetails: string | null | undefined = undefined, requireOpenDay = false) {
   const exchanges = hasExchanges ? 1 : 0;
   if (appointment.trocas === exchanges) return appointment;
   const agenda = await findAgendaById(db, appointment.agenda_id);
@@ -704,7 +704,7 @@ async function changeAppointmentExchanges(db: D1Database, appointment: Appointme
   return updated;
 }
 
-async function changeAppointmentStatus(db: D1Database, appointment: AppointmentRow, userId: string, status: AppointmentStatus, adminAdjustmentDetails: string | null | undefined, observation: string | null | undefined, requireOpenDay = false) {
+async function changeAppointmentStatus(db: D1Database, appointment: AppointmentRow, userId: string, status: AppointmentStatus, adminAdjustmentDetails: string | null | undefined = undefined, observation: string | null | undefined = undefined, requireOpenDay = false) {
   const previousObservation = appointment.observacao ?? null;
   const nextObservation = observation === undefined
     ? (status === appointment.status ? previousObservation : null)

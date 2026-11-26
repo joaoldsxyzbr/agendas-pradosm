@@ -126,3 +126,7 @@ Primeiro lote de 12 dos 30 testes TypeScript incluído no gate Node: contratos d
 ### Segundo lote Node: integração e concorrência
 
 O CI de 8ce340b passou verify, CodeQL e integração local. Novo adaptador SQLite exclusivamente de teste, com transação e rollback, hooks restritos para simular concorrência e falha de auditoria, bindings sintéticos que falham se utilizados indevidamente. Nove arquivos adicionais no gate strict (paginação, concorrência, digitação, autenticação, diagnósticos, migrations, CSRF, recebimento e revogação). Mantidas as fixtures e asserções; coerções de projeções SQL ficam na fronteira de teste. Ainda faltam oito arquivos; CI deste lote pendente. Sem acesso remoto.
+
+### Guardas e retenção sob strict
+
+Mais dois testes migrados: guardas concorrentes com schema real, rollback integral do lote e retenção local sintética (R2 exclusivamente simulado em memória, sem binding remoto). Assinaturas das mutações explicitam parâmetros já opcionais em runtime. Agora 23 de 29 arquivos de teste no gate; seis restantes. CI pendente.

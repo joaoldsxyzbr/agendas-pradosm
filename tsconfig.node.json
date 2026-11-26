@@ -44,6 +44,8 @@
     "tests/unit/migrations-worker-smoke.test.ts",
     "tests/unit/mutation-origin-security.test.ts",
     "tests/unit/recebimento-api-integrated.test.ts",
-    "tests/unit/session-revocation.test.ts"
+    "tests/unit/session-revocation.test.ts",
+    "tests/unit/concurrency-guards.test.ts",
+    "tests/unit/retention.test.ts"
   ]
 }

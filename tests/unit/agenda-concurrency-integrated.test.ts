@@ -1,5 +1,5 @@
 import type { AppointmentRow, AgendaRow } from "../../worker/repositories/agendas.ts";
-import { sqliteD1, isStateConflict } from "../helpers/sqlite-d1.ts";
+import { sqliteD1, isStateConflict, requiredRow } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -30,8 +30,8 @@ function fixture() {
   sql.prepare("INSERT INTO agendas VALUES ('agenda1','loja1','2026-10-29','teste.csv','adm1','aberto',NULL,NULL,NULL,NULL,'t0','t0')").run();
   sql.prepare("INSERT INTO agendamentos (id,agenda_id,protocolo,horario_inicio,horario_fim,fornecedor,status,trocas,observacao,origem,ativo,criado_em,atualizado_em) VALUES ('appt1','agenda1','P1','08:00','08:30','Fornecedor sintético','aguardando',0,NULL,'importado',1,'t0','t0')").run();
   const db = sqliteD1(sql);
-  const appointment = (): AppointmentRow => { const row = sql.prepare("SELECT * FROM agendamentos WHERE id='appt1'").get(); assert.ok(row); return row as unknown as AppointmentRow; };
-  const agenda = (): AgendaRow => { const row = sql.prepare("SELECT * FROM agendas WHERE id='agenda1'").get(); assert.ok(row); return row as unknown as AgendaRow; };
+  const appointment = () => requiredRow<AppointmentRow>(sql.prepare("SELECT * FROM agendamentos WHERE id='appt1'").get());
+  const agenda = () => requiredRow<AgendaRow>(sql.prepare("SELECT * FROM agendas WHERE id='agenda1'").get());
   const count = (table: "historico_status" | "historico_agenda" | "auditoria") => sql.prepare("SELECT COUNT(*) AS n FROM " + table).get()?.n;
   return { sql, db, appointment, agenda, count };
 }

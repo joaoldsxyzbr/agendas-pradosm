@@ -65,3 +65,9 @@ export function testEnv(db: D1Database, secret: string, limiter?: RateLimit): En
 export function isStateConflict(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "CONFLITO_ESTADO";
 }
+
+export function requiredRow<T>(row: Record<string, unknown> | undefined): T {
+  if (!row) throw Error("Registro sintético esperado não encontrado.");
+  // Projeção de fixture SQLite: mesma fronteira genérica do D1.first<T>().
+  return row as T;
+}
