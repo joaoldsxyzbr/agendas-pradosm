@@ -211,7 +211,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
     assert.equal(statement.values[0], "msg-1");
     assert.equal(statement.values[1], "M");
     assert.match(statement.sql, /VALUES \(\?, 'chat', NULL/);
-    // Aviso global: o público é "todas as lojas" e não adiciona binds.
+    // A consulta de leitores usa dois binds fixos, mesmo para avisos globais.
     const leitores = await listLeitoresDoAviso(db, "msg-1");
     assert.deepEqual(leitores, { vistos: [], faltantes: [] });
   });
@@ -860,4 +860,22 @@ describe("Reações do canal", () => {
       assert.deepEqual(leitores.faltantes.map(p=>p.id),["conf1"]);
     } finally { f.sqlite.close(); }
   });
+});
+
+it("destino legado não resolvido não é tratado como aviso global", async () => {
+  const f=fixture();
+  try {
+    f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('legado','aviso','Legado','Teste','2026-11-20T10:00:00.000Z')").run();
+    f.sqlite.prepare("INSERT INTO avisos_lojas (aviso_id,loja,loja_id) VALUES ('legado','desconhecida',NULL)").run();
+    for (const user of ["conf1","conf2"]) {
+      const result=avisosResponseSchema.parse(await (await f.call(user,"/api/avisos")).json());
+      assert.equal(result.avisos.length,0);
+      assert.equal(result.naoLidos,0);
+      assert.equal((await f.call(user,"/api/avisos/legado/reacao",{method:"PUT",body:{emoji:"👍"}})).status,404);
+    }
+    const admin=avisosResponseSchema.parse(await (await f.call("adm1","/api/avisos")).json());
+    assert.equal(admin.avisos.length,1);
+    const readers=leitoresAvisoSchema.parse(await (await f.call("adm1","/api/admin/avisos/legado/leitores")).json());
+    assert.deepEqual(readers,{vistos:[],faltantes:[]});
+  } finally { f.sqlite.close(); }
 });
