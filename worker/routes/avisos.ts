@@ -30,7 +30,7 @@ function lojaDoUsuario(user) {
   return user.papel === "conferente" ? user.lojaCodigo : null;
 }
 
-function verEventosDoUsuario(user) {
+function verEventosDoUsuario(_user) {
   // Eventos operacionais pertencem à auditoria, não ao canal de comunicação.
   return false;
 }

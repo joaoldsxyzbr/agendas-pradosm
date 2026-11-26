@@ -656,6 +656,28 @@ describe("Rotas de avisos integradas", () => {
       f.sqlite.close();
     }
   });
+  it("busca e filtra avisos sem vazar público e conta urgência além da primeira página", async () => {
+    const f = fixture();
+    try {
+      const post = (titulo, lojas = null, urgente = false) => f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo, mensagem: "Comunicado sintético", lojas, urgente } });
+      assert.equal((await post("Urgente antigo", ["01"], true)).status, 201);
+      assert.equal((await post("Restrito loja 02", ["02"])).status, 201);
+      assert.equal((await post("Inválido", [])).status, 400);
+      const add = f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES (?,'chat',NULL,'Mensagem nova','2099-01-01T00:00:00.000Z')");
+      for (let i = 0; i < 51; i++) add.run("nova-" + i);
+      const recente = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(recente.avisos.length, 50);
+      assert.equal(recente.avisos.every(a => a.tipo === "chat"), true);
+      assert.equal(recente.urgenteNaoLido, true);
+      const oficiais = await (await f.call("conf1", "/api/avisos?tipo=aviso&q=urgente")).json();
+      assert.equal(oficiais.avisos.length, 1);
+      assert.equal(oficiais.avisos[0].titulo, "Urgente antigo");
+      assert.equal(oficiais.naoLidos, recente.naoLidos);
+      const restrito = await (await f.call("conf1", "/api/avisos?q=Restrito")).json();
+      assert.equal(restrito.avisos.length, 0);
+      assert.equal((await f.call("conf1", "/api/avisos?tipo=evento")).status, 400);
+    } finally { f.sqlite.close(); }
+  });
   it("pagina avisos antigos por cursor estável, respeitando a loja e o total de não lidos", async () => {
     const f = fixture();
     try {

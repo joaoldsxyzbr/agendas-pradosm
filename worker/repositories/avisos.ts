@@ -1,6 +1,6 @@
 // Repositório de avisos/notificações in-app (spec 2026-11-11, melhorias de
-// 12/11/2026). Eventos automáticos entram no MESMO db.batch da operação que
-// os origina: operação gravada sem aviso é estado inconsistente (decisão 5).
+// 12/11/2026). Eventos antigos permanecem no D1; operações novas são
+// registradas na auditoria, sem duplicação no canal.
 // Avisos são registro permanente: sem filtro de expiração/inativação — a
 // lista é o histórico completo, do mais recente para o mais antigo.
 // Desde 25/11/2026 o canal é um chat: a mensagem comum (tipo "chat") vive na
@@ -26,7 +26,7 @@ function filtroTipo(verEventos) {
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
 // Limitado aos últimos `limit` itens. Admin/visualizador (loja null) veem tudo.
-export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null, tipoAviso = undefined, busca = "") {
+export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null, tipoAviso: string | undefined = undefined, busca = "") {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
   const filtroBase = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");

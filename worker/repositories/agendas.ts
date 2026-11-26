@@ -166,7 +166,7 @@ function appointmentInsert(db, agendaId, appointment, now) {
     appointment.csvFields ? JSON.stringify(appointment.csvFields) : null
   );
 }
-async function createAgendaImport(db, storeId, createdBy, input, storeName = null) {
+async function createAgendaImport(db, storeId, createdBy, input, _storeName = null) {
   const agendaId = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [
