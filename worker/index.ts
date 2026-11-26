@@ -12,7 +12,8 @@ export default {
     env,
     _ctx,
   ) {
-    await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
+    try { await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime)); }
+    catch { console.error("Scheduled agenda maintenance failed"); }
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }
     catch { console.warn("Scheduled diagnostics retention unavailable"); }
     try { await pruneRevokedSessions(env.DB, Math.floor(controller.scheduledTime / 1000)); }

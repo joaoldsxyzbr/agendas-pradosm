@@ -111,6 +111,7 @@ export function AvisosPage() {
   const [busca, setBusca] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
   const olderCursors = useRef<AvisoCursor[]>([]);
+  const lastOlderRefresh = useRef(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
@@ -132,7 +133,8 @@ export function AvisosPage() {
 
   // Reconciliar também as páginas antigas já abertas quando chegam alterações.
   useEffect(() => {
-    if (!avisos.dataUpdatedAt || !olderCursors.current.length) return;
+    if (!avisos.dataUpdatedAt || !olderCursors.current.length || Date.now() - lastOlderRefresh.current < 60_000) return;
+    lastOlderRefresh.current = Date.now();
     let cancelled = false;
     const cursors = [...olderCursors.current];
     void Promise.all(cursors.map(cursor => getAvisos(cursor, { busca }))).then(pages => {
@@ -190,6 +192,7 @@ export function AvisosPage() {
     if (nextBusca === busca) return;
     generation.current++;
     olderCursors.current = [];
+    lastOlderRefresh.current = 0;
     setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
     prependHeight.current = null; previousLatest.current = undefined; nearBottom.current = true; setNewMessages(false);
   };

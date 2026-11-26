@@ -59,12 +59,13 @@ realtimeRoutes.get("/", async (c) => {
   } else {
     headers.delete("X-Agenda-Realtime-Store-Id");
   }
-  return hub.fetch(
-    new Request(c.req.url, {
-      method: "GET",
-      headers
-    })
-  );
+  try {
+    return await hub.fetch(new Request(c.req.url, { method: "GET", headers }));
+  } catch {
+    // Indisponibilidade do hub não é falha da operação D1. O cliente mantém polling.
+    console.warn("realtime_upgrade_unavailable");
+    return c.json({ error: "REALTIME_INDISPONIVEL", message: "Tempo real temporariamente indisponível." }, 503);
+  }
 });
 export {
   realtimeRoutes
