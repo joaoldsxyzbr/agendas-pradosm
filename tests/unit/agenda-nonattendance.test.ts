@@ -1,35 +1,24 @@
+import { recordingD1, agendaFixture } from "../helpers/recording-d1.ts";
 import { describe,it } from "node:test";
 import assert from "node:assert/strict";
 import { changeAgendaDayStatus, listAppointmentHistory } from "../../worker/repositories/agendas.ts";
 import { closePastOpenAgendas } from "../../worker/services/agenda-maintenance.ts";
 
 function fakeDb(hasEligible = true) {
-  const statements=[], batches=[];
-  const db={
-    prepare(sql){
-      const stmt={sql,params:[],
-        bind(...values){this.params=values;return this;},
-        async first(){
-          if(sql.startsWith("SELECT 1 FROM agendas")) return hasEligible ? { 1: 1 } : null;
-          if(sql.includes("FROM agendas a"))return {
-            id:"ag1",loja_id:"store1",status_dia:"concluido",
-            store_code:"F01",store_name:"Centro"
-          };
-          throw Error("Consulta inesperada: "+sql);
-        }
-      };
-      statements.push(stmt);return stmt;
-    },
-    async batch(batch){batches.push(batch);return batch.map(()=>({meta:{changes:1}}));}
-  };
-  return {db,statements,batches};
+  const db = recordingD1({ first(sql) {
+    if (sql.startsWith("SELECT 1 FROM agendas")) return hasEligible ? { 1: 1 } : null;
+    if (sql.includes("FROM agendas a")) return agendaFixture({ id: "ag1", loja_id: "store1", status_dia: "concluido", store_name: "Centro" });
+    throw Error("Consulta inesperada: " + sql);
+  } });
+  return { db, statements: db.statements, batches: db.batches };
 }
 
 describe("Não compareceu automático",()=>{
  it("ao concluir, grava status, motivo e auditoria do sistema em batch único",async()=>{
    const {db,batches}=fakeDb();
-   const agenda={id:"ag1",loja_id:"store1",status_dia:"aberto",store_name:"Centro",data_agenda:"2026-11-11"};
+   const agenda=agendaFixture({id:"ag1",loja_id:"store1",status_dia:"aberto",store_name:"Centro",data_agenda:"2026-11-11"});
    const result=await changeAgendaDayStatus(db,agenda,"conf1","concluido");
+   assert.ok(result);
    assert.equal(result.status_dia,"concluido");
    assert.equal(batches.length,1);
    assert.equal(batches[0].length,5);
@@ -47,23 +36,20 @@ describe("Não compareceu automático",()=>{
  });
  it("reabrir dia não desfaz o Não compareceu nem gera classificação nova",async()=>{
    const {db,batches}=fakeDb();
-   await changeAgendaDayStatus(db,{id:"ag1",loja_id:"store1",status_dia:"concluido",store_name:"Centro",data_agenda:"2026-11-11"},"admin1","aberto");
+   await changeAgendaDayStatus(db,agendaFixture({id:"ag1",loja_id:"store1",status_dia:"concluido",store_name:"Centro",data_agenda:"2026-11-11"}),"admin1","aberto");
    assert.equal(batches.length,1);
    assert.equal(batches[0].length,3);
    assert.ok(batches[0].every(s=>!s.sql.includes("Não compareceu")));
    assert.ok(batches[0].every(s=>!s.sql.includes("INSERT INTO avisos")));
  });
  it("histórico expõe o evento automático pela auditoria, sem usuário humano",async()=>{
-   let query="",params=[];
-   const db={prepare(sql){query=sql;return{
-     bind(...args){params=args;return this;},
-     async all(){return{results:[{
+   const db=recordingD1({ all: () => [{
        id:"audit-1",agendamento_id:"appt1",usuario_id:null,usuario_nome:"Sistema",
        status_anterior:"aguardando",status_novo:"nao_chegou",
        observacao:"Não compareceu",alterado_em:"2026-10-28T23:00:00Z"
-     }]};}
-   };}};
+   }] });
    const rows=await listAppointmentHistory(db,"appt1");
+   const {sql: query, params} = db.calls[0];
    assert.deepEqual(params,["appt1","appt1"]);
    assert.match(query,/FROM historico_status/);
    assert.match(query,/UNION ALL/);

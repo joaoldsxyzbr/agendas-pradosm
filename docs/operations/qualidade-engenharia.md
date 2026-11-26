@@ -130,3 +130,7 @@ O CI de 8ce340b passou verify, CodeQL e integração local. Novo adaptador SQLit
 ### Guardas e retenção sob strict
 
 Mais dois testes migrados: guardas concorrentes com schema real, rollback integral do lote e retenção local sintética (R2 exclusivamente simulado em memória, sem binding remoto). Assinaturas das mutações explicitam parâmetros já opcionais em runtime. Agora 23 de 29 arquivos de teste no gate; seis restantes. CI pendente.
+
+### Último lote de mocks SQL
+
+Cinco arquivos adicionais no strict Node; adaptador de statements registrados tipado, separado do SQLite real, preservando asserções de aridade, SQL, binds e batches. Fixtures completas com tipos de domínio, sem casts nos chamadores; resultados genéricos ficam na fronteira do mock. Restam avisos e validação CI deste lote.

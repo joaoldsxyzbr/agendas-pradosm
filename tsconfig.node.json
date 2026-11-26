@@ -46,6 +46,11 @@
     "tests/unit/recebimento-api-integrated.test.ts",
     "tests/unit/session-revocation.test.ts",
     "tests/unit/concurrency-guards.test.ts",
-    "tests/unit/retention.test.ts"
+    "tests/unit/retention.test.ts",
+    "tests/unit/agenda-digitado.test.ts",
+    "tests/unit/agenda-import-bulk-replace.test.ts",
+    "tests/unit/agenda-nonattendance.test.ts",
+    "tests/unit/agenda-status.test.ts",
+    "tests/unit/repositories-services.test.ts"
   ]
 }
