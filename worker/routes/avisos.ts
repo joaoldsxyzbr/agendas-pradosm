@@ -36,7 +36,7 @@ avisoRoutes.use("*", async (c, next) => {
 // Conferente vê os avisos da sua loja (e os de todas); os demais papéis,
 // sem loja, veem todos os comunicados. Nenhum papel recebe eventos operacionais.
 function lojaDoUsuario(user) {
-  return user.papel === "conferente" ? user.lojaCodigo : null;
+  return user.papel === "conferente" ? user.lojaId : null;
 }
 
 function verEventosDoUsuario(_user) {
@@ -209,18 +209,20 @@ adminAvisoRoutes.post("/", async (c) => {
   }
   const { titulo, mensagem, urgente } = parsed.data;
   const lojas = parsed.data.lojas ? [...new Set(parsed.data.lojas)] : null;
-  // Direcionamento só para lojas ativas e existentes.
+  // Resolve o código informado para a identidade permanente da loja.
+  let destinos: { id: string; codigo: string }[] | null = null;
   if (lojas) {
     const rows = await c.env.DB.prepare(
-      "SELECT codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
+      "SELECT id, codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
     ).all();
-    const validas = new Set((rows.results ?? []).map((row) => row.codigo));
+    const validas = new Map((rows.results ?? []).map(row => [row.codigo, { id: String(row.id), codigo: String(row.codigo) }]));
     if (lojas.some((loja) => !validas.has(loja))) {
       return c.json(
         { error: "LOJAS_INVALIDAS", message: "Alguma loja escolhida não existe ou está inativa." },
         400
       );
     }
+    destinos = lojas.map(loja => validas.get(loja)!);
   }
   const now = new Date().toISOString();
   const avisoId = crypto.randomUUID();
@@ -233,7 +235,7 @@ adminAvisoRoutes.post("/", async (c) => {
       autor: user.nome,
       criadoEm: now,
       urgente,
-      lojas
+      lojas: destinos
     }),
     auditStatement(c.env.DB, {
       userId: user.id,
