@@ -1,8 +1,10 @@
-import { test, expect } from "@playwright/test";
+import { required, requestBody, type CapturedRequest } from "./fixtures.ts";
+import { CreateUserInput, UpdateUserInput } from "../../../shared/api.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "admin-sintetico", nome: "Administrador Teste", papel: "admin" };
 const viewer = { id: "viewer-sintetico", nome: "Visualizador Teste", papel: "visualizador" };
-const uuid = i => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
+const uuid = (i: number) => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
 
 function buildState() {
   return {
@@ -19,16 +21,16 @@ function buildState() {
   };
 }
 
-async function setup(page, { role = "admin", duplicate = false, lastAdmin = false, listingError = false } = {}) {
+async function setup(page: Page, { role = "admin", duplicate = false, lastAdmin = false, listingError = false } = {}) {
   const current = role === "admin" ? admin : viewer;
   const state = buildState();
-  const requests = [];
+  const requests: CapturedRequest[] = [];
   await page.route("**/api/**", route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
-    const body = method === "GET" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body, params: url.searchParams });
+    const rawBody = requestBody(route.request());
+    requests.push({ path, method, body: rawBody, params: url.searchParams });
     if (path === "/api/auth/me") return route.fulfill({ json: current });
     if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
     if (path === "/api/admin/presence") return route.fulfill({ json: [] });
@@ -39,13 +41,15 @@ async function setup(page, { role = "admin", duplicate = false, lastAdmin = fals
     }
     if (path === "/api/admin/users" && method === "POST") {
       if (duplicate) return route.fulfill({ status: 409, json: { error: "LOGIN_EM_USO", message: "Login já está em uso." } });
+      const body = CreateUserInput.parse(rawBody);
       const created = { id: uuid(20), nome: body.nome, login: body.login, papel: body.papel, lojaId: body.lojaId ?? null, ativo: true };
       state.users = [...state.users, created];
       return route.fulfill({ status: 201, json: created });
     }
     if (path === "/api/admin/users" && method === "PATCH") {
       if (lastAdmin) return route.fulfill({ status: 409, json: { error: "ULTIMO_ADMIN_ATIVO", message: "É necessário manter pelo menos um administrador ativo." } });
-      let updated = null;
+      const body = UpdateUserInput.parse(rawBody);
+      let updated: typeof state.users[number] | null = null;
       state.users = state.users.map(user => user.id === body.id
         ? (updated = {
             ...user,
@@ -110,7 +114,7 @@ test("Usuários React exige campos completos antes de gravar", async ({ page }) 
   await expect(dialog).toHaveCount(0);
   expect(requests.filter(r => r.method === "POST")).toHaveLength(1);
   const post = requests.find(r => r.method === "POST");
-  expect(post.body).toEqual({
+  expect(required(post).body).toEqual({
     nome: "Novo Conferente", login: "novo.conferente", senha: "senha-valida-123456",
     papel: "conferente", lojaId: uuid(1),
   });
@@ -142,7 +146,7 @@ test("Usuários React edita acesso e consulta auditoria", async ({ page }) => {
   await dialog.getByRole("button", { name: "Salvar alterações" }).click();
   await expect(dialog).toHaveCount(0);
   const patch = requests.find(r => r.method === "PATCH" && r.path === "/api/admin/users");
-  expect(patch.body).toEqual({ id: uuid(10), nome: "Maria Silva", login: "maria", papel: "visualizador" });
+  expect(required(patch).body).toEqual({ id: uuid(10), nome: "Maria Silva", login: "maria", papel: "visualizador" });
   await expect(page.getByRole("table", { name: "Usuários cadastrados" }).locator("tbody tr")).toContainText(["Maria Silva", "Visualizador"]);
   await page.getByRole("button", { name: "Editar usuário Maria Silva" }).click();
   await page.getByRole("button", { name: "Ver histórico" }).click();
@@ -150,8 +154,8 @@ test("Usuários React edita acesso e consulta auditoria", async ({ page }) => {
   await expect(dialog).toContainText("Antes: nome: Maria Antiga");
   await expect(dialog).toContainText("Depois: nome: Maria Silva");
   const audit = requests.find(r => r.path === "/api/admin/audit");
-  expect(audit.params.get("entity")).toBe("usuario");
-  expect(audit.params.get("entityId")).toBe(uuid(10));
+  expect(required(audit).params.get("entity")).toBe("usuario");
+  expect(required(audit).params.get("entityId")).toBe(uuid(10));
 });
 
 test("Usuários React desativa e reativa com confirmação", async ({ page }) => {
@@ -162,7 +166,7 @@ test("Usuários React desativa e reativa com confirmação", async ({ page }) =>
   await expect(dialog.getByText("Desativar Maria Silva?")).toBeVisible();
   await dialog.getByRole("button", { name: "Confirmar desativação" }).click();
   await expect(dialog).toHaveCount(0);
-  expect(requests.find(r => r.method === "PATCH" && r.path === "/api/admin/users").body)
+  expect(required(requests.find(r => r.method === "PATCH" && r.path === "/api/admin/users")).body)
     .toEqual({ id: uuid(10), ativo: false });
   await expect(page.getByRole("table", { name: "Usuários cadastrados" }).locator("tbody tr"))
     .toContainText(["Maria Silva", "Inativo"]);
@@ -170,7 +174,7 @@ test("Usuários React desativa e reativa com confirmação", async ({ page }) =>
   await dialog.getByRole("button", { name: "Ativar usuário" }).click();
   await dialog.getByRole("button", { name: "Confirmar ativação" }).click();
   await expect(dialog).toHaveCount(0);
-  expect(requests.filter(r => r.method === "PATCH").at(-1).body).toEqual({ id: uuid(10), ativo: true });
+  expect(required(requests.filter(r => r.method === "PATCH").at(-1)).body).toEqual({ id: uuid(10), ativo: true });
   await expect(page.getByRole("table", { name: "Usuários cadastrados" }).locator("tbody tr"))
     .toContainText(["Maria Silva", "Ativo"]);
 });

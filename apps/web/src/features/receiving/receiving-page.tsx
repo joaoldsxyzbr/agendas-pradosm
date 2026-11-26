@@ -98,7 +98,7 @@ export function ReceivingPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const realtimeStatus = useReceivingRealtime(session.data?.id, selectedDate);
   const stores = useQuery({ queryKey: ["receiving", "stores"], queryFn: getStores, refetchInterval: 60_000, refetchOnWindowFocus: true });
-  const agendas = useQuery({ queryKey: ["receiving", "agendas", selectedDate], queryFn: () => getAgendas(selectedDate), refetchInterval: 30_000, refetchOnWindowFocus: true });
+  const agendas = useQuery({ queryKey: ["receiving", "agendas", selectedDate], queryFn: ({ signal }) => getAgendas(selectedDate, signal), refetchInterval: 30_000, refetchOnWindowFocus: true });
   const presence = useQuery({ queryKey: ["receiving", "presence"], queryFn: getPresence, refetchInterval: 30_000, refetchOnWindowFocus: true });
 
   // A data da operacao obedece America/Sao_Paulo, inclusive na virada do dia.

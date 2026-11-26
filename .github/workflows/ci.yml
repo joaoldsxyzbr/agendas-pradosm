@@ -39,7 +39,6 @@ jobs:
           set -euo pipefail
           node scripts/check-modern-boundary.mjs
           node -e 'const p=require("./package.json");const d={...p.dependencies,...p.devDependencies};for(const n of ["react","react-dom","react-router-dom","vite","vitest","typescript"])if(d[n])process.exit(1)'
-          node scripts/check-worker.mjs
       - name: Validar migrations e Worker
         run: npm run check:migrations
       - name: Testes JavaScript e bootstrap administrativo
@@ -55,8 +54,41 @@ jobs:
         run: npx wrangler deploy --dry-run --config wrangler.preview.jsonc
       - name: Dry-run do Worker de producao sem deploy
         run: npx wrangler deploy --dry-run --config wrangler.jsonc
+      - name: Baseline SQL completo (SQLite local sintético)
+        run: npm run benchmark:agendas
+      - name: Benchmark de importação e PBKDF2 local
+        run: |
+          npm run benchmark:imports
+          npm run benchmark:password
+      - name: Medir PBKDF2 no Workerd isolado (loopback; sem Worker remoto)
+        shell: bash
+        run: |
+          set -euo pipefail
+          logfile="$RUNNER_TEMP/pbkdf2-workerd.log"
+          npx --no-install wrangler dev --local --config wrangler.password-benchmark.jsonc --ip 127.0.0.1 --port 8799 > "$logfile" 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:8799/health > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$worker_pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ready" != "1" ]]; then
+            tail -n 70 "$logfile"
+            exit 1
+          fi
+          if ! node scripts/benchmark-password-workerd.mjs; then
+            tail -n 70 "$logfile"
+            exit 1
+          fi
       - name: Preparar Chromium
         run: npx playwright install --with-deps chromium
+      - name: Integração real Worker, D1, WebSocket e navegador local
+        run: npm run test:integration:local
       - name: E2E React isolado com dados sinteticos
         env:
           CI: "true"
@@ -67,8 +99,8 @@ jobs:
         with:
           name: diagnosticos-js-puro
           path: |
-            playwright-report/
-            test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7
 

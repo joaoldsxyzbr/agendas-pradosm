@@ -2,14 +2,12 @@
 // Regras: historico_status e historico_agenda com mais de 12 meses;
 // auditoria com mais de 24 meses. Diagnósticos seguem o pruneDiagnostics (30 dias).
 //
-// Invariante de segurança: nenhum registro é purgado sem antes ser exportado
-// para o bucket R2 de retenção. Sem binding RETENTION_BUCKET disponível,
-// a execução apenas contabiliza, emite alerta e NÃO purga.
+// Históricos e auditoria são permanentes. A rotina apenas mede e alerta;
+// diagnósticos e sessões expiradas têm limpeza independente.
 
 const DAY_MS = 86400000;
 const HISTORICO_RETENCAO_DIAS = 365;
 const AUDITORIA_RETENCAO_DIAS = 730;
-const LOTE_EXPORTACAO = 500;
 const LIMITE_ALERTA_LINHAS_PADRAO = 500000;
 
 const TABELAS_RETENCAO = [
@@ -25,19 +23,23 @@ const TABELAS_CONTAGEM = [
   "historico_agenda",
   "auditoria",
   "agenda_digitacao_fornecedor",
-  "diagnosticos"
+  "diagnosticos",
+  "avisos",
+  "avisos_lidos",
+  "avisos_lojas",
+  "avisos_reacoes"
 ];
 
-function cortePara(now, dias) {
+function cortePara(now: Date, dias: number) {
   return new Date(now.getTime() - dias * DAY_MS).toISOString();
 }
 
-async function contar(db, sql, valores = []) {
-  const row = await db.prepare(sql).bind(...valores).first();
+async function contar(db: D1Database, sql: string, valores: string[] = []) {
+  const row = await db.prepare(sql).bind(...valores).first<{ total: number }>();
   return Number(row?.total ?? 0);
 }
 
-export async function retentionStatus(db) {
+export async function retentionStatus(db: D1Database) {
   const agora = new Date();
   const tabelas = [];
   for (const spec of TABELAS_RETENCAO) {
@@ -60,49 +62,18 @@ export async function retentionStatus(db) {
   return { geradoEm: agora.toISOString(), tabelas };
 }
 
-async function purgarTabela(db, bucket, spec, corte, runId) {
-  let exportados = 0;
-  let purgados = 0;
-  let lotes = 0;
-  while (true) {
-    const resultado = await db.prepare(
-      `SELECT * FROM ${spec.tabela} WHERE ${spec.colunaTempo} < ?
-         ORDER BY ${spec.colunaTempo}, id LIMIT ${LOTE_EXPORTACAO}`
-    ).bind(corte).all();
-    const registros = resultado.results ?? [];
-    if (!registros.length) break;
-    lotes += 1;
-    const chave = `retencao/${spec.tabela}/${runId}/${String(lotes).padStart(4, "0")}.json`;
-    const corpo = JSON.stringify({
-      tabela: spec.tabela,
-      corte,
-      executadoEm: new Date().toISOString(),
-      runId,
-      lote: lotes,
-      quantidade: registros.length,
-      registros
-    });
-    await bucket.put(chave, corpo, { contentType: "application/json" });
-    const ids = registros.map((registro) => registro.id);
-    const placeholders = ids.map(() => "?").join(",");
-    const exclusao = await db.prepare(
-      `DELETE FROM ${spec.tabela} WHERE id IN (${placeholders})`
-    ).bind(...ids).run();
-    exportados += registros.length;
-    purgados += Number(exclusao.meta?.changes ?? ids.length);
-  }
-  return { exportados, purgados, lotes };
-}
-
 export async function runRetention(
-  db,
-  bucket,
+  db: D1Database,
   options: { now?: Date; runId?: string; rowWarningThreshold?: number } = {}
 ) {
   const agora = options.now ?? new Date();
   const runId = options.runId ?? crypto.randomUUID();
   const limiteAlertaLinhas = options.rowWarningThreshold ?? LIMITE_ALERTA_LINHAS_PADRAO;
-  const resumo = {
+  const resumo: {
+    runId: string; executadoEm: string; tabelas: Array<{ tabela: string; corte: string; exportados: number; purgados: number; lotes: number; pendentes: number; motivo?: string }>;
+    exportacaoPulada: boolean; totalLinhas: number; contagemTabelas: Record<string, number>;
+    alertaTamanhoBanco: { nivel: string; totalLinhas: number; limite: number } | null;
+  } = {
     runId,
     executadoEm: agora.toISOString(),
     tabelas: [],
@@ -125,20 +96,15 @@ export async function runRetention(
       });
       continue;
     }
-    if (!bucket) {
-      resumo.exportacaoPulada = true;
-      resumo.tabelas.push({
-        tabela: spec.tabela, corte, exportados: 0, purgados: 0, lotes: 0,
-        pendentes: expiradas, motivo: "SEM_BUCKET_R2"
-      });
-      continue;
-    }
-    const estatisticas = await purgarTabela(db, bucket, spec, corte, runId);
-    resumo.tabelas.push({ tabela: spec.tabela, corte, ...estatisticas, pendentes: 0 });
+    resumo.exportacaoPulada = true;
+    resumo.tabelas.push({
+      tabela: spec.tabela, corte, exportados: 0, purgados: 0, lotes: 0,
+      pendentes: expiradas, motivo: "PRESERVACAO_HISTORICO"
+    });
   }
 
   if (resumo.exportacaoPulada) {
-    console.error(JSON.stringify({ event: "retention_export_skipped", runId, motivo: "SEM_BUCKET_R2" }));
+    console.log(JSON.stringify({ event: "retention_history_preserved", runId }));
   }
 
   let total = 0;

@@ -13,7 +13,7 @@ describe("Presença do conferente após conversão para JS", () => {
   });
   it("distingue online, ausente e offline conforme o último sinal", () => {
     const now = Date.parse("2026-10-18T15:00:00.000Z");
-    const ago = ms => new Date(now - ms).toISOString();
+    const ago = (ms: number) => new Date(now - ms).toISOString();
     assert.equal(conferentePresenceStatus(ago(1000), ago(1000), now), "online");
     assert.equal(conferentePresenceStatus(ago(181000), ago(1000), now), "away");
     assert.equal(conferentePresenceStatus(ago(1000), ago(421000), now), "offline");

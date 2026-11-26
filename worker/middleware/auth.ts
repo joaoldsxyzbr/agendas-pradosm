@@ -1,3 +1,4 @@
+import type { AuthUser } from "../../shared/auth.ts";
 import type { AppEnv } from "../env.ts";
 import { getCookie, setCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
@@ -37,7 +38,7 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (user.papel === "conferente" && !store) {
     return c.json(unauthorized(), 401);
   }
-  const authUser = {
+  const authUser: AuthUser = {
     id: user.id,
     nome: user.nome,
     papel: user.papel,

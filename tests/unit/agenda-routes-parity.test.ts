@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const load = relative => readFileSync(new URL(relative, import.meta.url), "utf8");
-const endpoints = code => [...code.matchAll(/\.(?:get|post|put|patch|delete)\(\s*["'](\/[^"']+)["']/g)].map(m => m[0]);
+const load = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
+const endpoints = (code: string) => [...code.matchAll(/\.(?:get|post|put|patch|delete)\(\s*["'](\/[^"']+)["']/g)].map(m => m[0]);
 for (const name of ["admin-agendas", "store-agendas"]) {
   describe(name + " — paridade da main", () => {
     const expected = JSON.parse(load("./legacy-route-contracts.json")).agenda[name];

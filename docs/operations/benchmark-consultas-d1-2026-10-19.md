@@ -33,3 +33,29 @@ O workflow não autentica usuários nem altera registros. Sucesso no HTTP compro
 5. Alterações por PR e CI, Preview isolada, smoke e deploy confirmado.
 
 Este diagnóstico não altera o schema nem endpoints de produção.
+## Atualização de 26/11/2026 — programa #259
+
+O diagnóstico de outubro acima é histórico. Na PR #258, o benchmark passa a usar as migrations reais e funções TypeScript de repositório e rotas gerenciais, com 20 repetições completas, mediana/p95 descritivo, quantidade de consultas e plano de cada statement. Inclui páginas iniciais e profundas, relatórios até 93 dias, ocorrências e avisos com cursor e badge. Volumes: 162, 1.000 e 5.000 agendas, 15 agendamentos e 2 avisos por agenda. O quick usa 40 agendas e duas repetições. CI executa os cenários completos em SQLite local; resultados não são medições remotas da Cloudflare. Preview não integra o escopo deste programa; não habilitar ou recriar D1 Preview. Nenhuma migration ou índice novo nesta etapa.
+
+## Resultado do CI 45887784001 — commit c538a49 (26/11/2026)
+
+Fonte: https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45887784001/job/140142711891 . Medições SQLite local sintético, 20 repetições; não são latência remota, CPU ou rows_read de D1. Verificações de cardinalidade, FKs e isolamento passaram.
+
+| Cenário | p95 162 agendas (ms) | p95 1.000 agendas (ms) | p95 5.000 agendas (ms) | Statements |
+|---|---:|---:|---:|---:|
+| ADM sem filtros | 2,19 | 13,25 | 81,56 | 1 |
+| ADM filtrado por data | 0,10 | 0,17 | 0,20 | 1 |
+| ADM primeira página | 0,39 | 0,55 | 1,36 | 1 |
+| ADM página profunda | 0,38 | 0,76 | 2,67 | 1 |
+| Conferente/loja sem paginação | 0,23 | 1,04 | 8,55 | 1 |
+| Conferente primeira página | 0,31 | 0,31 | 0,32 | 1 |
+| Relatório até 93 dias | 3,51 | 14,58 | 29,32 | 3 |
+| Ocorrências paginadas | 1,63 | 8,64 | 28,03 | 2 |
+| Avisos primeira página + badge | 0,54 | 2,19 | 10,93 | 2 |
+| Avisos segunda página | 0,44 | 2,17 | 11,26 | 2 |
+
+Interpretação: o caminho paginado evita agregação de todas as agendas e escala melhor no cenário sintético; o caminho filtrado por data é estável. Relatórios e badge de avisos merecem observação de rows_read e CPU antes de otimizar. Ordenações temporárias aparecem nos planos de agendas; não são por si só um defeito. Manter paginação nos consumidores de histórico e evitar novos usos sem filtros. A comparação não é uma garantia de capacidade, SLA nem teste de concorrência. A #257 modifica destinos e índices de avisos; repetir a baseline depois de reconciliar as PRs. Sem criar índices especulativos.
+
+## Extensão: escrita em lote (CI seguinte)
+
+`npm run benchmark:imports` executa 121, 350 e 700 agendamentos em dez lojas, 5 medições por tamanho depois de aquecimento, contra migrations reais e repositório atômico. Mede criação e substituição sem alterar protocolos, IDs, status ou cardinalidade; registra contagem de statements, mediana/máximo local e planos das leituras de versão/itens. Lote disjunto de 700 deve exceder 800 statements e rejeitar sem gravação. Sem thresholds de tempo arbitrários e sem D1 remoto. Resultados pendentes de CI.

@@ -1,3 +1,4 @@
+import { sqliteD1, isStateConflict } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -22,34 +23,7 @@ function setup() {
   insert.run("item1", "111111", "Fornecedor Á", JSON.stringify({ Doca: "01", Pedidos: "456" }));
   insert.run("item2", "222222", "FORNECEDOR A", JSON.stringify({ Doca: "01", Pedidos: "456" }));
 
-  const d1 = {
-    prepare(sql) {
-      const stmt = sqlite.prepare(sql);
-      let values = [];
-      const d1Stmt = {
-        bind(...args) { values = args; return d1Stmt; },
-        async first() { return stmt.get(...values) ?? null; },
-        async all() { return { results: stmt.all(...values) }; },
-        async run() {
-          const result = stmt.run(...values);
-          return { success: true, meta: { changes: Number(result.changes) } };
-        }
-      };
-      return d1Stmt;
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const results = [];
-        for (const stmt of statements) results.push(await stmt.run());
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
-      }
-    }
-  };
+  const d1 = sqliteD1(sqlite);
   return { sqlite, d1, agenda: { id: "agenda1", loja_id: "loja1" } };
 }
 
@@ -121,7 +95,7 @@ describe("Digitação administrativa por fornecedor — preview", () => {
     });
     assert.ok(changed?.digitadoEm);
     const after = await listAgendaSuppliers(d1, agenda.id);
-    assert.equal(after[0].digitadoPor.name, "Administradora");
+    assert.equal(after[0].digitadoPor?.name, "Administradora");
     assert.ok(after[0].digitadoEm);
     // No-op concorrente: pedir o mesmo estado devolve o nome salvo do
     // digitador (nunca string vazia) e nao grava auditoria nova.
@@ -129,16 +103,16 @@ describe("Digitação administrativa por fornecedor — preview", () => {
       supplier: after[0].supplier, hash: after[0].hash, digitado: true,
       expectedDigitadoEm: after[0].digitadoEm
     });
-    assert.equal(noop.digitadoPor?.name, "Administradora");
-    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);
-    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);
+    assert.equal(noop?.digitadoPor?.name, "Administradora");
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n, 1);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n, 1);
     assert.deepEqual(sqlite.prepare("SELECT status FROM agendamentos ORDER BY id").all().map(row => row.status), ["aguardando", "aguardando"]);
     await changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: after[0].supplier, hash: after[0].hash, digitado: false,
       expectedDigitadoEm: after[0].digitadoEm
     });
     assert.equal((await listAgendaSuppliers(d1, agenda.id))[0].digitadoEm, null);
-    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 2);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n, 2);
     sqlite.close();
   });
 
@@ -154,8 +128,8 @@ describe("Digitação administrativa por fornecedor — preview", () => {
     assert.equal(changed.digitadoEm, null);
     await assert.rejects(() => changeSupplierCheck(d1, agenda, "adm", "Administradora", {
       supplier: first.supplier, hash: first.hash, digitado: true, expectedDigitadoEm: null
-    }), error => error?.code === "CONFLITO_ESTADO");
-    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n, 1);
+    }), isStateConflict);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n, 1);
     sqlite.close();
   });
 });

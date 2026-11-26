@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,21 +28,11 @@ function fixture() {
   ins.run("admin1",null,"Admin sintético","admin","hash-sintetico","admin");
   ins.run("viewer1",null,"Viewer sintético","viewer","hash-sintetico","visualizador");
   ins.run("clerk1","store1","Conferente sintético","clerk","hash-sintetico","conferente");
-  const db = { prepare(statement) {
-    const stmt = sql.prepare(statement);
-    let vals = [];
-    const bound = {
-      bind(...values) { vals = values; return bound; },
-      async first() { return stmt.get(...vals) ?? null; },
-      async all() { return { results: stmt.all(...vals) }; },
-      async run() { const result = stmt.run(...vals); return { success:true,meta:{changes:Number(result.changes)} }; }
-    };
-    return bound;
-  } };
-  const env = { DB:db, SESSION_SECRET:secret };
-  async function call(user, path, method="GET", body=null, origin="http://localhost") {
+  const db = sqliteD1(sql);
+  const env = testEnv(db, secret);
+  async function call(user: string | null, path: string, method="GET", body: unknown = null, origin="http://localhost") {
     const token = user && await createSessionToken(user,1,secret);
-    const headers = { Origin:origin };
+    const headers: Record<string, string> = { Origin:origin };
     if(token) headers.Cookie = "agenda_session=" + token;
     if(body!==null) headers["Content-Type"] = "application/json";
     return app.request("http://localhost" + path, {
@@ -81,11 +73,11 @@ describe("Diagnósticos seguros", () => {
       assert.equal((await f.call(null,"/api/admin/diagnostics")).status,401);
       const answer=await f.call("admin1","/api/admin/diagnostics?nivel=error&operacao=importacao");
       assert.equal(answer.status,200);
-      const rows=await answer.json();
+      const rows=z.array(z.object({ event: z.string(), user: z.object({ id: z.string() }).nullable() }).passthrough()).parse(await answer.json());
       assert.equal(rows.length,2);
       assert.equal(rows[0].event,"IMPORT_READ_FAILED");
-      assert.ok(rows.some(row=>row.user.id==="admin1"));
-      assert.ok(rows.some(row=>row.user.id==="clerk1"));
+      assert.ok(rows.some(row=>row.user?.id==="admin1"));
+      assert.ok(rows.some(row=>row.user?.id==="clerk1"));
       assert.equal("senha" in rows[0],false);
       assert.equal((await f.call("admin1","/api/admin/diagnostics?nivel=INVALIDO")).status,400);
     } finally { f.sql.close(); }
@@ -102,7 +94,7 @@ describe("Diagnósticos seguros", () => {
       f.sql.prepare("INSERT INTO auditoria (id,usuario_id,acao,entidade,entidade_id,criado_em) VALUES ('log1','admin1','teste','usuario','admin1',?)").run(oldAudit);
       await pruneDiagnostics(f.db,new Date("2026-10-22T00:00:00.000Z"));
       assert.equal((await listDiagnostics(f.db)).length,1);
-      assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n,1);
+      assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n,1);
       for(let i=0;i<29;i++) await recordDiagnostic(f.db,event);
       assert.equal((await f.call("admin1","/api/diagnostics/events","POST",{
         evento:"IMPORT_SELECTED",nivel:"info",operacao:"importacao"

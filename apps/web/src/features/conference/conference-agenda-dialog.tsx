@@ -56,7 +56,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
   const [pdfError, setPdfError] = useState("");
   const query = useQuery({
     queryKey: ["conference", "admin-agenda", agendaId],
-    queryFn: () => loadAdminAgenda(agendaId),
+    queryFn: ({ signal }) => loadAdminAgenda(agendaId, signal),
     refetchInterval: 30_000, refetchOnWindowFocus: true,
   });
   const agendaQueryKey = ["conference", "admin-agenda", agendaId] as const;

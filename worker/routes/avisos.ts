@@ -1,3 +1,4 @@
+import type { AuthUser } from "../../shared/auth.ts";
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { auditStatement } from "../repositories/audit.ts";
@@ -35,11 +36,11 @@ avisoRoutes.use("*", async (c, next) => {
 
 // Conferente vê os avisos da sua loja (e os de todas); os demais papéis,
 // sem loja, veem todos os comunicados. Nenhum papel recebe eventos operacionais.
-function lojaDoUsuario(user) {
-  return user.papel === "conferente" ? user.lojaCodigo : null;
+function lojaDoUsuario(user: AuthUser) {
+  return user.papel === "conferente" ? user.lojaId : null;
 }
 
-function verEventosDoUsuario(_user) {
+function verEventosDoUsuario(_user: AuthUser) {
   // Eventos operacionais pertencem à auditoria, não ao canal de comunicação.
   return false;
 }
@@ -134,7 +135,8 @@ avisoRoutes.post("/", async (c) => {
 });
 
 avisoRoutes.put("/:id/reacao", async (c) => {
-  const user = c.get("authUser")!;
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
   const parsed = definirReacaoSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "REQUISICAO_INVALIDA", message: "Reação inválida." }, 400);
   const id = c.req.param("id");
@@ -209,17 +211,24 @@ adminAvisoRoutes.post("/", async (c) => {
   }
   const { titulo, mensagem, urgente } = parsed.data;
   const lojas = parsed.data.lojas ? [...new Set(parsed.data.lojas)] : null;
-  // Direcionamento só para lojas ativas e existentes.
+  // A API recebe códigos; o destino persistido é a identidade estável.
+  let destinos: { id: string; codigo: string }[] | null = null;
   if (lojas) {
     const rows = await c.env.DB.prepare(
-      "SELECT codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
-    ).all();
-    const validas = new Set((rows.results ?? []).map((row) => row.codigo));
+      "SELECT id, codigo FROM lojas WHERE ativo = 1 AND excluido_em IS NULL"
+    ).all<{ id: string; codigo: string }>();
+    const validas = new Map((rows.results ?? []).map(row => [row.codigo, row]));
     if (lojas.some((loja) => !validas.has(loja))) {
       return c.json(
         { error: "LOJAS_INVALIDAS", message: "Alguma loja escolhida não existe ou está inativa." },
         400
       );
+    }
+    destinos = [];
+    for (const codigo of lojas) {
+      const destino = validas.get(codigo);
+      if (!destino) throw Error("Destino validado não encontrado.");
+      destinos.push(destino);
     }
   }
   const now = new Date().toISOString();
@@ -233,7 +242,7 @@ adminAvisoRoutes.post("/", async (c) => {
       autor: user.nome,
       criadoEm: now,
       urgente,
-      lojas
+      lojas: destinos
     }),
     auditStatement(c.env.DB, {
       userId: user.id,

@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const load = path => readFileSync(new URL(path, import.meta.url), "utf8");
-function routePatterns(source) {
+const load = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+function routePatterns(source: string) {
   // `[^"']*` também casa o caminho raiz "/" — contratos anteriores ignoravam
   // esses endpoints por exigirem um caractere após a barra.
   return [...source.matchAll(/\b(?:get|post|patch|put|delete)\(\s*["'](\/[^"']*)["']/g)].map(hit => hit[0]);

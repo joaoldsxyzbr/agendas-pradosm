@@ -1,7 +1,15 @@
+import { realtimeFailureKind } from "../lib/realtime-failure.ts";
+import type { Env } from "../env.ts";
+interface AgendaChangedInput {
+  agendaId: string;
+  storeId: string;
+  date: string;
+  reason: "status" | "exchanges" | "manual" | "day-status" | "import" | "observation";
+}
 import {
   REALTIME_PROTOCOL_VERSION
 } from "../../shared/realtime.ts";
-async function publishAgendaChanged(env, input) {
+async function publishAgendaChanged(env: Env, input: AgendaChangedInput): Promise<boolean> {
   if (env.REALTIME_MODE !== "on") return false;
   const event = {
     version: REALTIME_PROTOCOL_VERSION,
@@ -34,14 +42,14 @@ async function publishAgendaChanged(env, input) {
       JSON.stringify({
         event: "realtime_publish_failed",
         type: event.type,
-        reason: event.reason
-      }),
-      error
+        reason: event.reason,
+        kind: realtimeFailureKind(error)
+      })
     );
     return false;
   }
 }
-async function revokeRealtimeUser(env, userId, mode = "terminate") {
+async function revokeRealtimeUser(env: Env, userId: string, mode: "terminate" | "refresh" = "terminate"): Promise<boolean> {
   if (env.REALTIME_MODE !== "on") return false;
   try {
     const hubId = env.REALTIME_HUB.idFromName("agenda-prado");
@@ -64,17 +72,16 @@ async function revokeRealtimeUser(env, userId, mode = "terminate") {
     return true;
   } catch (error) {
     console.error(
-      JSON.stringify({ event: "realtime_revoke_failed" }),
-      error
+      JSON.stringify({ event: "realtime_revoke_failed", kind: realtimeFailureKind(error) })
     );
     return false;
   }
 }
 // Apenas sinal de invalidação; conteúdo e autorização continuam na API HTTP.
-async function publishAvisosChanged(env, avisoId) {
+async function publishAvisosChanged(env: Env, avisoId: string): Promise<boolean> {
   if (env.REALTIME_MODE !== "on") return false;
   try {
-    const rows = await env.DB.prepare("SELECT s.id AS store_id FROM avisos_lojas a LEFT JOIN lojas s ON s.codigo = a.loja WHERE a.aviso_id = ?").bind(avisoId).all();
+    const rows = await env.DB.prepare("SELECT loja_id AS store_id FROM avisos_lojas WHERE aviso_id = ?").bind(avisoId).all<{ store_id: string | null }>();
     const lojas = rows.results ?? [];
     const storeIds = lojas.length ? lojas.map(row => row.store_id).filter(id => typeof id === "string") : null;
     const response = await env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("agenda-prado")).fetch(new Request("https://realtime.internal/internal/publish", {
@@ -83,8 +90,8 @@ async function publishAvisosChanged(env, avisoId) {
     }));
     if (!response.ok) console.error("realtime_avisos_publish_failed", { status: response.status });
     return response.ok;
-  } catch {
-    console.error("realtime_avisos_publish_failed");
+  } catch (error) {
+    console.error("realtime_avisos_publish_failed", { kind: realtimeFailureKind(error) });
     return false;
   }
 }

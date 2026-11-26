@@ -1,3 +1,34 @@
+import type { Aviso, AvisoTipo, AvisoCursor, LeitorCanal, Reacao, ReacaoEmoji } from "../../shared/avisos.ts";
+import { reacaoEmojiSchema } from "../../shared/avisos.ts";
+import { z } from "zod";
+
+interface AvisoRow {
+  id: string;
+  tipo: AvisoTipo;
+  titulo: string | null;
+  mensagem: string;
+  criado_em: string;
+  urgente: number;
+  autor: string | null;
+  lojas: string | null;
+  lido: number;
+  proprio?: number | null;
+  reacoes_json?: string | null;
+}
+interface MensagemInput {
+  id?: string;
+  mensagem: string;
+  criadoPor: string;
+  autor: string;
+  criadoEm: string;
+}
+interface AvisoInput extends MensagemInput {
+  titulo: string;
+  urgente: boolean;
+  lojas: { id: string; codigo: string }[] | null;
+}
+const reacaoRowSchema = z.object({ emoji: reacaoEmojiSchema, nome: z.string(), proprio: z.number() });
+
 // Repositório de avisos/notificações in-app (spec 2026-11-11, melhorias de
 // 12/11/2026). Eventos antigos permanecem no D1; operações novas são
 // registradas na auditoria, sem duplicação no canal.
@@ -9,24 +40,24 @@
 // Filtro de direcionamento por loja: aviso sem linhas em avisos_lojas é de
 // todas as lojas; com linhas, só quem tem a loja (ou vê tudo) o enxerga.
 // Mensagens de chat não têm linhas em avisos_lojas: sempre visíveis.
-function visibilidadePorLoja(loja) {
+function visibilidadePorLoja(loja: string | null) {
   return loja
     ? "(SELECT COUNT(*) FROM avisos_lojas x WHERE x.aviso_id = a.id) = 0 " +
-        "OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = a.id AND x.loja = ?)"
+        "OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = a.id AND x.loja_id = ?)"
     : "";
 }
 
 // Eventos automáticos são do admin/gerente: o conferente recebe os avisos
 // publicados pelo admin E as mensagens do chat (decisão de 25/11/2026 — sem
 // ruído de operações de lojas alheias para quem confere).
-function filtroTipo(verEventos) {
+function filtroTipo(verEventos: boolean) {
   return verEventos ? "" : "a.tipo IN ('aviso', 'chat')";
 }
 
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
-// Limitado aos últimos `limit` itens. Admin/visualizador (loja null) veem tudo.
-export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null, tipoAviso: string | undefined = undefined, busca = "") {
+// Limitado aos últimos `limit` itens. Admin (loja null) vê tudo.
+export async function listAvisos(db: D1Database, userId: string, loja: string | null = null, verEventos = true, limit = 50, cursor: AvisoCursor | null = null, tipoAviso: string | undefined = undefined, busca = "") {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
   const filtroBase = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
@@ -41,7 +72,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
   // Separador char(31) (unit separator): código de loja com vírgula não pode
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
-    "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
+    "(SELECT GROUP_CONCAT(COALESCE(s.codigo, x.loja), char(31)) FROM avisos_lojas x LEFT JOIN lojas s ON s.id = x.loja_id WHERE x.aviso_id = a.id) AS lojas";
   // "proprio" alinha a mensagem do próprio autor à direita no chat sem
   // depender de nome (homônimos); eventos (criado_por NULL) nunca são próprios.
   const values = [userId, userId, userId, userId, ...(loja ? [loja] : []), ...(busca ? [busca] : []),
@@ -58,7 +89,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
       ${where ? "WHERE " + where : ""}
       ORDER BY a.criado_em DESC, a.id DESC
       LIMIT ?`
-  ).bind(...values).all();
+  ).bind(...values).all<AvisoRow>();
   const unread = await db.prepare(
     `SELECT COUNT(*) AS total, COALESCE(MAX(CASE WHEN a.tipo = 'aviso' AND a.urgente = 1 THEN 1 ELSE 0 END), 0) AS urgente
        FROM avisos a
@@ -66,7 +97,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
           SELECT 1 FROM avisos_lidos l
            WHERE l.aviso_id = a.id AND l.usuario_id = ?
         )`
-  ).bind(...(loja ? [loja, userId, userId] : [userId, userId])).first();
+  ).bind(...(loja ? [loja, userId, userId] : [userId, userId])).first<{ total: number; urgente: number }>();
   const rows = result.results ?? [];
   const avisos = rows.slice(0, limit);
   const hasMore = rows.length > limit;
@@ -84,7 +115,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
 // filtro de loja e tipo da listagem). Idempotente: marcar de novo não
 // regrava (INSERT OR IGNORE na PK composta); aviso invisível responde igual
 // a já lido, sem vazar existência fora do que o usuário vê.
-export async function markAvisoLido(db, avisoId, userId, now, loja = null, verEventos = true) {
+export async function markAvisoLido(db: D1Database, avisoId: string, userId: string, now: string, loja: string | null = null, verEventos = true) {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
   const where = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
@@ -102,7 +133,7 @@ export async function markAvisoLido(db, avisoId, userId, now, loja = null, verEv
 // marca tudo o que o usuário enxerga. Idempotente por aviso (INSERT OR
 // IGNORE); respeita o direcionamento por loja e o filtro de tipo.
 // Retorna quantos viraram lidos agora.
-export async function markTodosAvisosLidos(db, userId, now, loja = null, verEventos = true) {
+export async function markTodosAvisosLidos(db: D1Database, userId: string, now: string, loja: string | null = null, verEventos = true) {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
   const where = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
@@ -114,11 +145,11 @@ export async function markTodosAvisosLidos(db, userId, now, loja = null, verEven
          WHERE l.aviso_id = a.id AND l.usuario_id = ?
       )`
   ).bind(...(loja ? [userId, now, loja, userId] : [userId, now, userId])).run();
-  return result?.meta?.changes ?? 0;
+  return Number(result?.meta?.changes ?? 0);
 }
 
 // Mapeia a linha do D1 para o contrato camelCase do frontend (shared/avisos.ts).
-export function avisoJson(row) {
+export function avisoJson(row: AvisoRow): Aviso {
   return {
     id: row.id,
     tipo: row.tipo,
@@ -130,7 +161,7 @@ export function avisoJson(row) {
     // Ausente (undefined) em respostas de publicação e tabelas sem a coluna:
     // o contrato do schema é opcional justamente por isso.
     ...(row.proprio === undefined ? {} : { proprio: row.proprio === 1 }),
-    reacoes: row.reacoes_json ? JSON.parse(row.reacoes_json).map(r => ({ ...r, proprio: r.proprio === 1 })) : [],
+    reacoes: row.reacoes_json ? z.array(reacaoRowSchema).parse(JSON.parse(row.reacoes_json)).map(r => ({ ...r, proprio: r.proprio === 1 })) : [],
     autor: row.autor ?? "Sistema",
     lojas: row.lojas ? String(row.lojas).split("\u001f") : null
   };
@@ -140,7 +171,7 @@ export function avisoJson(row) {
 // direcionamento por loja); entram no mesmo batch da auditoria
 // (aviso_publicado) na rota. O `id` opcional permite casar o INSERT com o
 // entityId gravado na auditoria.
-export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, autor, criadoEm, urgente, lojas }) {
+export function publishAvisoStatements(db: D1Database, { id, titulo, mensagem, criadoPor, autor, criadoEm, urgente, lojas }: AvisoInput): D1PreparedStatement[] {
   const avisoId = id ?? crypto.randomUUID();
   const statements = [
     db.prepare(
@@ -149,7 +180,7 @@ export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, au
   ];
   for (const loja of lojas ?? []) {
     statements.push(
-      db.prepare("INSERT INTO avisos_lojas (aviso_id, loja) VALUES (?, ?)").bind(avisoId, loja)
+      db.prepare("INSERT INTO avisos_lojas (aviso_id, loja, loja_id) VALUES (?, ?, ?)").bind(avisoId, loja.codigo, loja.id)
     );
   }
   return statements;
@@ -158,7 +189,7 @@ export function publishAvisoStatements(db, { id, titulo, mensagem, criadoPor, au
 // Statement de INSERT da mensagem comum do canal (tipo "chat"): sem título,
 // sem urgência e global (sem linhas em avisos_lojas = todas as lojas).
 // Usada pelo POST /api/avisos de admin e conferente (decisão de 25/11).
-export function publishMensagemStatements(db, { id, mensagem, criadoPor, autor, criadoEm }) {
+export function publishMensagemStatements(db: D1Database, { id, mensagem, criadoPor, autor, criadoEm }: MensagemInput): D1PreparedStatement {
   const mensagemId = id ?? crypto.randomUUID();
   return db.prepare(
     "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_por, criado_em, urgente, autor) VALUES (?, 'chat', NULL, ?, ?, ?, 0, ?)"
@@ -169,29 +200,24 @@ export function publishMensagemStatements(db, { id, mensagem, criadoPor, autor, 
 // destinatário (aviso sem linhas em avisos_lojas = todas as lojas), com quem
 // já leu (lido_em) e quem ainda está aguardando. Leitura automática do canal
 // grava em avisos_lidos, então "visto" = abriu o canal após a publicação.
-export async function listLeitoresDoAviso(db, avisoId) {
-  const lojasRows = await db.prepare(
-    "SELECT loja FROM avisos_lojas WHERE aviso_id = ?"
-  ).bind(avisoId).all();
-  const codigos = (lojasRows.results ?? []).map((row) => row.loja);
-  const alvo = codigos.length
-    ? " AND s.codigo IN (" + codigos.map(() => "?").join(",") + ")"
-    : "";
+export async function listLeitoresDoAviso(db: D1Database, avisoId: string) {
+  // EXISTS evita listas IN variáveis e mantém destinos não resolvidos fechados.
   const publico = await db.prepare(
     `SELECT u.id, u.nome, s.codigo AS loja
-       FROM usuarios u
-       JOIN lojas s ON s.id = u.loja_id
-      WHERE u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL${alvo}`
-  ).bind(...codigos).all();
+       FROM usuarios u JOIN lojas s ON s.id = u.loja_id
+      WHERE u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL
+        AND (NOT EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = ?)
+          OR EXISTS (SELECT 1 FROM avisos_lojas x WHERE x.aviso_id = ? AND x.loja_id = s.id))`
+  ).bind(avisoId, avisoId).all<{ id: string; nome: string; loja: string }>();
   const lidos = await db.prepare(
     `SELECT l.usuario_id, l.lido_em
        FROM avisos_lidos l
        JOIN usuarios u ON u.id = l.usuario_id
       WHERE l.aviso_id = ? AND u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL`
-  ).bind(avisoId).all();
+  ).bind(avisoId).all<{ usuario_id: string; lido_em: string }>();
   const lidosMap = new Map((lidos.results ?? []).map((row) => [row.usuario_id, row.lido_em]));
-  const vistos = [];
-  const faltantes = [];
+  const vistos: LeitorCanal[] = [];
+  const faltantes: LeitorCanal[] = [];
   for (const pessoa of publico.results ?? []) {
     const lidoEm = lidosMap.get(pessoa.id) ?? null;
     const registro = { id: pessoa.id, nome: pessoa.nome, lidoEm, loja: pessoa.loja };
@@ -207,7 +233,7 @@ export async function listLeitoresDoAviso(db, avisoId) {
 // operação. `guardAuditId`: só grava o aviso se a auditoria da operação
 // registrou (padrão onlyIfPreviousWrite — falha silenciosa se a operação
 // não alterou nada). Urgência 0 e autor 'Sistema' vêm do DEFAULT de 0023.
-export function avisoEventoStatement(db, { titulo, mensagem, criadoEm, guardAuditId = null }) {
+export function avisoEventoStatement(db: D1Database, { titulo, mensagem, criadoEm, guardAuditId = null }: { titulo: string; mensagem: string; criadoEm: string; guardAuditId?: string | null }): D1PreparedStatement {
   const id = crypto.randomUUID();
   if (guardAuditId) {
     return db.prepare(
@@ -221,7 +247,7 @@ export function avisoEventoStatement(db, { titulo, mensagem, criadoEm, guardAudi
 }
 
  // A visibilidade e a autoria são verificadas também na própria mutação SQL.
-export async function definirReacao(db, avisoId, userId, loja, emoji, now) {
+export async function definirReacao(db: D1Database, avisoId: string, userId: string, loja: string | null, emoji: ReacaoEmoji | null, now: string): Promise<Reacao[] | null> {
   const filtroLoja = visibilidadePorLoja(loja);
   const where = "a.id = ? AND a.tipo IN ('aviso', 'chat') AND a.criado_por IS NOT ?" +
     (filtroLoja ? " AND (" + filtroLoja + ")" : "");
@@ -239,6 +265,6 @@ export async function definirReacao(db, avisoId, userId, loja, emoji, now) {
   }
   const rows = await db.prepare(`SELECT r.emoji, u.nome, (r.usuario_id = ?) AS proprio
       FROM avisos_reacoes r JOIN usuarios u ON u.id = r.usuario_id WHERE r.aviso_id = ?
-      ORDER BY r.emoji, u.nome, u.id`).bind(userId, avisoId).all();
+      ORDER BY r.emoji, u.nome, u.id`).bind(userId, avisoId).all<{ emoji: ReacaoEmoji; nome: string; proprio: number }>();
   return (rows.results ?? []).map(row => ({ emoji: row.emoji, nome: row.nome, proprio: row.proprio === 1 }));
 }

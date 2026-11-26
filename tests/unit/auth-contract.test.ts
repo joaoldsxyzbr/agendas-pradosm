@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const read = p => readFileSync(new URL(p, import.meta.url), "utf8");
-const routes = src => [...src.matchAll(/authRoutes\.(get|post|patch|delete)\(\s*"([^"]+)"/g)].map(m => [m[1], m[2]]);
+const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
+const routes = (src: string) => [...src.matchAll(/authRoutes\.(get|post|patch|delete)\(\s*"([^"]+)"/g)].map(m => [m[1], m[2]]);
 describe("Autenticação JS corresponde à main", () => {
   it("preserva todos os endpoints e não inclui login de demonstração", () => {
     const expected = JSON.parse(read("./legacy-route-contracts.json")).auth;

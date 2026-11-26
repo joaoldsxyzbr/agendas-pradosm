@@ -1,21 +1,22 @@
 import type { AppEnv } from "../env.ts";
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 const MAX_IMPORT_JSON_BYTES = 1024 * 1024;
 const MUTATION_METHODS = /* @__PURE__ */ new Set(["POST", "PUT", "PATCH", "DELETE"]);
-function isSensitiveApiPath(path) {
+function isSensitiveApiPath(path: string) {
   return path.startsWith("/api/auth/") || path.startsWith("/api/admin/") || path.startsWith("/api/store/") || path.startsWith("/api/diagnostics/") || path.startsWith("/api/avisos");
 }
-function isMutationOriginProtectedPath(path) {
+function isMutationOriginProtectedPath(path: string) {
   return path.startsWith("/api/admin/") || path.startsWith("/api/store/") || path.startsWith("/api/diagnostics/") || path.startsWith("/api/avisos") || path === "/api/auth/bootstrap-register" || path === "/api/auth/login" || path === "/api/auth/logout";
 }
-function originMatchesRequest(requestUrl, origin) {
+function originMatchesRequest(requestUrl: string, origin: string): boolean {
   try {
     return new URL(origin).origin === new URL(requestUrl).origin;
   } catch {
     return false;
   }
 }
-function requestTooLarge(c) {
+function requestTooLarge(c: Context<AppEnv>) {
   return c.json(
     {
       error: "REQUISICAO_MUITO_GRANDE",
@@ -71,14 +72,26 @@ const limitAgendaImportBody = createMiddleware<AppEnv>(
     if (Number.isFinite(contentLength) && contentLength > MAX_IMPORT_JSON_BYTES) {
       return requestTooLarge(c);
     }
-    const bytes = (await c.req.raw.clone().arrayBuffer()).byteLength;
-    if (bytes > MAX_IMPORT_JSON_BYTES) {
-      return requestTooLarge(c);
+    // Limita a leitura mesmo sem Content-Length confiável. O clone preserva o corpo original.
+    const reader = c.req.raw.clone().body?.getReader();
+    if (reader) {
+      try {
+        let bytes = 0;
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > MAX_IMPORT_JSON_BYTES) {
+            void reader.cancel().catch(() => undefined);
+            return requestTooLarge(c);
+          }
+        }
+      } finally { reader.releaseLock(); }
     }
     await next();
   }
 );
-function internalServerError(c) {
+function internalServerError(c: Context<AppEnv>) {
   return c.json(
     {
       error: "ERRO_INTERNO",

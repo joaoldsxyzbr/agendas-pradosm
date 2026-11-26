@@ -7,17 +7,17 @@ import {
 export async function getStores() {
   return z.array(storeSchema).parse(await apiFetch<unknown>("/api/admin/stores"));
 }
-export async function getAgendas(date: string) {
+export async function getAgendas(date: string, signal?: AbortSignal) {
   return z.array(summarySchema).parse(await apiFetch<unknown>(
-    `/api/admin/agendas?date=${encodeURIComponent(date)}`,
+    `/api/admin/agendas?date=${encodeURIComponent(date)}`, { signal },
   ));
 }
 export async function getPresence() {
   return z.array(presenceSchema).parse(await apiFetch<unknown>("/api/admin/presence"));
 }
-export async function getAgendaDetail(id: string) {
+export async function getAgendaDetail(id: string, signal?: AbortSignal) {
   return detailSchema.parse(await apiFetch<unknown>(
-    `/api/admin/agendas/${encodeURIComponent(id)}`,
+    `/api/admin/agendas/${encodeURIComponent(id)}`, { signal },
   ));
 }
 

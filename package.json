@@ -17,7 +17,9 @@
     "deploy:preview": "npm run db:migrate:preview:agendas && wrangler deploy --config wrangler.preview.jsonc",
     "deploy": "npm run verify:production && npm run deploy:cloudflare",
     "benchmark:password": "node --experimental-strip-types scripts/benchmark-password.mjs",
-    "benchmark:agendas": "node --experimental-strip-types scripts/benchmark-agendas.mjs"
+    "benchmark:agendas": "node --experimental-strip-types scripts/benchmark-agendas.mjs",
+    "test:integration:local": "node --experimental-strip-types scripts/test-local-worker.mjs",
+    "benchmark:imports": "node --experimental-strip-types scripts/benchmark-imports.ts"
   },
   "dependencies": {
     "@llamaindex/liteparse-wasm": "^2.18.0",

@@ -6,7 +6,7 @@ const HASH_BYTES = 32;
 const SALT_BYTES = 16;
 const DATABASE_NAME = "agendas-prado";
 
-function required(name) {
+function required(name: string) {
   const value = process.env[name]?.trim();
   if (!value) {
     throw new Error(`Defina ${name} no ambiente antes de executar o bootstrap.`);
@@ -14,11 +14,11 @@ function required(name) {
   return value;
 }
 
-function sqlString(value) {
+function sqlString(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
-function executeRemote(sql, captureOutput = false) {
+function executeRemote(sql: string, captureOutput = false) {
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 
   return execFileSync(
@@ -40,7 +40,7 @@ function executeRemote(sql, captureOutput = false) {
   );
 }
 
-function requireRemoteMarker(sql, failureMessage) {
+function requireRemoteMarker(sql: string, failureMessage: string) {
   const marker = "BOOTSTRAP_OK";
   const output = executeRemote(sql, true);
   if (typeof output !== "string" || !output.includes(marker)) {

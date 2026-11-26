@@ -1,5 +1,6 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { RegisterFirstAdminInput } from "../../shared/api.ts";
@@ -24,7 +25,7 @@ const LoginInput = z.object({
   senha: z.string().min(8).max(200),
 });
 
-function invalidCredentials(c) {
+function invalidCredentials(c: Context<AppEnv>) {
   return c.json(
     {
       error: "CREDENCIAIS_INVALIDAS",
@@ -34,7 +35,7 @@ function invalidCredentials(c) {
   );
 }
 
-function bootstrapClosed(c) {
+function bootstrapClosed(c: Context<AppEnv>) {
   return c.json(
     {
       error: "BOOTSTRAP_ENCERRADO",
@@ -44,7 +45,7 @@ function bootstrapClosed(c) {
   );
 }
 
-function isDuplicateLogin(error) {
+function isDuplicateLogin(error: unknown) {
   return (
     error instanceof Error &&
     error.message.includes("UNIQUE constraint failed: usuarios.login")
@@ -103,7 +104,7 @@ authRoutes.post("/bootstrap-register", async (c) => {
 });
 
 authRoutes.post("/login", async (c) => {
-  let body;
+  let body: unknown;
   try {
     body = await c.req.json();
   } catch {
@@ -201,7 +202,12 @@ authRoutes.post("/logout", async (c) => {
     if (payload) {
       // Grava antes de apagar o cookie: um logout só é confirmado depois da
       // revogação no D1. O identificador permanece estável nas renovações.
-      await revokeSession(c.env.DB, await sessionKey(token, payload), payload.exp);
+      // Uma versão renovada do mesmo sessionId pode expirar depois do cookie
+      // apresentado no logout. A revogação deve cobrir toda a janela possível.
+      const revokedUntil = payload.sessionId
+        ? Math.max(payload.exp, Math.floor(Date.now() / 1000) + SESSION_MAX_AGE)
+        : payload.exp;
+      await revokeSession(c.env.DB, await sessionKey(token, payload), revokedUntil);
       await revokeRealtimeUser(c.env, payload.userId);
     }
   }

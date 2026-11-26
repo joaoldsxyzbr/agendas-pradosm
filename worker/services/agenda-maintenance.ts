@@ -15,7 +15,7 @@ const AUTO_CLOSE_ELIGIBILITY = `
     ''
   ) <> 'reaberto'
 `;
-async function closePastOpenAgendas(db, now = /* @__PURE__ */ new Date()) {
+async function closePastOpenAgendas(db: D1Database, now = /* @__PURE__ */ new Date()) {
   const today = businessDate(now);
   // GET e cron mantêm o fallback, mas não abrem transações de escrita
   // quando não existe uma agenda antiga elegível a fechamento.

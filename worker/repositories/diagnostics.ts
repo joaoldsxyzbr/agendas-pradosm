@@ -1,3 +1,15 @@
+interface DiagnosticInput {
+  origem: string; nivel: string; evento: string; operacao: string;
+  formato?: string | null; quantidade?: number | null; duracaoMs?: number | null;
+  httpStatus?: number | null; correlacao?: string | null;
+  userId?: string | null; storeId?: string | null;
+}
+interface DiagnosticRow {
+  id: string; usuario_id: string | null; usuario_nome: string | null;
+  origem: string; nivel: string; evento: string; operacao: string; formato: string | null;
+  quantidade: number | null; http_status: number | null; duracao_ms: number | null;
+  correlacao: string; criado_em: string; loja_id: string | null;
+}
 // Eventos limitados a códigos estáveis. Nunca armazenar conteúdo de arquivos, URL, stack, mensagens ou tokens.
 export const DIAGNOSTIC_EVENTS = Object.freeze([
   "IMPORT_SELECTED", "IMPORT_PREVIEW_READY", "IMPORT_VALIDATION_FAILED",
@@ -12,7 +24,7 @@ const formats = new Set(["csv", "pdf", "outro"]);
 const sources = new Set(["browser", "worker"]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function normalizeDiagnostic(input) {
+export function normalizeDiagnostic(input: DiagnosticInput) {
   if (!input || !eventSet.has(input.evento) || !levels.has(input.nivel)
       || !operations.has(input.operacao) || !sources.has(input.origem)) {
     throw new TypeError("Evento de diagnóstico inválido");
@@ -34,11 +46,11 @@ export function normalizeDiagnostic(input) {
   return {
     origem: input.origem, nivel: input.nivel, evento: input.evento,
     operacao: input.operacao, formato, quantidade, duracaoMs, httpStatus,
-    correlacao: uuid.test(input.correlacao ?? "") ? input.correlacao : crypto.randomUUID()
+    correlacao: input.correlacao && uuid.test(input.correlacao) ? input.correlacao : crypto.randomUUID()
   };
 }
 
-export async function recordDiagnostic(db, data) {
+export async function recordDiagnostic(db: D1Database, data: DiagnosticInput) {
   const item = normalizeDiagnostic(data);
   const id = crypto.randomUUID();
   await db.prepare(`INSERT INTO diagnosticos
@@ -52,12 +64,12 @@ export async function recordDiagnostic(db, data) {
   return { id, correlacao: item.correlacao };
 }
 
-export async function recordDiagnosticSafe(db, data) {
+export async function recordDiagnosticSafe(db: D1Database, data: DiagnosticInput) {
   try { return await recordDiagnostic(db, data); }
   catch { console.warn("Diagnostic persistence unavailable", { event: data.evento }); return null; }
 }
 
-export async function listDiagnostics(db, filters: { nivel?: string; operacao?: string; origem?: string; userId?: string; storeId?: string; date?: string; limit?: number } = {}) {
+export async function listDiagnostics(db: D1Database, filters: { nivel?: string; operacao?: string; origem?: string; userId?: string; storeId?: string; date?: string; limit?: number } = {}) {
   const clauses = [], values = [];
   if (filters.nivel) { clauses.push("d.nivel = ?"); values.push(filters.nivel); }
   if (filters.operacao) { clauses.push("d.operacao = ?"); values.push(filters.operacao); }
@@ -75,11 +87,11 @@ export async function listDiagnostics(db, filters: { nivel?: string; operacao?: 
     d.http_status, d.duracao_ms, d.correlacao, d.criado_em, d.loja_id
     FROM diagnosticos d LEFT JOIN usuarios u ON u.id = d.usuario_id
     ${where} ORDER BY d.criado_em DESC, d.id DESC LIMIT ?`
-  ).bind(...values, limit).all();
-  return result.results;
+  ).bind(...values, limit).all<DiagnosticRow>();
+  return result.results ?? [];
 }
 
-export async function pruneDiagnostics(db, now = new Date()) {
+export async function pruneDiagnostics(db: D1Database, now = new Date()) {
   const cutoff = new Date(now.getTime() - 30 * 86400000).toISOString();
   await db.prepare("DELETE FROM diagnosticos WHERE criado_em < ?").bind(cutoff).run();
 }

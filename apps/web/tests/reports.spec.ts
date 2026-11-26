@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const user = { id: "user-1", nome: "Visualizador de Teste", papel: "visualizador" };
 const stores = [
@@ -32,9 +32,8 @@ const semAgendaSuppliers = [
   { supplier: "Fornecedor Zeta", vezes: 1, ultima: "2026-10-26" },
   { supplier: "Fornecedor Ômega", vezes: 1, ultima: "2026-10-25" },
 ];
-async function mock(page, options = {}) {
-  const requests = [];
-  let failed = false;
+async function mock(page: Page, options: { reportUnavailable?: () => boolean } = {}) {
+  const requests: {path:string;stores:string[];start:string|null;end:string|null;offset:string|null;search:string|null}[] = [];
   await page.route("**/api/auth/me", route => route.fulfill({ json: user }));
   await page.route("**/api/avisos", route => route.fulfill({ json: { avisos: [], naoLidos: 0 } }));
   await page.route("**/api/admin/**", route => {
@@ -44,8 +43,7 @@ async function mock(page, options = {}) {
       offset: url.searchParams.get("offset"), search: url.searchParams.get("q") });
     if (url.pathname === "/api/admin/stores") return route.fulfill({ json: stores });
     if (url.pathname === "/api/admin/reports") {
-      if (options.failOnce && !failed) {
-        failed = true;
+      if (options.reportUnavailable?.()) {
         return route.fulfill({ status: 503, json: { error: "UNAVAILABLE", message: "Serviço indisponível" } });
       }
       return route.fulfill({ json: {
@@ -141,10 +139,21 @@ test("Relatório React oferece pesquisa, paginação e comparação sem gravaç�
 });
 
 test("Relatório React recupera de erro e mantém permissão somente leitura do visualizador", async ({ page }) => {
-  await mock(page, { failOnce: true });
+  // A primeira tentativa pode ser cancelada pelo lifecycle do React Query.
+  // Simula indisponibilidade até o usuário efetivamente solicitar a recuperação.
+  let unavailable = true;
+  await mock(page, { reportUnavailable: () => unavailable });
+  await page.addInitScript(() => {
+    localStorage.setItem("agenda-prado-report-filters", JSON.stringify({
+      start: "2026-10-01", end: "2026-10-30", stores: [], compare: false,
+    }));
+  });
   await page.goto("/admin/reports");
-  await expect(page.getByRole("alert")).toContainText("Não foi possível carregar os indicadores");
-  await page.getByRole("button", { name: "Tentar novamente" }).first().click();
+  const alert = page.getByRole("alert").filter({ hasText: "Não foi possível carregar os indicadores" });
+  await expect(alert).toBeVisible();
+  unavailable = false;
+  await alert.getByRole("button", { name: "Tentar novamente" }).click();
+  await expect(alert).toHaveCount(0);
   await expect(page.getByLabel("Indicadores gerenciais")).toContainText("66,7%");
   await expect(page.getByRole("link", { name: "Usuários" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Importar agenda" })).toHaveCount(0);
@@ -194,4 +203,21 @@ test("Rosca do relatório mantém o rótulo central dentro do anel colorido", as
     return corners.every(([x, y]) => Math.hypot(x - cx, y - cy) <= radius);
   });
   expect(inside).toBe(true);
+});
+
+
+test("Período rápido mantém os filtros aplicados e o formulário sincronizados", async ({ page }) => {
+  await mock(page);
+  await page.goto("/admin/reports");
+  await expect(page.getByLabel("Indicadores gerenciais")).toContainText("66,7%");
+  const summary = page.locator('summary[aria-label="Editar período e lojas"]');
+  await summary.click();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await page.locator('input[type="checkbox"][value="F01"]').check();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await page.getByRole("button", { name: "Últimos 7 dias" }).click();
+  await expect(summary).toContainText("Todas as lojas");
+  await summary.click();
+  await page.locator('summary[aria-label="Selecionar lojas"]').click();
+  await expect(page.locator('input[type="checkbox"][value="F01"]')).not.toBeChecked();
 });

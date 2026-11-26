@@ -1,69 +1,66 @@
 import { DurableObject } from "cloudflare:workers";
+import { z } from "zod";
+import type { Env } from "../env.ts";
 import {
   REALTIME_PROTOCOL_VERSION, isAgendaChangedReason
 } from "../../shared/realtime.ts";
 const PRESENCE_STALE_MS = 12e4;
 const MAX_CLIENT_MESSAGE_BYTES = 2048;
-function connectionTag(prefix, value) {
+const roleSchema = z.enum(["admin", "visualizador", "conferente"]);
+const livePresenceSchema = z.enum(["online", "away"]);
+const attachmentSchema = z.object({
+  userId: z.string(), role: roleSchema, storeId: z.string().nullable(),
+  connectedAt: z.string(), sessionExpiresAt: z.number(),
+  presenceStatus: livePresenceSchema.nullable(), lastPresenceAt: z.number().nullable()
+});
+type SocketAttachment = z.infer<typeof attachmentSchema>;
+type PresenceStatus = "online" | "away" | "offline";
+const agendaEventSchema = z.object({
+  version: z.literal(REALTIME_PROTOCOL_VERSION), type: z.literal("agenda.changed"),
+  agendaId: z.string(), storeId: z.string(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reason: z.string().refine(isAgendaChangedReason)
+});
+type AgendaEvent = z.infer<typeof agendaEventSchema>;
+const avisosEventSchema = z.object({
+  version: z.literal(REALTIME_PROTOCOL_VERSION), type: z.literal("avisos.changed"),
+  storeIds: z.array(z.string()).nullable()
+});
+const revokeSchema = z.object({ userId: z.string().min(1), reconnect: z.boolean().optional() });
+const clientMessageSchema = z.discriminatedUnion("type", [
+  z.object({ version: z.literal(REALTIME_PROTOCOL_VERSION), type: z.literal("presence.heartbeat") }),
+  z.object({ version: z.literal(REALTIME_PROTOCOL_VERSION), type: z.literal("presence.set"), status: livePresenceSchema })
+]);
+function connectionTag(prefix: "role" | "user" | "store", value: string): string {
   return `${prefix}:${value}`;
 }
-function isLivePresenceStatus(value) {
-  return value === "online" || value === "away";
+function parseAgendaChangedEvent(value: unknown): AgendaEvent | null {
+  const parsed = agendaEventSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
-function parseAgendaChangedEvent(value) {
-  if (!value || typeof value !== "object") return null;
-  const event = value;
-  if (event.version !== REALTIME_PROTOCOL_VERSION || event.type !== "agenda.changed" || typeof event.agendaId !== "string" || typeof event.storeId !== "string" || typeof event.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(event.date) || !isAgendaChangedReason(event.reason)) {
-    return null;
-  }
-  return {
-    version: REALTIME_PROTOCOL_VERSION,
-    type: "agenda.changed",
-    agendaId: event.agendaId,
-    storeId: event.storeId,
-    date: event.date,
-    reason: event.reason
-  };
-}
-function parseClientMessage(message) {
-  if (new TextEncoder().encode(message).byteLength > MAX_CLIENT_MESSAGE_BYTES) {
-    return null;
-  }
+function parseClientMessage(message: string) {
+  if (new TextEncoder().encode(message).byteLength > MAX_CLIENT_MESSAGE_BYTES) return null;
   try {
-    const parsed = JSON.parse(message);
-    if (parsed.version !== REALTIME_PROTOCOL_VERSION) return null;
-    if (parsed.type === "presence.heartbeat") {
-      return {
-        version: REALTIME_PROTOCOL_VERSION,
-        type: "presence.heartbeat"
-      };
-    }
-    if (parsed.type === "presence.set" && isLivePresenceStatus(parsed.status)) {
-      return {
-        version: REALTIME_PROTOCOL_VERSION,
-        type: "presence.set",
-        status: parsed.status
-      };
-    }
-    return null;
+    const decoded: unknown = JSON.parse(message);
+    const parsed = clientMessageSchema.safeParse(decoded);
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
 }
 class RealtimeHub extends DurableObject {
-  constructor(ctx, env) {
+  constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("ping", "pong")
     );
   }
-  override async fetch(request) {
+  override async fetch(request: Request) {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/internal/publish") {
-      const raw = await request.json().catch(() => null) as any;
-      if (raw?.version === REALTIME_PROTOCOL_VERSION && raw.type === "avisos.changed" &&
-          (raw.storeIds === null || (Array.isArray(raw.storeIds) && raw.storeIds.every(id => typeof id === "string")))) {
-        this.broadcastAvisosChanged(raw.storeIds);
+      const raw: unknown = await request.json().catch(() => null);
+      const avisos = avisosEventSchema.safeParse(raw);
+      if (avisos.success) {
+        this.broadcastAvisosChanged(avisos.data.storeIds);
         return new Response(null, { status: 204 });
       }
       const event = parseAgendaChangedEvent(raw);
@@ -82,12 +79,13 @@ class RealtimeHub extends DurableObject {
       return new Response(null, { status: 204 });
     }
     if (request.method === "POST" && url.pathname === "/internal/revoke") {
-      const body = await request.json().catch(() => null);
-      if (!body || typeof body.userId !== "string" || !body.userId || body.reconnect !== void 0 && typeof body.reconnect !== "boolean") {
+      const parsed = revokeSchema.safeParse(await request.json().catch(() => null));
+      if (!parsed.success) {
         return new Response("Invalid realtime revoke request.", { status: 400 });
       }
-      const revoked = /* @__PURE__ */ new Set();
-      const affectedStores = /* @__PURE__ */ new Set();
+      const body = parsed.data;
+      const revoked = /* @__PURE__ */ new Set<WebSocket>();
+      const affectedStores = /* @__PURE__ */ new Set<string>();
       for (const ws of this.ctx.getWebSockets(connectionTag("user", body.userId))) {
         const attachment2 = this.attachment(ws);
         revoked.add(ws);
@@ -120,7 +118,7 @@ class RealtimeHub extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const now = Date.now();
-    const attachment = {
+    const attachment: SocketAttachment = {
       userId,
       role,
       storeId,
@@ -160,12 +158,13 @@ class RealtimeHub extends DurableObject {
     );
     return new Response(null, { status: 101, webSocket: client });
   }
-  override async webSocketMessage(ws, message) {
+  override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     if (typeof message === "string" && message === "ping") {
       return;
     }
     const attachment = this.attachment(ws);
-    if (!attachment || attachment.role !== "conferente" || !attachment.storeId) {
+    if (!attachment || Date.now() >= attachment.sessionExpiresAt) { ws.close(4003, "Sessão realtime expirada."); return; }
+    if (attachment.role !== "conferente" || !attachment.storeId) {
       this.rejectMessage(ws);
       return;
     }
@@ -189,7 +188,7 @@ class RealtimeHub extends DurableObject {
       this.broadcastPresence(attachment.storeId);
     }
   }
-  override async webSocketClose(ws, code, _reason) {
+  override async webSocketClose(ws: WebSocket, code: number, _reason: string) {
     const attachment = this.attachment(ws);
     if (attachment?.role === "conferente" && attachment.storeId) {
       this.broadcastPresence(attachment.storeId, /* @__PURE__ */ new Set([ws]));
@@ -204,7 +203,7 @@ class RealtimeHub extends DurableObject {
       })
     );
   }
-  override async webSocketError(ws) {
+  override async webSocketError(ws: WebSocket) {
     const attachment = this.attachment(ws);
     if (attachment?.role === "conferente" && attachment.storeId) {
       this.broadcastPresence(attachment.storeId, /* @__PURE__ */ new Set([ws]));
@@ -223,10 +222,10 @@ class RealtimeHub extends DurableObject {
     const now = Date.now();
     const expired = /* @__PURE__ */ new Set<WebSocket>();
     const stale = /* @__PURE__ */ new Set<WebSocket>();
-    const affectedStores = /* @__PURE__ */ new Set();
+    const affectedStores = /* @__PURE__ */ new Set<string>();
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.attachment(ws);
-      if (!attachment) continue;
+      if (!attachment) { expired.add(ws); continue; }
       if (now >= attachment.sessionExpiresAt) {
         expired.add(ws);
         if (attachment.role === "conferente" && attachment.storeId) {
@@ -253,10 +252,13 @@ class RealtimeHub extends DurableObject {
     }
     await this.ensureAlarm(excluded);
   }
-  attachment(ws) {
-    return ws.deserializeAttachment();
+  attachment(ws: WebSocket): SocketAttachment | null {
+    try {
+      const parsed = attachmentSchema.safeParse(ws.deserializeAttachment());
+      return parsed.success ? parsed.data : null;
+    } catch { return null; }
   }
-  rejectMessage(ws) {
+  rejectMessage(ws: WebSocket) {
     console.warn(
       JSON.stringify({
         event: "invalid_realtime_message",
@@ -265,20 +267,20 @@ class RealtimeHub extends DurableObject {
     );
     ws.close(1008, "Mensagem realtime n\xE3o suportada.");
   }
-  connectionLastSeen(ws, attachment) {
+  connectionLastSeen(ws: WebSocket, attachment: SocketAttachment) {
     const presenceSeen = attachment.lastPresenceAt ?? Date.parse(attachment.connectedAt);
     const autoResponseSeen = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? Number.NaN;
     if (!Number.isFinite(presenceSeen)) return autoResponseSeen;
     if (!Number.isFinite(autoResponseSeen)) return presenceSeen;
     return Math.max(presenceSeen, autoResponseSeen);
   }
-  storePresence(storeId, excluded = /* @__PURE__ */ new Set()) {
+  storePresence(storeId: string, excluded = /* @__PURE__ */ new Set<WebSocket>()): PresenceStatus {
     const now = Date.now();
-    let status = "offline";
+    let status: PresenceStatus = "offline";
     for (const ws of this.ctx.getWebSockets(connectionTag("store", storeId))) {
       if (excluded.has(ws)) continue;
       const attachment = this.attachment(ws);
-      if (attachment?.role !== "conferente" || attachment.storeId !== storeId || !attachment.presenceStatus) {
+      if (attachment?.role !== "conferente" || attachment.storeId !== storeId || !attachment.presenceStatus || now >= attachment.sessionExpiresAt) {
         continue;
       }
       const lastSeen = this.connectionLastSeen(ws, attachment);
@@ -293,7 +295,7 @@ class RealtimeHub extends DurableObject {
     return status;
   }
   presenceSnapshot() {
-    const stores = /* @__PURE__ */ new Set();
+    const stores = /* @__PURE__ */ new Set<string>();
     for (const ws of this.ctx.getWebSockets(connectionTag("role", "conferente"))) {
       const attachment = this.attachment(ws);
       if (attachment?.storeId) stores.add(attachment.storeId);
@@ -303,7 +305,7 @@ class RealtimeHub extends DurableObject {
       status: this.storePresence(storeId)
     }));
   }
-  broadcastPresence(storeId, excluded = /* @__PURE__ */ new Set()) {
+  broadcastPresence(storeId: string, excluded = /* @__PURE__ */ new Set<WebSocket>()) {
     const event = JSON.stringify({
       version: REALTIME_PROTOCOL_VERSION,
       type: "presence.changed",
@@ -312,35 +314,39 @@ class RealtimeHub extends DurableObject {
     });
     for (const role of ["admin", "visualizador"]) {
       for (const ws of this.ctx.getWebSockets(connectionTag("role", role))) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(event);
-        }
+        this.sendLive(ws, event);
       }
     }
+  }
+  sendLive(ws: WebSocket, payload: string) {
+    const identity = this.attachment(ws);
+    if (!identity || Date.now() >= identity.sessionExpiresAt || ws.readyState !== WebSocket.OPEN) return;
+    try { ws.send(payload); } catch { /* conexão individual não bloqueia as demais; polling reconcilia */ }
   }
   broadcastAvisosChanged(storeIds: string[] | null) {
     const payload = JSON.stringify({ version: REALTIME_PROTOCOL_VERSION, type: "avisos.changed" });
-    const sockets = [...this.ctx.getWebSockets(connectionTag("role", "admin")), ...this.ctx.getWebSockets(connectionTag("role", "conferente"))];
+    const recipients = storeIds === null
+      ? this.ctx.getWebSockets(connectionTag("role", "conferente"))
+      : [...new Set(storeIds)].flatMap(id => this.ctx.getWebSockets(connectionTag("store", id)));
+    const sockets = new Set([...this.ctx.getWebSockets(connectionTag("role", "admin")), ...recipients]);
     for (const ws of sockets) {
       const identity = this.attachment(ws);
       if (!identity || Date.now() >= identity.sessionExpiresAt || ws.readyState !== WebSocket.OPEN) continue;
-      if (identity.role === "admin" || (identity.role === "conferente" && (storeIds === null || storeIds.includes(identity.storeId)))) {
-        try { ws.send(payload); } catch { /* HTTP mantém reconciliação. */ }
+      if (identity.role === "admin" || (identity.role === "conferente" && (storeIds === null || (identity.storeId !== null && storeIds.includes(identity.storeId))))) {
+        this.sendLive(ws, payload);
       }
     }
   }
-  broadcastDashboardEvent(event) {
+  broadcastDashboardEvent(event: AgendaEvent) {
     const payload = JSON.stringify(event);
     for (const role of ["admin", "visualizador"]) {
       for (const ws of this.ctx.getWebSockets(connectionTag("role", role))) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(payload);
-        }
+        this.sendLive(ws, payload);
       }
     }
   }
-  async ensureAlarm(excluded = /* @__PURE__ */ new Set()) {
-    let nextAlarm = null;
+  async ensureAlarm(excluded = /* @__PURE__ */ new Set<WebSocket>()) {
+    let nextAlarm: number | null = null;
     for (const ws of this.ctx.getWebSockets()) {
       if (excluded.has(ws)) continue;
       const attachment = this.attachment(ws);

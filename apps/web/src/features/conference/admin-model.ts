@@ -18,8 +18,8 @@ const postJson = (body: Record<string, unknown>) => ({
   body: JSON.stringify(body),
 });
 
-export async function loadAdminAgenda(agendaId: string) {
-  return storeAgenda.parse(await apiFetch<unknown>(`/api/admin/agendas/${encodeURIComponent(agendaId)}`));
+export async function loadAdminAgenda(agendaId: string, signal?: AbortSignal) {
+  return storeAgenda.parse(await apiFetch<unknown>(`/api/admin/agendas/${encodeURIComponent(agendaId)}`, { signal }));
 }
 export async function patchAdminStatus(id: string, status: StoreAppointment["status"], observation: string | null = null) {
   return storeAppointment.parse(await apiFetch<unknown>(`/api/admin/appointments/${encodeURIComponent(id)}/status`, patchJson({ status, observation })));
@@ -39,8 +39,8 @@ export async function deleteAdminManual(id: string) {
 export async function createAdminManual(agendaId: string, supplier: string) {
   return storeAppointment.parse(await apiFetch<unknown>(`/api/admin/agendas/${encodeURIComponent(agendaId)}/manual`, postJson({ supplier })));
 }
-export async function getAdminAppointmentDetail(id: string) {
-  return storeAppointmentDetail.parse(await apiFetch<unknown>(`/api/admin/appointments/${encodeURIComponent(id)}`));
+export async function getAdminAppointmentDetail(id: string, signal?: AbortSignal) {
+  return storeAppointmentDetail.parse(await apiFetch<unknown>(`/api/admin/appointments/${encodeURIComponent(id)}`, { signal }));
 }
 export async function reopenAdminAgenda(agendaId: string) {
   return apiFetch<unknown>(`/api/admin/agendas/${encodeURIComponent(agendaId)}/status`, patchJson({ status: "aberto" }));

@@ -9,7 +9,7 @@ Sistema web para gestão diária das agendas de recebimento das lojas Prado Supe
 - Cloudflare D1
 - Zod
 - Testes Node.js nativos e validação do Worker
-- Playwright + Chromium com APIs mockadas para os testes de navegador
+- Playwright + Chromium: E2E com APIs mockadas e integração real com Worker/D1 local descartável
 
 ## Perfis de acesso
 
@@ -30,7 +30,7 @@ A autorização real é aplicada no Worker. A interface também oculta ações q
 
 ## Organização do repositório
 
-As branches `main` (produção) e `preview` (homologação) utilizam a interface React de `apps/web/`, publicada na raiz pelo fallback SPA do Worker. A `preview` mantém ambiente e D1 isolados e pode receber mudanças ainda não integradas à `main`.
+As branches `main` (produção) e `preview` (homologação) utilizam a interface React de `apps/web/`, publicada na raiz pelo fallback SPA do Worker. A branch `preview` permanece no histórico, mas seu D1 remoto não está em uso; validações de PR são locais/sintéticas.
 
 | Pasta/arquivo | Responsabilidade |
 | --- | --- |
@@ -46,9 +46,9 @@ As branches `main` (produção) e `preview` (homologação) utilizam a interface
 | `docs/operations/` | Procedimentos atuais; `docs/archive/` guarda históricos de migração |
 | `wrangler.jsonc`, `wrangler.local.jsonc` | Produção e ambiente local sintético |
 
-**Branches:** `main` = produção com React; `preview` = homologação React com D1 separado, em https://previewagendaspradosm.joaolds.xyz.br. Mudanças devem ser validadas em PR com CI verde antes da mesclagem.
+**Branches:** `main` = produção com React; branches de trabalho = PRs com CI e dados sintéticos. Mudanças devem ser validadas em PR com CI verde antes da mesclagem.
 
-Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/README.md) e [Publicação segura](docs/operations/production-release.md). Ambas as branches usam React; cada ambiente mantém suas próprias configurações e recursos Cloudflare.
+Leia [Arquitetura](docs/architecture.md), [Índice da documentação](docs/README.md) e [Publicação segura](docs/operations/production-release.md). Não recriar Preview nem reutilizar o D1 de produção para testes.
 
 ## Desenvolvimento local
 
@@ -91,10 +91,12 @@ O Wrangler usa `.wrangler/state` para o D1 local, com banco sintético configura
 | Comando | Função |
 | --- | --- |
 | `npm run dev` | Worker com D1 exclusivamente local servindo a UI React de `dist/` |
-| `npm test` | Testes de contratos e funcionalidades JavaScript |
+| `npm test` | TypeScript strict e testes de contratos, segurança e integridade |
 | `npm run test:bootstrap-admin` | Segurança do bootstrap emergencial |
 | `npx playwright test --config apps/web/playwright.config.mjs` | UI React no Chromium com APIs mockadas |
 | `npm run build` | Bundle React de produção em `dist/` |
+| `npm run test:integration:local` | Worker/D1/Chromium/WebSocket reais, sintéticos e descartáveis; exige Chromium instalado |
+| `npm run benchmark:agendas` / `npm run benchmark:imports` | Capacidade sintética SQLite sem acesso remoto |
 | `npm run verify:production` | Migrations, testes, bootstrap e build íntegro |
 | `npm run check:migrations` | Bloqueio de migrations destrutivas não aprovadas |
 | `npm run deploy` | Validação, migrations remotas e publicação explícita |
@@ -200,7 +202,7 @@ O Worker possui Cron Trigger:
 5 3 * * *
 ```
 
-Ele executa às 03:05 UTC, equivalente a 00:05 em `America/Sao_Paulo`, para fechar agendas anteriores à data operacional. As requisições HTTP mantêm o mesmo fechamento como fallback idempotente. Na mesma execução, o job de retenção exporta para o R2 e depois purga `historico_status`/`historico_agenda` com mais de 12 meses e `auditoria` com mais de 24 meses; sem o bucket de retenção configurado, nada é purgado (política e endpoints em `docs/operations/retencao-e-backup-2026-11-05.md`).
+Ele executa às 03:05 UTC, equivalente a 00:05 em `America/Sao_Paulo`, para fechar agendas anteriores à data operacional. As requisições HTTP mantêm o mesmo fechamento como fallback idempotente. Na mesma execução, a rotina monitora volume e antiguidade dos históricos, sem exclusão automática e sem R2 (política em `docs/operations/retencao-e-backup-2026-11-05.md`).
 
 ## Produção
 
@@ -225,3 +227,7 @@ Os planos e especificações técnicas ficam em `docs/superpowers/`.
 - O login usa rate limiter com comportamento fail-closed.
 - Códigos de loja são canonicalizados e possuem unicidade case-insensitive.
 - Mutações críticas usam operações atômicas no D1 quando o contrato exige.
+
+### Preservação de históricos
+
+O banco D1 de produção chama-se `agendas-pradosm` (binding `DB`). Históricos e avisos são preservados integralmente. Diagnósticos e sessões expiradas têm limpezas independentes. A Preview está fora do fluxo atual; testes são locais e sintéticos.

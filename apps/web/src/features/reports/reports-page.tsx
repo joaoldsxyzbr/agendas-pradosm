@@ -231,9 +231,8 @@ type DialogName = "stores" | "occurrences" | "withoutAgenda" | "suppliers";
 
 export function ReportsPage() {
   const queryClient = useQueryClient();
-  const [base] = useState(() => restoreFilters() ?? initialFilters());
-  const [draft, setDraft] = useState<ReportFilters>(base);
-  const [applied, setApplied] = useState<ReportFilters>(base);
+  const [applied, setApplied] = useState<ReportFilters>(() => restoreFilters() ?? initialFilters());
+  const [draft, setDraft] = useState<ReportFilters>(applied);
   const [filterError, setFilterError] = useState("");
   const [occurrenceInput, setOccurrenceInput] = useState("");
   const [occurrenceQuery, setOccurrenceQuery] = useState("");
@@ -241,15 +240,15 @@ export function ReportsPage() {
   const [dialog, setDialog] = useState<DialogName | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const stores = useQuery({ queryKey: ["manager-report", "stores"], queryFn: getStores, staleTime: 60_000 });
-  const report = useQuery({ queryKey: ["manager-report", "rows", applied], queryFn: () => getReport(applied) });
+  const report = useQuery({ queryKey: ["manager-report", "rows", applied], queryFn: ({ signal }) => getReport(applied, signal) });
   const previous = previousRange(applied);
   const previousReport = useQuery({
-    queryKey: ["manager-report", "previous", applied], queryFn: () => getReport({ ...previous, stores: applied.stores }),
+    queryKey: ["manager-report", "previous", applied], queryFn: ({ signal }) => getReport({ ...previous, stores: applied.stores }, signal),
     enabled: applied.compare,
   });
   const occurrences = useQuery({
     queryKey: ["manager-report", "occurrences", applied, occurrenceOffset, occurrenceQuery],
-    queryFn: () => getOccurrences(applied, occurrenceOffset, occurrenceQuery),
+    queryFn: ({ signal }) => getOccurrences(applied, occurrenceOffset, occurrenceQuery, signal),
   });
   const summary = useMemo(() => totals(report.data?.rows ?? []), [report.data]);
   const priorSummary = useMemo(() => applied.compare && previousReport.data ? totals(previousReport.data.rows) : null, [applied.compare, previousReport.data]);
@@ -282,9 +281,10 @@ export function ReportsPage() {
     const range = presetRange(key);
     if (!validRange(range.start, range.end)) return;
     setFilterError("");
-    setDraft(value => ({ ...value, ...range }));
-    setApplied(value => ({ ...value, ...range }));
-    persistFilters({ ...applied, ...range });
+    const next: ReportFilters = { ...applied, ...range };
+    setDraft(next);
+    setApplied(next);
+    persistFilters(next);
     setOccurrenceOffset(0);
     if (filterRef.current) filterRef.current.open = false;
   };
@@ -297,6 +297,7 @@ export function ReportsPage() {
     const next: ReportFilters = { ...applied, stores: applied.stores.filter(code => valid.has(code)) };
     setApplied(next);
     setDraft(next);
+    setOccurrenceOffset(0);
     persistFilters(next);
   }, [stores.data, applied]);
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -32,48 +33,19 @@ function createFixture() {
 
   let simulateAuditFailure = false;
   let simulateConcurrentUpdate = false;
-  const db = {
-    prepare(sql) {
-      const statement = sqlite.prepare(sql);
-      let bindings = [];
-      const request = {
-        sql,
-        bind(...values) { bindings = values; return request; },
-        async first() {
-          const row = statement.get(...bindings) ?? null;
-          // Replica outra solicitação que grava após a leitura da primeira.
-          if (simulateConcurrentUpdate && sql.includes("FROM agendamentos ag")) {
-            simulateConcurrentUpdate = false;
-            sqlite.prepare("UPDATE agendamentos SET status='recusado' WHERE id='agend1'").run();
-          }
-          return row;
-        },
-        async all() { return { results: statement.all(...bindings) }; },
-        async run() {
-          if (simulateAuditFailure && sql.includes("INSERT INTO auditoria")) {
-            throw new Error("falha de auditoria sintética");
-          }
-          const result = statement.run(...bindings);
-          return { success: true, meta: { changes: Number(result.changes) } };
-        }
-      };
-      return request;
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
+  const db = sqliteD1(sqlite, {
+    afterFirst(sql) {
+      if (simulateConcurrentUpdate && sql.includes("FROM agendamentos ag")) {
+        simulateConcurrentUpdate = false;
+        sqlite.prepare("UPDATE agendamentos SET status='recusado' WHERE id='agend1'").run();
       }
+    },
+    beforeRun(sql) {
+      if (simulateAuditFailure && sql.includes("INSERT INTO auditoria")) throw new Error("falha de auditoria sintética");
     }
-  };
-  const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-  async function callAs(userId, path, body, extraHeaders = {}) {
+  });
+  const env = testEnv(db, SECRET);
+  async function callAs(userId: string, path: string, body: unknown, extraHeaders: Record<string, string> = {}) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method: "PATCH",
@@ -86,7 +58,7 @@ function createFixture() {
       body: JSON.stringify(body)
     }, env);
   }
-  async function getAs(userId, path) {
+  async function getAs(userId: string, path: string) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method: "GET",
@@ -97,8 +69,8 @@ function createFixture() {
     }, env);
   }
   const status = () => ({ ...sqlite.prepare("SELECT status,observacao FROM agendamentos WHERE id='agend1'").get() });
-  const historyCount = () => sqlite.prepare("SELECT count(*) AS n FROM historico_status").get().n;
-  const auditCount = () => sqlite.prepare("SELECT count(*) AS n FROM auditoria").get().n;
+  const historyCount = () => sqlite.prepare("SELECT count(*) AS n FROM historico_status").get()?.n;
+  const auditCount = () => sqlite.prepare("SELECT count(*) AS n FROM auditoria").get()?.n;
   return {
     sqlite, callAs, getAs, status, historyCount, auditCount,
     failAudit: () => { simulateAuditFailure = true; },
@@ -180,4 +152,24 @@ describe("Recebimento integrado: Worker + SQLite sintético, sem mocks de endpoi
     }
   });
 
+});
+describe("Busca literal do relatório gerencial sem limite de padrão LIKE", () => {
+  it("aceita termos longos UTF-8 e caracteres especiais sem tratá-los como curingas", async () => {
+    const f = createFixture();
+    try {
+      const supplier = "Fornecedor " + "á".repeat(35) + " %_\\ literal";
+      f.sqlite.prepare("UPDATE agendamentos SET fornecedor=?, status='nao_chegou' WHERE id='agend1'").run(supplier);
+      const base = "/api/admin/reports/occurrences?start=2026-10-21&end=2026-10-21&q=";
+      for (const term of ["FORNECEDOR", "á".repeat(35), "%_\\", supplier]) {
+        const response = await f.getAs("view1", base + encodeURIComponent(term));
+        assert.equal(response.status, 200);
+        const result = await response.json();
+        assert.equal(result.total, 1);
+        assert.equal(result.rows[0].supplier, supplier);
+      }
+      const missing = await f.getAs("adm1", base + encodeURIComponent("%%"));
+      assert.equal((await missing.json()).total, 0);
+      assert.equal((await f.getAs("conf1", base + "Fornecedor")).status, 403);
+    } finally { f.sqlite.close(); }
+  });
 });
