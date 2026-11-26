@@ -109,7 +109,7 @@ async function createUser(db: D1Database, input: UserCreate, actorUserId: string
   const lojaId = input.papel === "conferente" ? input.lojaId ?? null : null;
   const statements = [
     db.prepare(
-      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"
+      "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) SELECT ?, ?, ?, ?, ?, ?, 1, ?, ? WHERE ? IS NULL OR EXISTS (SELECT 1 FROM lojas WHERE id = ? AND excluido_em IS NULL)"
     ).bind(
       id,
       lojaId,
@@ -118,13 +118,16 @@ async function createUser(db: D1Database, input: UserCreate, actorUserId: string
       passwordHash,
       input.papel,
       now,
-      now
+      now,
+      lojaId,
+      lojaId
     )
   ];
   statements.push(
     auditStatement(db, {
       userId: actorUserId,
       action: "usuario_criado",
+      onlyIfPreviousWrite: true,
       entity: "usuario",
       entityId: id,
       storeId: lojaId,
@@ -140,7 +143,8 @@ async function createUser(db: D1Database, input: UserCreate, actorUserId: string
       createdAt: now
     })
   );
-  await db.batch(statements);
+  const [write] = await db.batch(statements);
+  if (write?.meta?.changes !== 1) throw Object.assign(new Error("Loja indisponível."), { code: "CONFLITO_ESTADO" });
   return await findUserById(db, id);
 }
 async function updateUser(db: D1Database, current: UserRow, input: UserUpdate, actorUserId: string): Promise<UserRow | null> {
@@ -160,7 +164,7 @@ async function updateUser(db: D1Database, current: UserRow, input: UserUpdate, a
   const sessionVersion = current.session_version + (input.senha || statusChanged || identityChanged ? 1 : 0);
   const statements = [
     db.prepare(
-      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ?"
+      "UPDATE usuarios SET loja_id = ?, nome = ?, login = ?, senha_hash = ?, papel = ?, ativo = ?, session_version = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND nome = ? AND login = ? AND senha_hash = ? AND papel = ? AND ativo = ? AND loja_id IS ? AND session_version = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM lojas WHERE id = ? AND excluido_em IS NULL))"
     ).bind(
       lojaId,
       nome,
@@ -177,7 +181,9 @@ async function updateUser(db: D1Database, current: UserRow, input: UserUpdate, a
       current.papel,
       current.ativo,
       current.loja_id,
-      current.session_version
+      current.session_version,
+      lojaId,
+      lojaId
     )
   ];
   statements.push(

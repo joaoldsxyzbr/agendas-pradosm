@@ -9,7 +9,7 @@ adminRetentionRoutes.get("/status", async (c) => {
 });
 
 adminRetentionRoutes.post("/run", async (c) => {
-  const resumo = await runRetention(c.env.DB, c.env.RETENTION_BUCKET ?? null);
+  const resumo = await runRetention(c.env.DB);
   try {
     await c.env.DB.prepare(
       `INSERT INTO auditoria (

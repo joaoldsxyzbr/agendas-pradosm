@@ -67,6 +67,7 @@ adminStoreRoutes.patch("/", async (c) => {
     if (!store) return c.json({ error: "LOJA_NAO_ENCONTRADA", message: "Loja não encontrada." }, 404);
     return c.json(storeJson(store));
   } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "CONFLITO_ESTADO") return c.json({ error: "CONFLITO_ESTADO", message: "A loja foi alterada. Atualize a lista e tente novamente." }, 409);
     if (isDuplicateCode(error)) {
       return c.json(
         { error: "CODIGO_LOJA_EM_USO", message: "C\xF3digo de loja j\xE1 est\xE1 em uso." },
@@ -103,12 +104,7 @@ adminStoreRoutes.delete("/:id", async (c) => {
   const actor = c.get("authUser");
   if (!actor) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
   const deleted = await softDeleteStore(c.env.DB, current, actor.id);
-  if (!deleted) {
-    return c.json(
-      { error: "LOJA_NAO_ENCONTRADA", message: "Loja n\xE3o encontrada." },
-      404
-    );
-  }
+  if (!deleted) return c.json({ error: "CONFLITO_ESTADO", message: "A loja ou seus vínculos mudaram. Atualize a lista e tente novamente." }, 409);
   return c.body(null, 204);
 });
 export {

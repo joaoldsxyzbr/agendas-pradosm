@@ -46,8 +46,6 @@ realtimeRoutes.get("/", async (c) => {
       403
     );
   }
-  const hubId = c.env.REALTIME_HUB.idFromName("agenda-prado");
-  const hub = c.env.REALTIME_HUB.get(hubId);
   const headers = new Headers(c.req.raw.headers);
   headers.set("X-Agenda-Realtime-User-Id", user.id);
   headers.set("X-Agenda-Realtime-Role", user.papel);
@@ -60,12 +58,13 @@ realtimeRoutes.get("/", async (c) => {
   } else {
     headers.delete("X-Agenda-Realtime-Store-Id");
   }
-  return hub.fetch(
-    new Request(c.req.url, {
-      method: "GET",
-      headers
-    })
-  );
+  try {
+    const hubId = c.env.REALTIME_HUB.idFromName("agenda-prado");
+    return await c.env.REALTIME_HUB.get(hubId).fetch(new Request(c.req.url, { method: "GET", headers }));
+  } catch {
+    console.warn("realtime_upgrade_unavailable");
+    return c.json({ error: "REALTIME_INDISPONIVEL", message: "Tempo real temporariamente indisponível." }, 503);
+  }
 });
 export {
   realtimeRoutes
