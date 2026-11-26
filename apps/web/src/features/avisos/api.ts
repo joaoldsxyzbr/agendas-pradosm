@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api";
 import {
+  definirReacaoSchema, reacoesResponseSchema, type ReacaoEmoji,
   avisoPublicadoSchema,
   avisoSchema,
   avisosResponseSchema,
@@ -71,4 +72,11 @@ export async function getLeitores(avisoId: string): Promise<LeitoresAviso> {
   return leitoresAvisoSchema.parse(
     await apiFetch<unknown>(`/api/admin/avisos/${encodeURIComponent(avisoId)}/leitores`)
   );
+}
+
+export async function definirReacao(avisoId: string, emoji: ReacaoEmoji | null) {
+  return reacoesResponseSchema.parse(await apiFetch<unknown>(`/api/avisos/${encodeURIComponent(avisoId)}/reacao`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(definirReacaoSchema.parse({ emoji })),
+  }));
 }

@@ -69,6 +69,14 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
       state.data = { ...state.data, avisos: [created, ...state.data.avisos] };
       return route.fulfill({ status: 201, json: created });
     }
+    if (/^\/api\/avisos\/([^/]+)\/reacao$/.test(path) && method === "PUT") {
+      const id = path.split("/")[3]!;
+      const alvo = state.data.avisos.find(a => a.id === id);
+      if (!alvo) return route.fulfill({ status: 404, json: {} });
+      const reacoes = [...(alvo.reacoes ?? []).filter(r => !r.proprio), ...(body.emoji ? [{ emoji: body.emoji, nome: user.nome, proprio: true }] : [])];
+      state.data = { ...state.data, avisos: state.data.avisos.map(a => a.id === id ? { ...a, reacoes } : a) };
+      return route.fulfill({ json: { reacoes } });
+    }
     if (/^\/api\/avisos\/([^/]+)\/lido$/.test(path) && method === "POST") {
       const id = path.split("/")[3]!;
       state.data = {
@@ -160,15 +168,12 @@ test("Conferente lê mensagens, confirma aviso oficial e escreve", async ({ page
   await expect(page.getByTestId("chat-proprio").filter({ hasText: "Chegando na doca 4." })).toBeVisible();
 });
 
-test("Visualizador acompanha o canal sem escrever", async ({ page }) => {
-  await setup(page, { role: "visualizador" });
-  await expect(page.getByRole("heading", { name: "Avisos" })).toBeVisible();
-  // Sem compositor e sem publicação: o visualizador só lê.
-  await expect(page.getByRole("textbox", { name: "Mensagem do canal" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Novo aviso" })).toHaveCount(0);
-  await expect(page.getByText(/Somente leitura/)).toBeVisible();
-  // Eventos do sistema não fazem parte do canal.
-  await expect(page.getByRole("heading", { name: "Dia concluído" })).toHaveCount(0);
+test("Visualizador não acessa o canal nem consulta notificações", async ({ page }) => {
+  const requests = await setup(page, { role: "visualizador" });
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByRole("link", { name: "Avisos", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Avisos", exact: true })).toHaveCount(0);
+  expect(requests.some(r => r.path === "/api/avisos")).toBe(false);
 });
 
 test("Admin publica aviso urgente direcionado e acompanha quem viu", async ({ page }) => {
@@ -274,3 +279,23 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 740 
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
   });
 }
+
+
+test("Reage, troca e remove reação sem marcar aviso como lido", async ({ page }) => {
+  const requests = await setup(page, { role: "admin" });
+  const aviso = page.getByTestId("reacoes-av1");
+  await aviso.getByRole("button", { name: "Reagir" }).click();
+  await aviso.getByRole("button", { name: "De acordo" }).click();
+  await expect(aviso.getByText("👍 1")).toBeVisible();
+  await aviso.getByRole("button", { name: "Reagir" }).click();
+  await aviso.getByRole("button", { name: "Acompanhando" }).click();
+  await expect(aviso.getByText("👀 1")).toBeVisible();
+  await expect(aviso.getByText("👍 1")).toHaveCount(0);
+  await aviso.locator("summary").click();
+  await expect(aviso.getByText("Administrador Teste (você)")).toBeVisible();
+  await aviso.getByRole("button", { name: "Reagir" }).click();
+  await aviso.getByRole("button", { name: "Acompanhando" }).click();
+  await expect(aviso.getByText("👀 1")).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" }).getByRole("button", { name: "Confirmar leitura" })).toBeVisible();
+  expect(requests.filter(r => r.path === "/api/avisos/av1/reacao").map(r => r.body.emoji)).toEqual(["👍", "👀", null]);
+});

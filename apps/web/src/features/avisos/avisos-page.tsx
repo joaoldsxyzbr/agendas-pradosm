@@ -13,6 +13,8 @@ import {
   type AvisosResponse,
   type LeitoresAviso,
 } from "./model";
+import { Reacoes } from "./reacoes";
+import type { Reacao, AvisoCursor } from "./model";
 import { PublishAvisoDialog } from "./publish-aviso-dialog";
 
 // Canal de comunicação: mensagens comuns e avisos oficiais. Eventos operacionais ficam na auditoria.
@@ -108,6 +110,7 @@ export function AvisosPage() {
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
+  const olderCursors = useRef<AvisoCursor[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
@@ -126,6 +129,29 @@ export function AvisosPage() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
+
+  // Reconciliar também as páginas antigas já abertas quando chegam alterações.
+  useEffect(() => {
+    if (!avisos.dataUpdatedAt || !olderCursors.current.length) return;
+    let cancelled = false;
+    const cursors = [...olderCursors.current];
+    void Promise.all(cursors.map(cursor => getAvisos(cursor, { busca }))).then(pages => {
+      if (cancelled) return;
+      const fresh = new Map(pages.flatMap(page => page.avisos).map(aviso => [aviso.id, aviso]));
+      setOlderPages(current => current.map(page => ({ ...page, avisos: page.avisos.map(aviso => {
+        const next = fresh.get(aviso.id);
+        return next ? { ...aviso, reacoes: next.reacoes, lido: aviso.lido || next.lido } : aviso;
+      }) })));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [avisos.dataUpdatedAt, busca]);
+
+  const updateReacoes = (id: string, reacoes: Reacao[]) => {
+    const update = (page: AvisosResponse) => ({ ...page, avisos: page.avisos.map(aviso => aviso.id === id ? { ...aviso, reacoes } : aviso) });
+    setOlderPages(current => current.map(update));
+    client.setQueriesData<AvisosResponse>({ predicate: q => q.queryKey[0] === "avisos" && (q.queryKey.length === 1 || q.queryKey[1] === "filtro") }, current => current ? update(current) : current);
+    void client.invalidateQueries({ queryKey: ["avisos"] });
+  };
 
   const markRead = async (id: string) => {
     if (readInFlight.current.has(id)) return;
@@ -163,6 +189,7 @@ export function AvisosPage() {
   const trocarBusca = (nextBusca: string) => {
     if (nextBusca === busca) return;
     generation.current++;
+    olderCursors.current = [];
     setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
     prependHeight.current = null; previousLatest.current = undefined; nearBottom.current = true; setNewMessages(false);
   };
@@ -176,6 +203,7 @@ export function AvisosPage() {
       const page = await getAvisos(nextCursor, filtros);
       if (generation.current !== requestGeneration) return;
       prependHeight.current = viewport.current?.scrollHeight ?? null;
+      olderCursors.current.push(nextCursor);
       setOlderPages(current => [...current, page]);
     } catch {
       if (generation.current === requestGeneration) setOlderError(true);
@@ -258,10 +286,11 @@ export function AvisosPage() {
           {lista.map((aviso, index) => {
             const dia = formatAvisoDia(aviso.criadoEm);
             const diaAnterior = index > 0 ? formatAvisoDia(lista[index - 1]!.criadoEm) : null;
-            return <div key={aviso.id} className="space-y-2">
+            return <div key={aviso.id} data-aviso-id={aviso.id} className="space-y-1">
               {dia !== diaAnterior && <DiaSeparador dia={dia} />}
               {aviso.tipo === "chat" ? <div data-unread-chat={!aviso.lido && !aviso.proprio ? aviso.id : undefined}><BolhaChat aviso={aviso} /></div>
                 : <CartaoAviso aviso={aviso} isAdmin={isAdmin} onRead={() => void markRead(aviso.id)} reading={readingIds.has(aviso.id)} />}
+              <Reacoes aviso={aviso} onChange={reacoes => updateReacoes(aviso.id, reacoes)} />
             </div>;
           })}
         </div>
@@ -278,7 +307,7 @@ export function AvisosPage() {
             className="w-full resize-y rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-sky-400 max-h-32" />
         </label>
         <Button type="submit" disabled={enviar.isPending || !texto.trim()}><Send size={16} aria-hidden="true" /> {enviar.isPending ? "Enviando…" : "Enviar"}</Button>
-      </form> : <p className="text-center text-xs text-slate-400">Somente leitura: visualizadores acompanham o canal; a escrita é de administradores e conferentes.</p>}
+      </form> : <p className="text-center text-xs text-slate-400">Canal restrito a administradores e conferentes.</p>}
       {enviar.isError && <p role="alert" className="mt-1.5 text-xs text-rose-300">{enviar.error instanceof ApiError ? enviar.error.message : "Não foi possível enviar a mensagem."}</p>}
     </footer>
     {publishing && <PublishAvisoDialog onClose={() => setPublishing(false)} />}

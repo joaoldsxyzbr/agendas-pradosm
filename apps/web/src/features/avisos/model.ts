@@ -4,6 +4,8 @@ import {
   leitoresAvisoSchema,
   publicarAvisoSchema,
   publicarMensagemSchema,
+  definirReacaoSchema, reacoesResponseSchema,
+  type Reacao, type ReacaoEmoji,
   type Aviso,
   type AvisoCursor,
   type AvisosResponse,
@@ -16,6 +18,8 @@ import {
 // Contratos de avisos reaproveitados do shared entre Worker e frontend
 // (mesmo padrão do import-model). O zod continua sendo a fonte da verdade.
 export { avisoSchema, avisosResponseSchema, leitoresAvisoSchema, publicarAvisoSchema, publicarMensagemSchema };
+export { definirReacaoSchema, reacoesResponseSchema };
+export type { Reacao, ReacaoEmoji };
 export type { Aviso, AvisoCursor, AvisosResponse, LeitorCanal, LeitoresAviso, PublicarAvisoInput, PublicarMensagemInput };
 
 export const avisoPublicadoSchema = avisoSchema;

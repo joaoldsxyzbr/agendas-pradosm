@@ -885,7 +885,7 @@ describe("Reações do canal", () => {
   it("bloqueia reações a avisos de outra loja, eventos e registros inexistentes", async () => {
     const f = fixture();
     try {
-      const pub = await f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo: "Direcionado", mensagem: "Teste", lojas: ["F01"] } });
+      const pub = await f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo: "Direcionado", mensagem: "Teste", lojas: ["01"] } });
       assert.equal(pub.status, 201);
       const { id } = await pub.json();
       f.sqlite.prepare("INSERT INTO avisos (id, tipo, titulo, mensagem, criado_em) VALUES ('ev-reacao','evento','Evento','Teste','2026-11-12T12:00:00.000Z')").run();

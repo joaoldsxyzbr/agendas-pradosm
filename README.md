@@ -140,7 +140,7 @@ Os arquivos reais exportados não devem ser versionados. Testes usam dados sint�
 
 ## Avisos e notificações
 
-O módulo Avisos é o canal de comunicação de administradores e conferentes, com visualizadores em modo leitura. Avisos oficiais são permanentes, podem ser urgentes e direcionados por loja; a leitura exige confirmação explícita. Mensagens comuns são lidas quando visíveis no canal. Avisos oficiais e mensagens comuns aparecem juntos em um canal único, com busca e histórico paginados no servidor. Importações, conclusões e reaberturas ficam na auditoria e no histórico operacional, sem gerar novos eventos no canal. Eventos antigos permanecem armazenados.
+O módulo Avisos é o canal de comunicação de administradores e conferentes, exclusivo de administradores e conferentes; visualizadores não acessam o canal. Avisos oficiais são permanentes, podem ser urgentes e direcionados por loja; a leitura exige confirmação explícita. Mensagens comuns são lidas quando visíveis no canal. Avisos oficiais e mensagens comuns aparecem juntos em um canal único, com busca e histórico paginados no servidor. Importações, conclusões e reaberturas ficam na auditoria e no histórico operacional, sem gerar novos eventos no canal. Eventos antigos permanecem armazenados. Reações 👍, 👀 e 😂 são opcionais, únicas por usuário/publicação e não confirmam leitura. Toasts aparecem apenas para novas publicações de terceiros, enquanto o sistema está aberto; a sinalização WebSocket invalida o cache e o polling continua como fallback.
 
 ## Dashboard
 

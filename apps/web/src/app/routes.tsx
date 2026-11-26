@@ -55,11 +55,11 @@ export function AppRoutes() {
       <Route element={<LayoutRoute />}>
         <Route path="/admin" element={<DeferredPage><ReceivingPage /></DeferredPage>} />
         <Route path="/admin/reports" element={<DeferredPage><ReportsPage /></DeferredPage>} />
-        <Route path="/admin/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} />
       </Route>
     </Route>
     <Route element={<Guard roles={["admin"]} />}>
       <Route element={<LayoutRoute />}>
+        <Route path="/admin/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} />
         <Route path="/admin/agendas" element={<DeferredPage><AgendasPage /></DeferredPage>} />
         <Route path="/admin/import" element={<DeferredPage><ImportPage /></DeferredPage>} />
         <Route path="/admin/history" element={<DeferredPage><HistoryPage /></DeferredPage>} />
