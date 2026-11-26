@@ -14,7 +14,8 @@ describe("Benchmark SQL sintético nativo", () => {
     assert.equal(output.agendas, 40);
     assert.equal(output.appointments, 600);
     assert.equal(output.engine.includes("local"), true);
-    assert.deepEqual(output.cases.map(c => c.count), [40, 10, 4]);
+    assert.ok(output.schema_migrations >= 26);
+    assert.deepEqual(output.cases.map(c => c.count), [40, 10, 4, 20, 20, 4]);
     assert.ok(output.cases.every(c => c.median_ms >= 0));
     assert.ok(output.cases.every(c => Array.isArray(c.plan) && c.plan.length > 0));
   });

@@ -1,6 +1,7 @@
 # Documentação do Agenda Prado
 
 - [Arquitetura atual](architecture.md) — caminhos do código, stack, build, testes e ambientes
+- [Qualidade de engenharia](operations/qualidade-engenharia.md) — critérios permanentes, limites e plano de consolidação
 - [Plano de remediação da auditoria 19/10/2026](operations/auditoria-remediacao-2026-10-19.md) — prioridades, progresso, critérios de aceite e riscos
 - [Auditoria de dependências, senhas e branches](operations/auditoria-dependencias-autenticacao-2026-10-19.md) — inventário, testes, benchmark opcional e critérios de limpeza
 - [PBKDF2 fixado em 100 mil iterações](operations/regra-pbkdf2-e-testes-2026-10-20.md) — decisão de estabilidade e testes autenticados sintéticos
