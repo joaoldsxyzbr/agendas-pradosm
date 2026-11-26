@@ -14,9 +14,8 @@ import {
 } from "../repositories/avisos.ts";
 
 // Rotas de avisos e do canal de avisos em chat (decisão do João, 25/11/2026).
-// - /api/avisos: qualquer papel autenticado lê o canal (avisos oficiais,
-//   mensagens e, para admin/visualizador, eventos do sistema) e marca leituras
-//   — a leitura automática ao abrir a página usa o marcar-todos. Admin e
+// - /api/avisos: qualquer papel autenticado lê avisos oficiais e mensagens.
+//   Eventos operacionais são consultados na auditoria. Admin e
 //   conferente publicam mensagens comuns aqui; o visualizador não publica.
 // - /api/admin/avisos: publicação de aviso oficial e a régua "quem viu"
 //   exclusivas do admin (a cadeia /api/admin/* já exige requireAuth +
@@ -25,14 +24,15 @@ import {
 const avisoRoutes = new Hono<AppEnv>();
 const adminAvisoRoutes = new Hono<AppEnv>();
 
-// Conferente vê os avisos da sua loja (e os de todas) e nenhum evento; os
-// demais papéis, sem loja, veem tudo (avisos, mensagens e eventos).
+// Conferente vê os avisos da sua loja (e os de todas); os demais papéis,
+// sem loja, veem todos os comunicados. Nenhum papel recebe eventos operacionais.
 function lojaDoUsuario(user) {
   return user.papel === "conferente" ? user.lojaCodigo : null;
 }
 
-function verEventosDoUsuario(user) {
-  return user.papel !== "conferente";
+function verEventosDoUsuario(_user) {
+  // Eventos operacionais pertencem à auditoria, não ao canal de comunicação.
+  return false;
 }
 
 avisoRoutes.get("/", async (c) => {
@@ -46,10 +46,15 @@ avisoRoutes.get("/", async (c) => {
     return c.json({ error: "REQUISICAO_INVALIDA", message: "Cursor de avisos inválido." }, 400);
   }
   const cursor = before && beforeId ? { criadoEm: before, id: beforeId } : null;
-  const { avisos, naoLidos, hasMore, nextCursor } = await listAvisos(
-    c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor
+  const tipo = c.req.query("tipo");
+  const busca = (c.req.query("q") ?? "").trim();
+  if ((tipo !== undefined && tipo !== "aviso") || busca.length > 200) {
+    return c.json({ error: "REQUISICAO_INVALIDA", message: "Filtro de avisos inválido." }, 400);
+  }
+  const { avisos, naoLidos, urgenteNaoLido, hasMore, nextCursor } = await listAvisos(
+    c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor, tipo, busca
   );
-  return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
+  return c.json({ avisos: avisos.map(avisoJson), naoLidos, urgenteNaoLido, hasMore, nextCursor });
 });
 
 // Mensagem comum do canal (tipo "chat"): escrita de admin e conferente,
@@ -117,7 +122,7 @@ avisoRoutes.post("/", async (c) => {
       urgente: 0,
       autor: user.nome,
       lojas: null,
-      lido: 0,
+      lido: 1,
       proprio: 1
     }),
     201
@@ -161,8 +166,8 @@ avisoRoutes.post("/marcar-todos", async (c) => {
 });
 
 // Régua do admin: quem já viu o AVISO oficial (com horário) e quem falta.
-// "Visto" tem a semântica da leitura automática: abriu o canal depois da
-// publicação (decisão de 25/11/2026). Só aviso oficial tem acompanhamento.
+// "Visto" registra a leitura individual do aviso; registros legados podem
+// ter sido automáticos. Só aviso oficial tem acompanhamento.
 adminAvisoRoutes.get("/:id/leitores", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);

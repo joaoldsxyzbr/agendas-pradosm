@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { NavLink, Outlet, useNavigate } from "react-router";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router";
 import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, Megaphone, PanelLeft, Settings2, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,7 @@ function writeSidebarCollapsed(role: Role, collapsed: boolean) {
 
 export function AppLayout({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
+  const canal = useLocation().pathname.endsWith("/avisos");
   const client = useQueryClient();
   const [collapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
   const signout = useMutation({
@@ -86,7 +87,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       {path.endsWith("/avisos") && <AvisosMenuBadge />}
     </NavLink>)}
   </nav>;
-  return <div className="flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row">
+  return <div className={cn("flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row", canal && "h-svh overflow-hidden")}>
     <aside className={cn("hidden shrink-0 flex-col border-r border-[#2b415b] bg-[#111e2e] p-3 md:sticky md:top-0 md:flex md:h-svh md:max-h-svh md:overflow-y-auto", collapsed ? "w-[76px]" : "w-56")}>
       <div className={cn("mb-7 border-b border-slate-700/70 p-3", collapsed && "flex flex-col items-center gap-2")}>
         {collapsed ? <>
@@ -107,8 +108,8 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <div className="flex-1">{renderNav(collapsed)}</div>
       <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-[11px] text-slate-500", collapsed && "truncate text-center")}>{labels[user.papel]}</div>
     </aside>
-    <div className="flex w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
-      <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[#2b415b] bg-[#142337] px-4">
+    <div className="flex min-h-0 w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
+      <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-[#2b415b] bg-[#142337] px-4">
         <span className="text-sm font-semibold text-slate-200 md:text-xs">Painel operacional</span>
         <div className="flex items-center gap-3">
           <span className="max-w-40 truncate text-xs text-slate-400">{user.nome}</span>
@@ -117,9 +118,9 @@ export function AppLayout({ user }: { user: SessionUser }) {
           </Button>
         </div>
       </header>
-      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
+      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] shrink-0 overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
-      <main className="w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-6"><Outlet /></main>
+      <main className={cn("w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-6", canal && "flex min-h-0 flex-col overflow-hidden p-2 md:p-4")}><Outlet /></main>
     </div>
   </div>;
 }

@@ -1,9 +1,6 @@
 import { auditStatement } from "./audit.ts";
-import { avisoEventoStatement } from "./avisos.ts";
 const AGENDA_COLUMNS = "id, loja_id, data_agenda, arquivo_original, criado_por, status_dia, concluido_em, concluido_por, digitado_em, digitado_por, criado_em, atualizado_em";
 const APPOINTMENT_COLUMNS = "id, agenda_id, protocolo, horario_inicio, horario_fim, fornecedor, itens, volumes, paletes, carga_batida, tipo, nfe, pedidos, status, trocas, observacao, origem, ativo, criado_em, atualizado_em, csv_campos";
-// Data de agenda (yyyy-mm-dd) no formato brasileiro das mensagens de aviso.
-const dateBR = (isoDate) => isoDate.split("-").reverse().join("/");
 async function findStoreByCode(db, code) {
   return db.prepare(
     "SELECT id, codigo, nome FROM lojas WHERE codigo = ? COLLATE NOCASE AND ativo = 1 AND excluido_em IS NULL LIMIT 1"
@@ -169,7 +166,7 @@ function appointmentInsert(db, agendaId, appointment, now) {
     appointment.csvFields ? JSON.stringify(appointment.csvFields) : null
   );
 }
-async function createAgendaImport(db, storeId, createdBy, input, storeName = null) {
+async function createAgendaImport(db, storeId, createdBy, input, _storeName = null) {
   const agendaId = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [
@@ -188,12 +185,6 @@ async function createAgendaImport(db, storeId, createdBy, input, storeName = nul
   for (const appointment of input.appointments) {
     statements.push(appointmentInsert(db, agendaId, appointment, now));
   }
-  // Evento de aviso na mesma transação da importação (spec de avisos, decisão 5).
-  statements.push(avisoEventoStatement(db, {
-    titulo: "Agenda importada",
-    mensagem: `Agenda de ${dateBR(input.date)}${storeName ? ` da loja ${storeName}` : ""} importada com ${input.appointments.length} agendamentos.`,
-    criadoEm: now
-  }));
   statements.push(
     auditStatement(db, {
       userId: createdBy,
@@ -220,7 +211,7 @@ async function createAgendaImport(db, storeId, createdBy, input, storeName = nul
 // para o log de auditoria do chamador.
 // A versão de importação é lida antes dos agendamentos. Se uma substituição
 // concorrente gravar primeiro, a constraint da migration 0024 aborta TODO
-// o db.batch, incluindo inserções, inativações, auditoria e avisos.
+// o db.batch, incluindo inserções, inativações e auditoria.
 async function readAgendaImportVersion(db, agendaId) {
   const row = await db.prepare("SELECT versao_importacao FROM agendas WHERE id = ?").bind(agendaId).first();
   if (!row) throw Object.assign(new Error("Agenda alterada durante a importação."), { code: "CONFLITO_ESTADO" });
@@ -285,12 +276,6 @@ async function replaceAgendaImport(db, agenda, userId, input) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const statements = [];
   const importedExisting = appendAgendaReplaceStatements(db, statements, agenda.id, expectedVersion, existing, input, now);
-  // Evento de aviso na mesma transação da substituição (spec de avisos, decisão 5).
-  statements.push(avisoEventoStatement(db, {
-    titulo: "Agenda substituída",
-    mensagem: `Agenda de ${dateBR(agenda.data_agenda)}${agenda.store_name ? ` da loja ${agenda.store_name}` : input.storeCode ? ` (loja ${input.storeCode})` : ""} substituída com ${input.appointments.length} agendamentos.`,
-    criadoEm: now
-  }));
   statements.push(
     auditStatement(db, {
       userId,
@@ -417,13 +402,6 @@ async function importAgendaBatchAtomic(db, userId, entries) {
   if (statements.length > MAX_BATCH_WRITE_STATEMENTS) {
     throw new AgendaBatchQueryBudgetError(statements.length);
   }
-  // Um aviso por lote, não por agenda: importar N lojas não pode inundar o sino.
-  const totalAppointments = entries.reduce((sum, entry) => sum + entry.input.appointments.length, 0);
-  statements.push(avisoEventoStatement(db, {
-    titulo: "Agendas importadas em lote",
-    mensagem: `Importação em lote concluída: ${entries.length} ${entries.length === 1 ? "agenda" : "agendas"} e ${totalAppointments} ${totalAppointments === 1 ? "agendamento" : "agendamentos"}.`,
-    criadoEm: now
-  }));
   await db.batch(statements);
   return results;
 }
@@ -802,17 +780,7 @@ async function changeAgendaDayStatus(db, agenda, userId, status) {
     db.prepare(
       "INSERT INTO historico_agenda (id, agenda_id, usuario_id, acao, detalhes, alterado_em) " +
       "SELECT ?, ?, ?, ?, NULL, ? WHERE EXISTS (SELECT 1 FROM auditoria WHERE id = ?)"
-    ).bind(crypto.randomUUID(), agenda.id, userId, action, now, auditId),
-    // Evento de aviso na mesma transação, guardado pela auditoria da operação:
-    // sem gravação real não existe aviso fictício (spec de avisos, decisão 5).
-    avisoEventoStatement(db, {
-      titulo: status === "concluido" ? "Dia concluído" : "Agenda reaberta",
-      mensagem: status === "concluido"
-        ? `Dia de conferência concluído: ${agenda.store_name ?? agenda.loja_id} em ${dateBR(agenda.data_agenda)}.`
-        : `Agenda reaberta para ajustes: ${agenda.store_name ?? agenda.loja_id} em ${dateBR(agenda.data_agenda)}.`,
-      criadoEm: now,
-      guardAuditId: auditId
-    })
+    ).bind(crypto.randomUUID(), agenda.id, userId, action, now, auditId)
   ];
   const result = await db.batch(statements);
   assertMutationApplied(result);

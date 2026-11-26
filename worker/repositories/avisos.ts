@@ -1,6 +1,6 @@
 // Repositório de avisos/notificações in-app (spec 2026-11-11, melhorias de
-// 12/11/2026). Eventos automáticos entram no MESMO db.batch da operação que
-// os origina: operação gravada sem aviso é estado inconsistente (decisão 5).
+// 12/11/2026). Eventos antigos permanecem no D1; operações novas são
+// registradas na auditoria, sem duplicação no canal.
 // Avisos são registro permanente: sem filtro de expiração/inativação — a
 // lista é o histórico completo, do mais recente para o mais antigo.
 // Desde 25/11/2026 o canal é um chat: a mensagem comum (tipo "chat") vive na
@@ -26,7 +26,7 @@ function filtroTipo(verEventos) {
 // Lista os avisos com o estado "lido" do usuário, do mais recente para o
 // mais antigo (decisão de 12/11: lista única, sem separação de histórico).
 // Limitado aos últimos `limit` itens. Admin/visualizador (loja null) veem tudo.
-export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null) {
+export async function listAvisos(db, userId, loja = null, verEventos = true, limit = 50, cursor = null, tipoAviso: string | undefined = undefined, busca = "") {
   const filtroLoja = visibilidadePorLoja(loja);
   const tipo = filtroTipo(verEventos);
   const filtroBase = [tipo, filtroLoja ? "(" + filtroLoja + ")" : ""].filter(Boolean).join(" AND ");
@@ -35,20 +35,22 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
   const filtroCursor = cursor
     ? "(a.criado_em < ? OR (a.criado_em = ? AND a.id < ?))"
     : "";
-  const where = [filtroBase, filtroCursor].filter(Boolean).join(" AND ");
+  const filtroAviso = tipoAviso === "aviso" ? "a.tipo = 'aviso'" : "";
+  const filtroBusca = busca ? "instr(lower(coalesce(a.titulo, '') || ' ' || a.mensagem || ' ' || coalesce(a.autor, '')), lower(?)) > 0" : "";
+  const where = [filtroBase, filtroAviso, filtroBusca, filtroCursor].filter(Boolean).join(" AND ");
   // Separador char(31) (unit separator): código de loja com vírgula não pode
   // quebrar o GROUP_CONCAT vindo do D1.
   const lojasSelect =
     "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
   // "proprio" alinha a mensagem do próprio autor à direita no chat sem
   // depender de nome (homônimos); eventos (criado_por NULL) nunca são próprios.
-  const values = [userId, userId, ...(loja ? [loja] : []),
+  const values = [userId, userId, userId, ...(loja ? [loja] : []), ...(busca ? [busca] : []),
     ...(cursor ? [cursor.criadoEm, cursor.criadoEm, cursor.id] : []), limit + 1];
   const result = await db.prepare(
     `SELECT a.id, a.tipo, a.titulo, a.mensagem, a.criado_em, a.urgente, a.autor,
             (a.criado_por = ?) AS proprio,
             ${lojasSelect},
-            CASE WHEN l.usuario_id IS NULL THEN 0 ELSE 1 END AS lido
+            CASE WHEN a.tipo = 'chat' AND a.criado_por = ? THEN 1 WHEN l.usuario_id IS NULL THEN 0 ELSE 1 END AS lido
        FROM avisos a
        LEFT JOIN avisos_lidos l ON l.aviso_id = a.id AND l.usuario_id = ?
       ${where ? "WHERE " + where : ""}
@@ -56,13 +58,13 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
       LIMIT ?`
   ).bind(...values).all();
   const unread = await db.prepare(
-    `SELECT COUNT(*) AS total
+    `SELECT COUNT(*) AS total, COALESCE(MAX(CASE WHEN a.tipo = 'aviso' AND a.urgente = 1 THEN 1 ELSE 0 END), 0) AS urgente
        FROM avisos a
-      WHERE ${filtroBase ? filtroBase + " AND " : ""}NOT EXISTS (
+      WHERE ${filtroBase ? filtroBase + " AND " : ""}(a.tipo <> 'chat' OR a.criado_por IS NOT ?) AND NOT EXISTS (
           SELECT 1 FROM avisos_lidos l
            WHERE l.aviso_id = a.id AND l.usuario_id = ?
         )`
-  ).bind(...(loja ? [loja, userId] : [userId])).first();
+  ).bind(...(loja ? [loja, userId, userId] : [userId, userId])).first();
   const rows = result.results ?? [];
   const avisos = rows.slice(0, limit);
   const hasMore = rows.length > limit;
@@ -70,6 +72,7 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
   return {
     avisos,
     naoLidos: unread?.total ?? 0,
+    urgenteNaoLido: unread?.urgente === 1,
     hasMore,
     nextCursor: hasMore && ultimo ? { criadoEm: ultimo.criado_em, id: ultimo.id } : null
   };
