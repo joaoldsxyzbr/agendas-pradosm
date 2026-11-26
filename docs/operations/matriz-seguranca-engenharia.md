@@ -20,3 +20,7 @@ Os testes anteriores usam Node/SQLite ou mocks; a PR #258 acrescenta smoke HTTP 
 ## Evidências da consolidação — 26/11/2026
 
 CI do c538a49: verify, CodeQL, 126 cenários de navegador e smoke real passaram. Smoke exercitou sessão HttpOnly/SameSite, papéis, isolamento de loja, rejeição de origem externa, presença e eventos direcionados, reações, leitura idempotente, revogação HTTP/WebSocket e login/logout da UI sem mocks. Testes Node cobrem encoding canônico e renovação/revogação de sessão. O limite de importação também é verificado na fronteira UTF-8 local. Não substitui teste de expiração/renovação em workerd, inventário completo de autorização, testes XSS adicionais ou restauração isolada. PBKDF2 não foi alterado. Próximo CI inclui smoke tipado e tipos oficiais como gate primário; não considerar esse incremento aprovado antes do resultado.
+
+### Cenários adicionais no smoke local (CI pendente)
+
+Publicação oficial rejeitada para visitante, visualizador e conferente; payload de importação acima de 1 MiB rejeitado no runtime real com 413 e código estável; conteúdo HTML sintético persistido e exibido literalmente no Chromium, sem elemento HTML correspondente no DOM. Não é teste exaustivo de XSS ou autorização. Todos os dados descartáveis; nenhuma execução ou mudança em produção.

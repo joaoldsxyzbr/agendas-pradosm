@@ -160,6 +160,7 @@ try {
   }
   assert.ok(ready, "Worker local não ficou pronto");
   await request("/api/auth/me",{status:401});
+  await request("/api/admin/avisos",{method:"POST",body:{titulo:"Sem sessão",mensagem:"Não publicar"},status:401});
   for (const user of ["admin","viewer","conf1","conf2"]) {
     const res = await request("/api/auth/login",{method:"POST",body:{login:user,senha:password}});
     const cookie = res.headers.get("set-cookie");
@@ -230,6 +231,15 @@ try {
   assert.equal(todaySchema.parse(await (await request("/api/store/today",{user:"conf1"})).json()).appointments[0].status,"recebido");
   await waitEvent("admin","agenda.changed");
   await waitEvent("viewer","agenda.changed");
+  await request("/api/admin/avisos",{user:"viewer",method:"POST",body:{titulo:"Sem permissão",mensagem:"Não publicar"},status:403});
+  await request("/api/admin/avisos",{user:"conf1",method:"POST",body:{titulo:"Sem permissão",mensagem:"Não publicar"},status:403});
+  // A requisição excede o limite antes de chegar ao parser JSON/importação.
+  const oversized = await fetch(base + "/api/admin/agendas/import/bulk", {
+    method:"POST",headers:{Origin:base,"Content-Type":"application/json",Cookie:cookies.get("admin") ?? ""},
+    body:JSON.stringify({padding:"x".repeat(1024*1024)}),signal:AbortSignal.timeout(10_000)
+  });
+  assert.equal(oversized.status,413);
+  assert.equal(z.object({error:z.string()}).parse(await oversized.json()).error,"REQUISICAO_MUITO_GRANDE");
   const aviso = avisoSchema.parse(await (await request("/api/admin/avisos",{user:"admin",method:"POST",body:{titulo:"Aviso sintético",mensagem:"Integração local",lojas:["01"]},status:201})).json());
   await waitEvent("admin","avisos.changed");
   await waitEvent("conf1","avisos.changed");
@@ -252,7 +262,16 @@ try {
   await request("/api/auth/logout",{user:"conf1",method:"POST",status:204});
   await request("/api/auth/me",{user:"conf1",status:401});
   await peer("conf1").page.waitForFunction(() => window.__smokeRealtime.closeCode === 4003, null, {timeout:10_000});
-  for (const peer of peers.values()) await peer.context.close();
+  // Conteúdo persistido deve aparecer como texto, nunca como HTML ativo.
+  const literal = '<b data-smoke-html="sentinel">MARCADOR LOCAL</b>';
+  const titulo = "Teste sintético de conteúdo literal";
+  await request("/api/admin/avisos",{user:"admin",method:"POST",body:{titulo,mensagem:literal},status:201});
+  const adminPage = peer("admin").page;
+  await adminPage.goto(base + "/admin/avisos");
+  const article = adminPage.getByRole("article",{name:titulo});
+  await expect(article).toContainText(literal,{timeout:15_000});
+  await expect(adminPage.locator("[data-smoke-html=sentinel]")).toHaveCount(0);
+  for (const connected of peers.values()) await connected.context.close();
   const ui = await browser.newContext();
   const page = await ui.newPage();
   await page.goto(base + "/login");
