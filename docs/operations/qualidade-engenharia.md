@@ -75,3 +75,10 @@ As etapas acima são planejadas, não entregues. Não duplicar a PR #257 nem alt
 - Gate estrito incremental para `worker/lib/session.ts` e `worker/lib/login-rate-limit.ts`, preservando o gate de todos os módulos. Payload de sessão validado em runtime; tokens com segmentos extras rejeitados; compatibilidade dos tokens legítimos e legados mantida. Não altera PBKDF2 ou duração das sessões.
 - Busca literal de ocorrências usa `instr(lower(...), lower(?))` em vez de LIKE com curingas escapados; preserva comparação ASCII do SQLite, remove dependência do limite de padrão LIKE e mantém parâmetros. Testes com Unicode, caracteres especiais e autorização.
 - Tipos oficiais Wrangler, demais módulos strict e smoke no workerd real ainda pendentes; não declarar etapa concluída antes do CI.
+
+### Incremento: runtime local e tipagem
+
+- Ampliação do gate strict para senha, middleware HTTP, presença e datas, sem mudar a política de senhas.
+- `npm run test:integration:local` (após `npm run build`): configuração temporária derivada apenas dos bindings locais, UUID fictício obrigatório, credenciais efêmeras, migrations reais em diretório descartável, Wrangler/workerd ouvindo somente loopback. Gera tipos oficiais do Wrangler e verifica nomes dos bindings; ainda não substitui o arquivo manual `worker/types.d.ts`.
+- Smoke HTTP com login real, isolamento entre lojas, autorização de visualizador, CSRF, mutação de recebimento, avisos direcionados, reações, leitura idempotente e logout/revogação. Executado no gate CI depois do build; resultado depende da execução. Realtime permanece desligado nesse primeiro smoke, e o navegador ainda usa mocks.
+- Referências: https://developers.cloudflare.com/workers/languages/typescript/ e https://developers.cloudflare.com/d1/best-practices/local-development/ .

@@ -55,6 +55,8 @@ jobs:
         run: npx wrangler deploy --dry-run --config wrangler.preview.jsonc
       - name: Dry-run do Worker de producao sem deploy
         run: npx wrangler deploy --dry-run --config wrangler.jsonc
+      - name: Integração real Worker e D1 local descartável
+        run: npm run test:integration:local
       - name: Preparar Chromium
         run: npx playwright install --with-deps chromium
       - name: E2E React isolado com dados sinteticos

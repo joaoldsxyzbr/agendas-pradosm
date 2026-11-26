@@ -6,6 +6,11 @@
   "include": [
     "./types.d.ts",
     "./lib/session.ts",
-    "./lib/login-rate-limit.ts"
+    "./lib/login-rate-limit.ts",
+    "./lib/password.ts",
+    "./lib/http.ts",
+    "./lib/presence.ts",
+    "./lib/time.ts",
+    "../shared/time.ts"
   ]
 }
