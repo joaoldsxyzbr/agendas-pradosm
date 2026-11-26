@@ -18,10 +18,12 @@ import {
 // GET /api/avisos — canal completo (mais recentes primeiro) + contagem de
 // não lidos do usuário logado. O chat da página inverte a ordem para exibir
 // a mais antiga no topo e a mais recente embaixo.
-export async function getAvisos(cursor?: AvisoCursor | null): Promise<AvisosResponse> {
-  const query = cursor
-    ? "?" + new URLSearchParams({ before: cursor.criadoEm, beforeId: cursor.id }).toString()
-    : "";
+export async function getAvisos(cursor?: AvisoCursor | null, filtros?: { tipo?: "aviso"; busca?: string }): Promise<AvisosResponse> {
+  const params = new URLSearchParams();
+  if (cursor) { params.set("before", cursor.criadoEm); params.set("beforeId", cursor.id); }
+  if (filtros?.tipo) params.set("tipo", filtros.tipo);
+  if (filtros?.busca) params.set("q", filtros.busca);
+  const query = params.toString() ? "?" + params.toString() : "";
   return avisosResponseSchema.parse(await apiFetch<unknown>("/api/avisos" + query));
 }
 

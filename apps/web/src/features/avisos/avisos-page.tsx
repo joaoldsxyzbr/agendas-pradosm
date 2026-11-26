@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Send } from "lucide-react";
+import { ArrowDown, CheckCheck, Megaphone, Search, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { useSession } from "@/app/session-query";
-import { enviarMensagem, getAvisos, getLeitores, marcarTodosLidos } from "./api";
+import { enviarMensagem, getAvisos, getLeitores, markAvisoLido } from "./api";
 import {
   formatAvisoDia,
   formatAvisoHora,
@@ -15,28 +15,11 @@ import {
 } from "./model";
 import { PublishAvisoDialog } from "./publish-aviso-dialog";
 
-// Página do canal de Avisos (decisão do João, 25/11/2026): um chat único em
-// lugar do sino do cabeçalho. Mensagens comuns (tipo "chat") de admin e
-// conferente em bolhas — as próprias à direita —, aviso oficial do admin em
-// cartão destacado com a régua "quem viu", eventos do sistema como linhas
-// discretas (admin e visualizador). Leitura automática estilo WhatsApp:
-// abrir o canal marca tudo como visto via marcar-todos. O visualizador
-// acompanha sem escrever. O rodapé do compositor é sticky: acompanha a
-// rolagem da página (sem cálculo de altura, robusto no celular).
-
+// Canal de comunicação: mensagens comuns e avisos oficiais. Eventos operacionais ficam na auditoria.
 function DiaSeparador({ dia }: { dia: string }) {
   return <div role="separator" aria-label={dia}
-    className="my-1 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    className="my-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
     {dia}
-  </div>;
-}
-
-function LinhaEvento({ aviso }: { aviso: Aviso }) {
-  // O título do evento é heading h3 (mesma hierarquia do título do aviso):
-  // a régua de eventos fica navegável por leitores de tela e pela busca
-  // por papel de heading dos testes. O "inline" preserva a pílula de uma linha.
-  return <div className="mx-auto max-w-xl rounded-full bg-slate-700/40 px-3 py-1 text-center text-[11px] text-slate-300">
-    <h3 className="inline text-[11px] font-semibold text-slate-200">{aviso.titulo}</h3> · {formatAvisoHora(aviso.criadoEm)} · por {aviso.autor}
   </div>;
 }
 
@@ -51,7 +34,7 @@ function BolhaChat({ aviso }: { aviso: Aviso }) {
           : "rounded-2xl rounded-bl-sm bg-[#1c2f47] text-slate-100"}`}
       aria-label={`${propria ? "Sua mensagem" : "Mensagem de " + aviso.autor}`}>
       {aviso.mensagem}
-      <span className="ml-2 align-bottom text-[10px] text-slate-400">{formatAvisoHora(aviso.criadoEm)}</span>
+      <span className="ml-2 align-bottom text-[11px] text-slate-300">{formatAvisoHora(aviso.criadoEm)}</span>
     </div>
   </div>;
 }
@@ -75,10 +58,10 @@ function LeitoresDoAviso({ avisoId }: { avisoId: string }) {
   return <details className="mt-1.5" onToggle={event => setAberto((event.target as HTMLDetailsElement).open)}
     data-testid={`leitores-${avisoId}`}>
     <summary className="cursor-pointer select-none text-[11px] font-semibold text-sky-300">
-      {leitores.isPending && aberto ? "Consultando quem viu…" : `Visto por ${vistos.length} de ${total}`}
+      {leitores.isError ? "Consultar leitores novamente" : dados ? `Visto por ${vistos.length} de ${total}` : aberto ? "Consultando quem viu…" : "Consultar leituras"}
     </summary>
     <div className="mt-1 space-y-1 text-[11px] text-slate-300">
-      {leitores.isError && <p className="text-rose-300">Não foi possível carregar a lista de leitores.</p>}
+      {leitores.isError && <p className="text-rose-300">Não foi possível carregar a lista de leitores. <button type="button" className="underline" onClick={() => void leitores.refetch()}>Tentar novamente</button></p>}
       {vistos.length > 0 && <ul className="space-y-0.5">
         {vistos.map(pessoa => <li key={pessoa.id}>
           {pessoa.nome} ({pessoa.loja ?? "sem loja"}) — visto às {formatAvisoHora(pessoa.lidoEm ?? "")}
@@ -91,13 +74,13 @@ function LeitoresDoAviso({ avisoId }: { avisoId: string }) {
   </details>;
 }
 
-function CartaoAviso({ aviso, isAdmin }: { aviso: Aviso; isAdmin: boolean }) {
+function CartaoAviso({ aviso, isAdmin, onRead, reading }: { aviso: Aviso; isAdmin: boolean; onRead: () => void; reading: boolean }) {
   return <article aria-label={aviso.titulo ?? "Aviso"}
-    className={`w-full max-w-xl self-stretch rounded-lg border-l-2 px-3.5 py-2.5 ${
+    className={`w-full rounded-lg border-l-4 px-4 py-3 ${
       aviso.lido
         ? "border-amber-500/50 bg-amber-500/5"
         : aviso.urgente
-          ? "animate-pulse border-rose-500 bg-rose-500/10"
+          ? "border-rose-500 bg-rose-500/10"
           : "border-amber-500/80 bg-amber-500/10"}`}>
     <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
       <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300">Aviso</span>
@@ -106,174 +89,203 @@ function CartaoAviso({ aviso, isAdmin }: { aviso: Aviso; isAdmin: boolean }) {
       {formatAvisoHora(aviso.criadoEm)} · por {aviso.autor}
     </p>
     <h3 className="mt-1 text-sm font-bold text-slate-100">{aviso.titulo}</h3>
-    <p className="mt-0.5 break-words text-sm text-slate-300">{aviso.mensagem}</p>
-    {isAdmin && <LeitoresDoAviso avisoId={aviso.id} />}
+    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-200">{aviso.mensagem}</p>
+    <div className="mt-2 flex flex-wrap items-start gap-3">
+      {aviso.lido ? <span className="inline-flex items-center gap-1 text-xs text-slate-400"><CheckCheck size={14} /> Lido</span>
+        : <Button size="sm" variant="secondary" disabled={reading} onClick={onRead}>{reading ? "Confirmando…" : "Confirmar leitura"}</Button>}
+      {isAdmin && <LeitoresDoAviso avisoId={aviso.id} />}
+    </div>
   </article>;
 }
 
 export function AvisosPage() {
-  // Sessão pelo hook canônico do app (o mesmo do LayoutRoute): a página não
-  // depende mais do contexto do Outlet do Guard — nenhuma outra tela do
-  // sistema consome esse contexto e a sessão em cache evita nova chamada.
-  const session = useSession();
-  const user = session.data;
+  const user = useSession().data;
   const client = useQueryClient();
   const isAdmin = user?.papel === "admin";
-  const podeEscrever = user?.papel === "admin" || user?.papel === "conferente";
+  const podeEscrever = isAdmin || user?.papel === "conferente";
   const [publishing, setPublishing] = useState(false);
   const [texto, setTexto] = useState("");
+  const [aba, setAba] = useState<"conversas" | "avisos">("conversas");
+  const [buscaInput, setBuscaInput] = useState("");
+  const [busca, setBusca] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [olderError, setOlderError] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
+  const [readingIds, setReadingIds] = useState<Set<string>>(new Set());
+  const [readError, setReadError] = useState("");
+  const [newMessages, setNewMessages] = useState(false);
+  const readInFlight = useRef(new Set<string>());
+  const viewport = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const prependHeight = useRef<number | null>(null);
+  const generation = useRef(0);
+  const previousLatest = useRef<string | undefined>(undefined);
+  const filtros = { tipo: aba === "avisos" ? "aviso" as const : undefined, busca };
+  const filtrado = aba === "avisos" || busca !== "";
   const avisos = useQuery({
-    queryKey: ["avisos"],
-    queryFn: () => getAvisos(),
-    refetchInterval: 60_000,
+    queryKey: filtrado ? ["avisos", "filtro", aba, busca] : ["avisos"],
+    queryFn: () => getAvisos(null, filtros),
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 
-  // Leitura automática estilo WhatsApp (25/11): abrir o canal marca como
-  // visto tudo o que o usuário enxerga. Otimista: zera o badge na hora.
-  const marcarTodos = useMutation({
-    mutationFn: marcarTodosLidos,
-    onMutate: async () => {
-      await client.cancelQueries({ queryKey: ["avisos"] });
-      const previous = client.getQueryData<AvisosResponse>(["avisos"]) ?? null;
-      client.setQueryData<AvisosResponse>(["avisos"], current =>
-        current ? { ...current, naoLidos: 0, avisos: current.avisos.map(aviso => ({ ...aviso, lido: true })) } : current);
-      return { previous };
-    },
-    onError: (_error, _void, context) => {
-      if (context?.previous) client.setQueryData(["avisos"], context.previous);
-    },
-    onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
-  });
-
-  // Dispara a leitura automática sempre que a listagem trouxer pendências —
-  // na abertura da página e nas novas mensagens que chegam pelo polling.
-  const pendentes = avisos.data?.naoLidos ?? 0;
-  useEffect(() => {
-    if (pendentes > 0 && !marcarTodos.isPending) marcarTodos.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avisos.data]);
-
-  const enviar = useMutation({
-    mutationFn: enviarMensagem,
-    onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
-  });
-
-  const enviarTexto = (mensagem: string) => {
-    if (!mensagem || enviar.isPending) return;
-    setTexto("");
-    enviar.mutate({ mensagem });
-  };
-
-  // Carregar mensagens antigas é opt-in: o polling segue consultando só os
-  // 50 itens mais recentes, sem multiplicar leituras no D1.
-  const loadMore = async () => {
-    const nextCursor = (olderPages.at(-1) ?? avisos.data)?.nextCursor;
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    setOlderError(false);
+  const markRead = async (id: string) => {
+    if (readInFlight.current.has(id)) return;
+    readInFlight.current.add(id);
+    setReadingIds(current => new Set(current).add(id));
+    setReadError("");
     try {
-      const page = await getAvisos(nextCursor);
-      setOlderPages(current => [...current, page]);
+      await markAvisoLido(id);
+      setOlderPages(current => current.map(page => ({ ...page, avisos: page.avisos.map(a => a.id === id ? { ...a, lido: true } : a) })));
+      client.setQueriesData<AvisosResponse>({ predicate: q => q.queryKey[0] === "avisos" && (q.queryKey.length === 1 || q.queryKey[1] === "filtro") }, current =>
+        current ? { ...current, avisos: current.avisos.map(a => a.id === id ? { ...a, lido: true } : a) } : current);
+      void client.invalidateQueries({ queryKey: ["avisos"] });
     } catch {
-      setOlderError(true);
+      setReadError("Não foi possível registrar a leitura. Tente novamente.");
     } finally {
-      setLoadingMore(false);
+      readInFlight.current.delete(id);
+      setReadingIds(current => { const next = new Set(current); next.delete(id); return next; });
     }
   };
 
-  // Ordem de exibição: o canal chega do mais recente para o mais antigo; o
-  // chat inverte para a mensagem mais nova ficar embaixo.
-  const listaDesc = [...(avisos.data?.avisos ?? []), ...olderPages.flatMap(page => page.avisos)];
-  const lista = [...new Map(listaDesc.map(aviso => [aviso.id, aviso] as const)).values()].reverse();
+  const enviar = useMutation({
+    mutationFn: enviarMensagem,
+    onSuccess: () => { setTexto(""); nearBottom.current = true; setNewMessages(false); },
+    onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
+  });
+  const enviarTexto = (mensagem: string) => {
+    if (!mensagem || enviar.isPending) return;
+    enviar.mutate({ mensagem });
+  };
+
+  const trocarFiltro = (nextAba: "conversas" | "avisos", nextBusca: string) => {
+    if (nextAba === aba && nextBusca === busca) return;
+    generation.current++;
+    setAba(nextAba); setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
+    prependHeight.current = null; previousLatest.current = undefined; nearBottom.current = true; setNewMessages(false);
+  };
+
+  const loadMore = async () => {
+    const nextCursor = (olderPages.at(-1) ?? avisos.data)?.nextCursor;
+    if (!nextCursor || loadingMore) return;
+    const requestGeneration = generation.current;
+    setLoadingMore(true); setOlderError(false);
+    try {
+      const page = await getAvisos(nextCursor, filtros);
+      if (generation.current !== requestGeneration) return;
+      prependHeight.current = viewport.current?.scrollHeight ?? null;
+      setOlderPages(current => [...current, page]);
+    } catch {
+      if (generation.current === requestGeneration) setOlderError(true);
+    } finally {
+      if (generation.current === requestGeneration) setLoadingMore(false);
+    }
+  };
+
+  // A página mais recente vence duplicatas e preserva o estado atual de leitura.
+  const listaDesc = [...olderPages.flatMap(page => page.avisos), ...(avisos.data?.avisos ?? [])];
+  const lista = [...new Map(listaDesc.map(aviso => [aviso.id, aviso] as const)).values()]
+    .filter(aviso => aviso.tipo !== "evento")
+    .sort((a, b) => a.criadoEm < b.criadoEm ? -1 : a.criadoEm > b.criadoEm ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const lastPage = olderPages.at(-1) ?? avisos.data;
-  const hasMore = Boolean(lastPage?.hasMore && Boolean(lastPage?.nextCursor));
-
-  // Rola para o fim quando entra uma mensagem nova (não ao carregar antigas).
+  const hasMore = Boolean(lastPage?.hasMore && lastPage?.nextCursor);
   const ultimoId = lista.at(-1)?.id;
+  const scrollEnd = () => {
+    const el = viewport.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    nearBottom.current = true; setNewMessages(false);
+  };
+  useLayoutEffect(() => {
+    const el = viewport.current;
+    if (!el) return;
+    if (prependHeight.current !== null) {
+      el.scrollTop += el.scrollHeight - prependHeight.current;
+      prependHeight.current = null;
+    } else if (ultimoId !== previousLatest.current) {
+      if (nearBottom.current) scrollEnd();
+      else if (previousLatest.current) setNewMessages(true);
+    }
+    previousLatest.current = ultimoId;
+  }, [ultimoId, olderPages.length]);
+
+  // Chat: leitura individual das bolhas visíveis, somente com a aba ativa.
+  // Avisos oficiais exigem confirmação explícita.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [ultimoId]);
+    const root = viewport.current;
+    if (!root || !("IntersectionObserver" in window)) return;
+    let active = true;
+    const observer = new IntersectionObserver(entries => {
+      if (!active || document.visibilityState !== "visible") return;
+      for (const entry of entries) if (entry.isIntersecting) {
+        const id = (entry.target as HTMLElement).dataset.unreadChat;
+        if (id) { observer.unobserve(entry.target); void markRead(id); }
+      }
+    }, { root, threshold: 0.25 });
+    const observe = () => { if (document.visibilityState === "visible") root.querySelectorAll("[data-unread-chat]").forEach(el => observer.observe(el)); else observer.disconnect(); };
+    observe();
+    document.addEventListener("visibilitychange", observe);
+    return () => { active = false; observer.disconnect(); document.removeEventListener("visibilitychange", observe); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avisos.data, olderPages, aba, busca]);
 
-  return <section aria-labelledby="avisos-heading" className="mx-auto flex w-full max-w-3xl flex-col">
-    <div className="flex flex-wrap items-end justify-between gap-2 pb-2">
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Canal</p>
-        <h1 id="avisos-heading" className="text-lg font-bold text-slate-100">Avisos</h1>
+  return <section aria-labelledby="avisos-heading" className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col overflow-hidden rounded-xl border border-[#2b415b] bg-[#142337]">
+    <header className="shrink-0 space-y-3 border-b border-[#2b415b] px-3 py-3 md:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-sky-500/15 p-2 text-sky-300"><Megaphone size={22} aria-hidden="true" /></div>
+          <div><h1 id="avisos-heading" className="text-lg font-bold text-slate-100">Avisos</h1><p className="text-xs text-slate-400">Canal de comunicação operacional</p></div>
+        </div>
+        {isAdmin && <Button size="sm" onClick={() => setPublishing(true)}><Megaphone size={14} aria-hidden="true" /> Novo aviso</Button>}
       </div>
-      {isAdmin && <Button size="sm" variant="secondary" onClick={() => setPublishing(true)}>
-        <Megaphone size={14} aria-hidden="true" /> Novo aviso
-      </Button>}
-    </div>
-
-    <div data-testid="avisos-mensagens" className="flex flex-col gap-2 pb-2">
-      {avisos.isError && <p role="alert" className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">
-        Não foi possível carregar o canal de avisos.
-      </p>}
-      {!avisos.isError && lista.length === 0 && (
-        <p className="py-6 text-center text-xs text-slate-400">Nenhuma mensagem ou aviso no canal ainda.</p>
-      )}
-      {hasMore && <div className="text-center">
-        <Button size="sm" variant="secondary" disabled={loadingMore} onClick={() => { void loadMore(); }}>
-          {loadingMore ? "Carregando…" : "Carregar mensagens anteriores"}
-        </Button>
-      </div>}
-      {olderError && <p role="alert" className="text-center text-xs text-rose-300">Não foi possível carregar mensagens antigas.</p>}
-      {lista.map((aviso, index) => {
-        const dia = formatAvisoDia(aviso.criadoEm);
-        const anterior = lista[index - 1];
-        const diaAnterior = anterior ? formatAvisoDia(anterior.criadoEm) : null;
-        return <div key={aviso.id} className="contents">
-          {dia !== diaAnterior && <DiaSeparador dia={dia} />}
-          {aviso.tipo === "chat" ? <BolhaChat aviso={aviso} />
-            : aviso.tipo === "aviso" ? <CartaoAviso aviso={aviso} isAdmin={isAdmin} />
-            : <LinhaEvento aviso={aviso} />}
-        </div>;
-      })}
-      <div ref={bottomRef} aria-hidden="true" />
-    </div>
-
-    <footer className="sticky bottom-0 z-10 -mx-4 border-t border-[#2b415b] bg-[#142337]/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
-      {podeEscrever ? <form className="flex items-end gap-2" onSubmit={event => {
-        event.preventDefault();
-        enviarTexto(texto.trim());
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="group" aria-label="Tipo de comunicação" className="flex gap-1">
+          <Button size="sm" variant={aba === "conversas" ? "default" : "secondary"} aria-pressed={aba === "conversas"} onClick={() => trocarFiltro("conversas", busca)}>Conversas</Button>
+          <Button size="sm" variant={aba === "avisos" ? "default" : "secondary"} aria-pressed={aba === "avisos"} onClick={() => trocarFiltro("avisos", busca)}>Avisos oficiais</Button>
+        </div>
+        <form className="flex min-w-0 flex-1 items-center gap-1 sm:max-w-sm" onSubmit={e => { e.preventDefault(); trocarFiltro(aba, buscaInput.trim()); }}>
+          <input aria-label="Pesquisar mensagens e avisos" value={buscaInput} onChange={e => setBuscaInput(e.target.value)} maxLength={200} placeholder="Pesquisar no canal…" className="min-w-0 flex-1 rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100" />
+          <Button type="submit" size="icon" variant="secondary" aria-label="Pesquisar"><Search size={16} /></Button>
+          {busca && <Button type="button" size="sm" variant="ghost" onClick={() => { setBuscaInput(""); trocarFiltro(aba, ""); }}>Limpar</Button>}
+        </form>
+      </div>
+    </header>
+    <div className="relative flex min-h-0 flex-1 flex-col bg-[#101924]">
+      <div ref={viewport} data-testid="avisos-mensagens" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 md:px-6" onScroll={e => {
+        const el = e.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+        if (nearBottom.current) setNewMessages(false);
       }}>
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">Mensagem do canal</span>
-          <textarea
-            value={texto}
-            onChange={event => setTexto(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                enviarTexto(texto.trim());
-              }
-            }}
-            rows={1}
-            maxLength={2000}
-            aria-label="Mensagem do canal"
-            placeholder="Escreva uma mensagem para o canal…"
-            disabled={enviar.isPending}
-            className="max-h-32 w-full resize-none rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400"
-          />
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
+          {avisos.isError && <p role="alert" className="rounded-md bg-rose-500/10 p-3 text-sm text-rose-200">Não foi possível carregar o canal. <button className="underline" onClick={() => void avisos.refetch()}>Tentar novamente</button></p>}
+          {avisos.isPending && <p className="py-6 text-center text-sm text-slate-400">Carregando canal…</p>}
+          {!avisos.isPending && !avisos.isError && lista.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{busca ? "Nenhum resultado encontrado." : "Nenhuma mensagem ou aviso no canal ainda."}</p>}
+          {hasMore && <div className="text-center"><Button size="sm" variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Carregando…" : "Carregar mensagens anteriores"}</Button></div>}
+          {olderError && <p role="alert" className="text-center text-xs text-rose-300">Não foi possível carregar mensagens antigas.</p>}
+          {lista.map((aviso, index) => {
+            const dia = formatAvisoDia(aviso.criadoEm);
+            const diaAnterior = index > 0 ? formatAvisoDia(lista[index - 1].criadoEm) : null;
+            return <div key={aviso.id} className="space-y-2">
+              {dia !== diaAnterior && <DiaSeparador dia={dia} />}
+              {aviso.tipo === "chat" ? <div data-unread-chat={!aviso.lido && !aviso.proprio ? aviso.id : undefined}><BolhaChat aviso={aviso} /></div>
+                : <CartaoAviso aviso={aviso} isAdmin={isAdmin} onRead={() => void markRead(aviso.id)} reading={readingIds.has(aviso.id)} />}
+            </div>;
+          })}
+        </div>
+      </div>
+      {newMessages && <div className="absolute bottom-3 right-5"><Button size="sm" onClick={scrollEnd}><ArrowDown size={14} /> Novas mensagens</Button></div>}
+    </div>
+    <footer className="shrink-0 border-t border-[#2b415b] bg-[#142337] px-3 py-3 md:px-5">
+      {readError && <p role="alert" className="mb-2 text-xs text-rose-300">{readError}</p>}
+      {podeEscrever && !filtrado ? <form className="flex items-end gap-2" onSubmit={event => { event.preventDefault(); enviarTexto(texto.trim()); }}>
+        <label className="min-w-0 flex-1"><span className="sr-only">Mensagem do canal</span>
+          <textarea value={texto} onChange={event => setTexto(event.target.value)} onKeyDown={event => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); enviarTexto(texto.trim()); }
+          }} rows={2} maxLength={2000} aria-label="Mensagem do canal" placeholder="Escreva uma mensagem para o canal…" disabled={enviar.isPending}
+            className="w-full resize-y rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-sky-400 max-h-32" />
         </label>
-        <Button type="submit" size="sm" disabled={enviar.isPending || texto.trim().length === 0}>
-          <Send size={14} aria-hidden="true" /> Enviar
-        </Button>
-      </form>
-      : <p className="text-center text-[11px] text-slate-400">
-        Somente leitura: visualizadores acompanham o canal; a escrita é de administradores e conferentes.
-      </p>}
-      {enviar.isError && <p role="alert" className="mt-1.5 text-xs text-rose-300">
-        {enviar.error instanceof ApiError ? enviar.error.message : "Não foi possível enviar a mensagem."}
-      </p>}
+        <Button type="submit" disabled={enviar.isPending || !texto.trim()}><Send size={16} aria-hidden="true" /> {enviar.isPending ? "Enviando…" : "Enviar"}</Button>
+      </form> : <p className="text-center text-xs text-slate-400">{podeEscrever ? "Volte a Conversas e limpe a pesquisa para enviar mensagens." : "Somente leitura: visualizadores acompanham o canal; a escrita é de administradores e conferentes."}</p>}
+      {enviar.isError && <p role="alert" className="mt-1.5 text-xs text-rose-300">{enviar.error instanceof ApiError ? enviar.error.message : "Não foi possível enviar a mensagem."}</p>}
     </footer>
-
     {publishing && <PublishAvisoDialog onClose={() => setPublishing(false)} />}
   </section>;
 }

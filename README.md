@@ -140,7 +140,7 @@ Os arquivos reais exportados não devem ser versionados. Testes usam dados sint�
 
 ## Avisos e notificações
 
-O módulo Avisos é o canal de comunicação de administradores e conferentes, com visualizadores em modo leitura. Avisos oficiais são permanentes, podem ser urgentes e direcionados por loja. Importações, conclusões e reaberturas ficam na auditoria e no histórico operacional, sem gerar novos eventos no canal. Eventos antigos permanecem armazenados.
+O módulo Avisos é o canal de comunicação de administradores e conferentes, com visualizadores em modo leitura. Avisos oficiais são permanentes, podem ser urgentes e direcionados por loja; a leitura exige confirmação explícita. Mensagens comuns são lidas quando visíveis no canal. A busca e a aba de avisos oficiais são paginadas no servidor. Importações, conclusões e reaberturas ficam na auditoria e no histórico operacional, sem gerar novos eventos no canal. Eventos antigos permanecem armazenados.
 
 ## Dashboard
 

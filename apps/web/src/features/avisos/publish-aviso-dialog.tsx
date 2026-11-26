@@ -121,7 +121,7 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
         )}
       </fieldset>
       <p className="rounded-md border border-[#34516d] bg-[#12213a] px-3 py-2 text-[11px] text-slate-400">
-        O aviso fica registrado permanentemente no canal: nunca é excluído, apenas marcado como lido. A régua "Visto por" mostra ao administrador quem abriu o canal após a publicação.
+        O aviso fica registrado permanentemente no canal: nunca é excluído, apenas marcado como lido. A régua "Visto por" mostra ao administrador quais conferentes registraram a leitura. Leituras antigas podem ter sido automáticas.
       </p>
       {error && <p role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}
       <div className="flex justify-end gap-2">

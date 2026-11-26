@@ -122,7 +122,7 @@ avisoRoutes.post("/", async (c) => {
       urgente: 0,
       autor: user.nome,
       lojas: null,
-      lido: 0,
+      lido: 1,
       proprio: 1
     }),
     201
@@ -166,8 +166,8 @@ avisoRoutes.post("/marcar-todos", async (c) => {
 });
 
 // Régua do admin: quem já viu o AVISO oficial (com horário) e quem falta.
-// "Visto" tem a semântica da leitura automática: abriu o canal depois da
-// publicação (decisão de 25/11/2026). Só aviso oficial tem acompanhamento.
+// "Visto" registra a leitura individual do aviso; registros legados podem
+// ter sido automáticos. Só aviso oficial tem acompanhamento.
 adminAvisoRoutes.get("/:id/leitores", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);

@@ -54,3 +54,5 @@ npx playwright test --config apps/web/playwright.config.mjs
 ## Alterações estruturais
 
 Preferir alterações incrementais, testes e CI antes da mesclagem. Não mexer em credenciais, sessões, permissões, D1 remoto ou lógica operacional como efeito colateral de reorganizações.
+
+O canal de comunicação possui abas Conversas e Avisos oficiais, busca paginada, leitura individual de mensagens visíveis e confirmação explícita de avisos. A consulta de pendências considera o conjunto completo, não apenas a primeira página. Leituras históricas podem ter sido automáticas.

@@ -55,16 +55,18 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
         ...state.data, hasMore: true,
         nextCursor: { criadoEm: "2026-11-11T09:00:00.000Z", id: "av2" },
       } });
-      return route.fulfill({ json: state.data });
+      const tipo = url.searchParams.get("tipo");
+      const q = (url.searchParams.get("q") ?? "").toLowerCase();
+      return route.fulfill({ json: { ...state.data, avisos: state.data.avisos.filter(a => (!tipo || a.tipo === tipo) && (!q || [a.titulo, a.mensagem, a.autor].join(" ").toLowerCase().includes(q))) } });
     }
     if (path === "/api/avisos" && method === "POST") {
       // Mensagem comum do canal (tipo "chat"): sempre global e do próprio autor.
       const created = {
         id: "msg-nova-" + ++state.nextId, tipo: "chat", titulo: null, mensagem: body.mensagem,
-        criadoEm: "2026-11-11T12:00:00.000Z", lido: false, urgente: false,
+        criadoEm: "2026-11-11T12:00:00.000Z", lido: true, urgente: false,
         autor: user.nome, lojas: null, proprio: true,
       };
-      state.data = { ...state.data, avisos: [created, ...state.data.avisos], naoLidos: state.data.naoLidos + 1 };
+      state.data = { ...state.data, avisos: [created, ...state.data.avisos] };
       return route.fulfill({ status: 201, json: created });
     }
     if (/^\/api\/avisos\/([^/]+)\/lido$/.test(path) && method === "POST") {
@@ -121,7 +123,7 @@ async function setup(page, { role = "admin", paginated = false } = {}) {
   return requests;
 }
 
-test("Conferente vê o badge no menu, abre o canal com leitura automática e escreve", async ({ page }) => {
+test("Conferente lê mensagens, confirma aviso oficial e escreve", async ({ page }) => {
   const requests = await setup(page, { role: "conferente" });
   // O menu renderiza duas cópias (aside desktop e navegação móvel): os
   // locators do link e do badge ficam escopados no aside visível.
@@ -135,20 +137,18 @@ test("Conferente vê o badge no menu, abre o canal com leitura automática e esc
   await linkAvisos.click();
   await expect(page).toHaveURL(/\/app\/avisos$/);
   await expect(page.getByRole("heading", { name: "Avisos" })).toBeVisible();
-  // Leitura automática estilo WhatsApp: abrir o canal dispara o marcar-todos
-  // e zera o badge do menu.
-  await expect.poll(() =>
-    requests.filter(x => x.path === "/api/avisos/marcar-todos" && x.method === "POST").length
-  ).toBeGreaterThanOrEqual(1);
-  await expect(badge).toHaveCount(0);
+  // Mensagens visíveis são lidas automaticamente; aviso oficial exige confirmação.
+  await expect(badge).toHaveText("1");
   // Canal cronológico: evento antigo, mensagem do colega e aviso urgente.
   const canal = page.getByTestId("avisos-mensagens");
-  await expect(canal.getByRole("heading", { name: "Dia concluído" })).toBeVisible();
+  await expect(canal.getByRole("heading", { name: "Dia concluído" })).toHaveCount(0);
   await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
   const urgente = page.getByRole("article", { name: "Doca 3 fechada" });
   await expect(urgente).toBeVisible();
   await expect(urgente.getByText("Urgente")).toBeVisible();
   await expect(urgente.getByText("Todas as lojas")).toBeVisible();
+  await urgente.getByRole("button", { name: "Confirmar leitura" }).click();
+  await expect(badge).toHaveCount(0);
   // Conferente escreve mensagem no canal, mas não publica aviso oficial.
   await expect(page.getByRole("button", { name: "Novo aviso" })).toHaveCount(0);
   await page.getByLabel("Mensagem do canal").fill("Chegando na doca 4.");
@@ -167,15 +167,13 @@ test("Visualizador acompanha o canal sem escrever", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Mensagem do canal" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Novo aviso" })).toHaveCount(0);
   await expect(page.getByText(/Somente leitura/)).toBeVisible();
-  // Visualizador também vê os eventos do sistema no canal.
-  await expect(page.getByRole("heading", { name: "Dia concluído" })).toBeVisible();
+  // Eventos do sistema não fazem parte do canal.
+  await expect(page.getByRole("heading", { name: "Dia concluído" })).toHaveCount(0);
 });
 
 test("Admin publica aviso urgente direcionado e acompanha quem viu", async ({ page }) => {
   const requests = await setup(page, { role: "admin" });
-  // Leitura automática limpa as pendências antes da publicação.
-  const badge = page.locator("aside").getByTestId("avisos-badge");
-  await expect(badge).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
   await page.getByRole("button", { name: "Novo aviso" }).click();
   const dialog = page.getByRole("dialog", { name: "Novo aviso" });
   await dialog.getByLabel("Título do aviso").fill("Inventário loja Central");
@@ -198,6 +196,7 @@ test("Admin publica aviso urgente direcionado e acompanha quem viu", async ({ pa
   await expect(page.getByRole("button", { name: /Inativar aviso/ })).toHaveCount(0);
   // Régua do admin: expande e consulta quem já viu o aviso.
   const leitores = publicado.locator("details").first();
+  await expect(leitores.locator("summary")).toHaveText("Consultar leituras");
   await leitores.locator("summary").click();
   await expect(leitores.locator("summary")).toHaveText("Visto por 1 de 1");
   await expect(leitores.getByText(/Conferente Doca \(F03\) — visto às/)).toBeVisible();
@@ -211,4 +210,23 @@ test("Canal carrega mensagens anteriores sem substituir as recentes", async ({ p
   await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Carregar mensagens anteriores" })).toHaveCount(0);
   expect(requests.some(request => request.path === "/api/avisos" && request.search.includes("before="))).toBe(true);
+});
+
+test("Filtros pesquisam o canal e preservam texto quando o envio falha", async ({ page }) => {
+  await setup(page, { role: "admin" });
+  await page.getByRole("button", { name: "Avisos oficiais" }).click();
+  await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
+  await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca 3");
+  await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
+  await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await page.getByRole("button", { name: "Limpar", exact: true }).click();
+  await page.getByRole("button", { name: "Conversas" }).click();
+  await page.route("**/api/avisos", async route => {
+    if (route.request().method() === "POST") return route.fulfill({ status: 503, json: { message: "Envio indisponível." } });
+    return route.fallback();
+  });
+  await page.getByLabel("Mensagem do canal").fill("Texto preservado");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Mensagem do canal")).toHaveValue("Texto preservado");
 });
