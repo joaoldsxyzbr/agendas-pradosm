@@ -86,3 +86,11 @@ As etapas acima são planejadas, não entregues. Não duplicar a PR #257 nem alt
 ### Segurança: revogação de sessão renovada
 
 Encontrado por revisão de código: o logout de um cookie anterior à renovação podia registrar a revogação apenas até a expiração daquele cookie, permitindo que a limpeza de revogações removesse a proteção antes do fim de validade de outro cookie do mesmo sessionId. A correção mantém a revogação pelo prazo máximo de sessão a partir do logout, e o UPSERT nunca encurta uma revogação existente. Também exige representação base64url canônica da assinatura, evitando aliases de cookies legados cuja revogação é por hash do token exato. O prazo das sessões válidas e a política de senha permanecem os mesmos. Não corrige retroativamente revogações já expiradas. Testes sintéticos cobrem a janela e os aliases; aguardar CI.
+
+### Compatibilidade do smoke local com migrations históricas
+
+O CI de `7249876` confirmou a geração dos tipos oficiais, mas o Wrangler local recusou a transação explícita da migration histórica 0029. A documentação D1 explica o gerenciamento de transações e FKs pelo runtime: https://developers.cloudflare.com/d1/sql-api/foreign-keys/ e https://developers.cloudflare.com/d1/reference/migrations/ .
+
+Ajuste estritamente local: banco novo, vazio, diretório temporário de migrations; apenas o envelope BEGIN/COMMIT e a troca de foreign_keys da 0029 são removidos da cópia descartável. O DDL/DML permanece; o Wrangler controla a transação, fixtures entram somente depois e foreign_key_check é exigido. Os testes SQLite continuam executando os arquivos originais, inclusive regressão de preservação de dados. Não é um procedimento de migração de banco populado; não se modifica a migration histórica, não se resolve uma eventual incompatibilidade dela com provisionamento remoto novo. O smoke verifica o schema resultante e a API real.
+
+Também passa a compilar os módulos strict contra os tipos de runtime gerados por `wrangler types --include-env false`, sem carregar as declarações manuais nessa verificação. A substituição integral dos tipos do backend continua incremental. CI pendente.

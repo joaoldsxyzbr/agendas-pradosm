@@ -2,7 +2,7 @@
 // Não usa credenciais, D1 remoto, preview, nem o estado local do desenvolvedor.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -18,6 +18,7 @@ const wrangler = join(root, "node_modules", "wrangler", "bin", "wrangler.js");
 const temp = await mkdtemp(join(tmpdir(), "agendas-smoke-"));
 const configPath = join(temp, "wrangler.json");
 const persist = join(temp, "state");
+const migrations = join(temp, "migrations");
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !/^(CLOUDFLARE_|CF_|WRANGLER_)/i.test(key)));
 Object.assign(env, { CI: "true", WRANGLER_SEND_METRICS: "false", CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false", CLOUDFLARE_INCLUDE_PROCESS_ENV: "false" });
@@ -37,18 +38,36 @@ const command = (...args) => {
   const result = spawnSync(process.execPath, [wrangler, ...args, "--config", configPath], {
     cwd: root, env, encoding: "utf8", timeout: 120_000, maxBuffer: 8 * 1024 * 1024
   });
-  if (result.status !== 0) throw Error("Wrangler local falhou: " + args.slice(0, 3).join(" ") + "\n" + (result.stderr || result.stdout || result.error));
+  if (result.status !== 0) throw Error("Wrangler local falhou: " + args.slice(0, 3).join(" ") + "\n" + [result.stdout, result.stderr, result.error].filter(Boolean).join("\n").replaceAll(secret,"[redigido]").replaceAll(password,"[redigido]"));
+  return result.stdout;
 };
 const sql = value => "'" + String(value).replaceAll("'", "''") + "'";
 const values = (...items) => items.map(value => value === null ? "NULL" : sql(value)).join(",");
 try {
+  // Banco novo e vazio: o Wrangler/D1 já executa cada migration em transação.
+  // Somente a migration histórica 0029 contém BEGIN/COMMIT explícitos.
+  // Copiamos todos os arquivos para o temporário e adaptamos APENAS o envelope
+  // da 0029. Os testes SQLite executam o original intacto, inclusive com dados.
+  // Não usar esta adaptação para migrar um banco existente (ON DELETE CASCADE).
+  await mkdir(migrations);
+  const names = (await readdir(join(root, "migrations"))).filter(name => /^\d+_.*\.sql$/.test(name)).sort();
+  for (const name of names) {
+    let source = await readFile(join(root, "migrations", name), "utf8");
+    if (name === "0029_avisos_chat.sql") {
+      for (const line of ["PRAGMA foreign_keys = OFF;", "BEGIN;", "COMMIT;", "PRAGMA foreign_keys = ON;"]) {
+        assert.equal(source.split(/\r?\n/).filter(value => value === line).length, 1, "Envelope histórico inesperado: " + line);
+        source = source.split(/\r?\n/).filter(value => value !== line).join("\n");
+      }
+    }
+    await writeFile(join(migrations, name), source);
+  }
   // Lista positiva de campos: nenhuma configuração de serviços remotos é herdada.
   const isolated = {
     name: "agendas-smoke-local",
     compatibility_date: config.compatibility_date,
     main: join(root, "worker/index.ts"),
     assets: { ...config.assets, directory: join(root, "dist") },
-    d1_databases: [{ ...config.d1_databases[0], migrations_dir: join(root, "migrations") }],
+    d1_databases: [{ ...config.d1_databases[0], migrations_dir: migrations }],
     ratelimits: config.ratelimits,
     durable_objects: config.durable_objects,
     migrations: config.migrations,
@@ -64,6 +83,21 @@ try {
     assert.match(types, new RegExp("\\b" + binding + "\\s*:"), "Binding ausente nos tipos oficiais: " + binding);
   }
   console.log("Wrangler: tipos oficiais gerados para os seis bindings locais.");
+  // Compila a fronteira já consolidada usando tipos oficiais do runtime, sem
+  // carregar os tipos manuais nem importar a implementação inteira via Env.
+  const runtimePath = join(temp, "runtime.d.ts");
+  command("types", runtimePath, "--include-env", "false");
+  const strict = JSON.parse(await readFile(join(root, "worker/tsconfig.strict.json"), "utf8"));
+  const sources = strict.include.filter(path => !path.endsWith(".d.ts")).map(path => resolve(root, "worker", path));
+  const runtimeTsconfig = join(temp, "tsconfig.runtime.json");
+  await writeFile(runtimeTsconfig, JSON.stringify({
+    extends: join(root, "worker/tsconfig.strict.json"),
+    compilerOptions: { lib: ["ES2022"], types: [] },
+    include: [], files: [runtimePath, ...sources]
+  }));
+  const checked = spawnSync(process.execPath, [join(root,"apps/web/node_modules/typescript/bin/tsc"),"-p",runtimeTsconfig], {cwd:root,env,encoding:"utf8",timeout:60_000});
+  assert.equal(checked.status, 0, "Tipos oficiais do runtime: " + (checked.stdout || checked.stderr));
+  console.log("Módulos strict compilados contra tipos oficiais do runtime.");
   command("d1", "migrations", "apply", "DB", "--local", "--persist-to", persist);
   const hash = await hashPassword(password);
   const seed = [
@@ -77,6 +111,8 @@ try {
   const seedPath = join(temp, "seed.sql");
   await writeFile(seedPath, seed);
   command("d1", "execute", "DB", "--local", "--persist-to", persist, "--file", seedPath);
+  const fk = JSON.parse(command("d1", "execute", "DB", "--local", "--persist-to", persist, "--command", "PRAGMA foreign_key_check", "--json"));
+  assert.ok(fk.length > 0 && fk.every(result => result.success && result.results.length === 0), "Fixture com chaves estrangeiras inválidas");
   const server = createServer();
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
