@@ -70,7 +70,26 @@ async function revokeRealtimeUser(env, userId, mode = "terminate") {
     return false;
   }
 }
+// Apenas sinal de invalidação; conteúdo e autorização continuam na API HTTP.
+async function publishAvisosChanged(env, avisoId) {
+  if (env.REALTIME_MODE !== "on") return false;
+  try {
+    const rows = await env.DB.prepare("SELECT s.id AS store_id FROM avisos_lojas a LEFT JOIN lojas s ON s.codigo = a.loja WHERE a.aviso_id = ?").bind(avisoId).all();
+    const lojas = rows.results ?? [];
+    const storeIds = lojas.length ? lojas.map(row => row.store_id).filter(id => typeof id === "string") : null;
+    const response = await env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("agenda-prado")).fetch(new Request("https://realtime.internal/internal/publish", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: REALTIME_PROTOCOL_VERSION, type: "avisos.changed", storeIds })
+    }));
+    if (!response.ok) console.error("realtime_avisos_publish_failed", { status: response.status });
+    return response.ok;
+  } catch {
+    console.error("realtime_avisos_publish_failed");
+    return false;
+  }
+}
 export {
+  publishAvisosChanged,
   publishAgendaChanged,
   revokeRealtimeUser
 };

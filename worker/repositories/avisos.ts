@@ -44,11 +44,13 @@ export async function listAvisos(db, userId, loja = null, verEventos = true, lim
     "(SELECT GROUP_CONCAT(x.loja, char(31)) FROM avisos_lojas x WHERE x.aviso_id = a.id) AS lojas";
   // "proprio" alinha a mensagem do próprio autor à direita no chat sem
   // depender de nome (homônimos); eventos (criado_por NULL) nunca são próprios.
-  const values = [userId, userId, userId, ...(loja ? [loja] : []), ...(busca ? [busca] : []),
+  const values = [userId, userId, userId, userId, ...(loja ? [loja] : []), ...(busca ? [busca] : []),
     ...(cursor ? [cursor.criadoEm, cursor.criadoEm, cursor.id] : []), limit + 1];
   const result = await db.prepare(
     `SELECT a.id, a.tipo, a.titulo, a.mensagem, a.criado_em, a.urgente, a.autor,
             (a.criado_por = ?) AS proprio,
+            (SELECT json_group_array(json_object('emoji', r.emoji, 'nome', u.nome, 'proprio', r.usuario_id = ?))
+               FROM avisos_reacoes r JOIN usuarios u ON u.id = r.usuario_id WHERE r.aviso_id = a.id) AS reacoes_json,
             ${lojasSelect},
             CASE WHEN a.tipo = 'chat' AND a.criado_por = ? THEN 1 WHEN l.usuario_id IS NULL THEN 0 ELSE 1 END AS lido
        FROM avisos a
@@ -128,6 +130,7 @@ export function avisoJson(row) {
     // Ausente (undefined) em respostas de publicação e tabelas sem a coluna:
     // o contrato do schema é opcional justamente por isso.
     ...(row.proprio === undefined ? {} : { proprio: row.proprio === 1 }),
+    reacoes: row.reacoes_json ? JSON.parse(row.reacoes_json).map(r => ({ ...r, proprio: r.proprio === 1 })) : [],
     autor: row.autor ?? "Sistema",
     lojas: row.lojas ? String(row.lojas).split("\u001f") : null
   };
@@ -215,4 +218,27 @@ export function avisoEventoStatement(db, { titulo, mensagem, criadoEm, guardAudi
   return db.prepare(
     "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_por, criado_em) VALUES (?, 'evento', ?, ?, NULL, ?)"
   ).bind(id, titulo, mensagem, criadoEm);
+}
+
+ // A visibilidade e a autoria são verificadas também na própria mutação SQL.
+export async function definirReacao(db, avisoId, userId, loja, emoji, now) {
+  const filtroLoja = visibilidadePorLoja(loja);
+  const where = "a.id = ? AND a.tipo IN ('aviso', 'chat') AND a.criado_por IS NOT ?" +
+    (filtroLoja ? " AND (" + filtroLoja + ")" : "");
+  const args = [avisoId, userId, ...(loja ? [loja] : [])];
+  const alvo = await db.prepare("SELECT a.id FROM avisos a WHERE " + where).bind(...args).first();
+  if (!alvo) return null;
+  if (emoji === null) {
+    await db.prepare("DELETE FROM avisos_reacoes WHERE aviso_id = ? AND usuario_id = ? AND EXISTS (SELECT 1 FROM avisos a WHERE " + where + ")")
+      .bind(avisoId, userId, ...args).run();
+  } else {
+    await db.prepare(`INSERT INTO avisos_reacoes (aviso_id, usuario_id, emoji, atualizado_em)
+      SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM avisos a WHERE ${where})
+      ON CONFLICT(aviso_id, usuario_id) DO UPDATE SET emoji = excluded.emoji, atualizado_em = excluded.atualizado_em
+      WHERE avisos_reacoes.emoji <> excluded.emoji`).bind(avisoId, userId, emoji, now, ...args).run();
+  }
+  const rows = await db.prepare(`SELECT r.emoji, u.nome, (r.usuario_id = ?) AS proprio
+      FROM avisos_reacoes r JOIN usuarios u ON u.id = r.usuario_id WHERE r.aviso_id = ?
+      ORDER BY r.emoji, u.nome, u.id`).bind(userId, avisoId).all();
+  return (rows.results ?? []).map(row => ({ emoji: row.emoji, nome: row.nome, proprio: row.proprio === 1 }));
 }

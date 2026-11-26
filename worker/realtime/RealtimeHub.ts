@@ -60,9 +60,13 @@ class RealtimeHub extends DurableObject {
   override async fetch(request) {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/internal/publish") {
-      const event = parseAgendaChangedEvent(
-        await request.json().catch(() => null)
-      );
+      const raw = await request.json().catch(() => null) as any;
+      if (raw?.version === REALTIME_PROTOCOL_VERSION && raw.type === "avisos.changed" &&
+          (raw.storeIds === null || (Array.isArray(raw.storeIds) && raw.storeIds.every(id => typeof id === "string")))) {
+        this.broadcastAvisosChanged(raw.storeIds);
+        return new Response(null, { status: 204 });
+      }
+      const event = parseAgendaChangedEvent(raw);
       if (!event) {
         return new Response("Invalid realtime event.", { status: 400 });
       }
@@ -311,6 +315,17 @@ class RealtimeHub extends DurableObject {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(event);
         }
+      }
+    }
+  }
+  broadcastAvisosChanged(storeIds: string[] | null) {
+    const payload = JSON.stringify({ version: REALTIME_PROTOCOL_VERSION, type: "avisos.changed" });
+    const sockets = [...this.ctx.getWebSockets(connectionTag("role", "admin")), ...this.ctx.getWebSockets(connectionTag("role", "conferente"))];
+    for (const ws of sockets) {
+      const identity = this.attachment(ws);
+      if (!identity || Date.now() >= identity.sessionExpiresAt || ws.readyState !== WebSocket.OPEN) continue;
+      if (identity.role === "admin" || (identity.role === "conferente" && (storeIds === null || storeIds.includes(identity.storeId)))) {
+        try { ws.send(payload); } catch { /* HTTP mantém reconciliação. */ }
       }
     }
   }

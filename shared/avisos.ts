@@ -21,6 +21,13 @@ export const avisoLojasSchema = z
   .min(1, "Selecione ao menos uma loja.")
   .max(20, "Escolha no máximo 20 lojas.");
 
+export const reacaoEmojiSchema = z.enum(["👍", "👀", "😂"]);
+export const definirReacaoSchema = z.object({ emoji: reacaoEmojiSchema.nullable() });
+export const reacaoSchema = z.object({ emoji: reacaoEmojiSchema, nome: z.string(), proprio: z.boolean() });
+export const reacoesResponseSchema = z.object({ reacoes: z.array(reacaoSchema) });
+export type ReacaoEmoji = z.infer<typeof reacaoEmojiSchema>;
+export type Reacao = z.infer<typeof reacaoSchema>;
+
 export const avisoSchema = z.object({
   id: z.string(),
   tipo: avisoTipoSchema,
@@ -33,6 +40,7 @@ export const avisoSchema = z.object({
   // true quando a mensagem foi escrita pelo próprio usuário. Opcional para
   // manter respostas de publicação e mocks antigos válidos.
   proprio: z.boolean().optional(),
+  reacoes: z.array(reacaoSchema).optional(),
   autor: z.string(),
   lojas: z.array(z.string()).nullable(),
 });
@@ -70,7 +78,7 @@ export const publicarAvisoSchema = z.object({
 
 // Corpo do POST /api/avisos — mensagem comum do canal (tipo "chat"). Sem
 // título, sem urgência e sempre global (sem direcionamento por loja).
-// Escrita de admin e conferente; o visualizador apenas acompanha.
+// Canal exclusivo de admin e conferente.
 export const publicarMensagemSchema = z.object({
   mensagem: z
     .string()

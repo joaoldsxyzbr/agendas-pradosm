@@ -89,8 +89,8 @@ app.use("/api/realtime", requireAuth);
 app.use("/api/realtime/*", requireAuth);
 app.route("/api/realtime", realtimeRoutes);
 
-// Avisos/notificações in-app: leitura e marcação de lidos para todos os
-// papéis autenticados (visualizador incluso); publicação só no bloco admin.
+// Avisos/notificações in-app: canal exclusivo de admin e conferente;
+// publicação oficial só no bloco admin.
 app.use("/api/avisos", requireAuth, validateMutationOrigin);
 app.use("/api/avisos/*", requireAuth, validateMutationOrigin);
 app.route("/api/avisos", avisoRoutes);

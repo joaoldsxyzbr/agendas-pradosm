@@ -299,7 +299,8 @@ function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) 
     "CREATE TABLE auditoria (id TEXT PRIMARY KEY, usuario_id TEXT, acao TEXT, entidade TEXT, entidade_id TEXT, loja_id TEXT, agenda_id TEXT, agendamento_id TEXT, antes TEXT, depois TEXT, detalhes TEXT, criado_em TEXT)",
     "CREATE TABLE avisos (id TEXT PRIMARY KEY, tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento','chat')), titulo TEXT, mensagem TEXT NOT NULL, criado_por TEXT, criado_em TEXT NOT NULL, expira_em TEXT, inativo_em TEXT, urgente INTEGER NOT NULL DEFAULT 0 CHECK (urgente IN (0,1)), autor TEXT NOT NULL DEFAULT 'Sistema')",
     "CREATE TABLE avisos_lidos (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, lido_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))",
-    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))"
+    "CREATE TABLE avisos_lojas (aviso_id TEXT NOT NULL, loja TEXT NOT NULL, PRIMARY KEY (aviso_id, loja))",
+    "CREATE TABLE avisos_reacoes (aviso_id TEXT NOT NULL, usuario_id TEXT NOT NULL, emoji TEXT NOT NULL CHECK (emoji IN ('👍', '👀', '😂')), atualizado_em TEXT NOT NULL, PRIMARY KEY (aviso_id, usuario_id))"
   ].join(";\n") + ";");
   const now = "2026-11-11T12:00:00.000Z";
   const addLoja = sqlite.prepare("INSERT INTO lojas (id,codigo,nome,ativo) VALUES (?,?,?,1)");
@@ -440,8 +441,7 @@ describe("Rotas de avisos integradas", () => {
       const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
       assert.equal(visaoAdmin.avisos.length, 1);
       // Visualizador também vê tudo.
-      const visaoView = await (await f.call("view1", "/api/avisos")).json();
-      assert.equal(visaoView.avisos.length, 1);
+      assert.equal((await f.call("view1", "/api/avisos")).status, 403);
     } finally {
       f.sqlite.close();
     }
@@ -474,9 +474,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(visaoAdmin.avisos.length, 1);
       assert.equal(visaoAdmin.naoLidos, 1);
       assert.equal(visaoAdmin.avisos.some(aviso => aviso.tipo === "evento"), false);
-      const visaoView = await (await f.call("view1", "/api/avisos")).json();
-      assert.equal(visaoView.avisos.length, 1);
-      assert.equal(visaoView.avisos.some(aviso => aviso.tipo === "evento"), false);
+      assert.equal((await f.call("view1", "/api/avisos")).status, 403);
     } finally {
       f.sqlite.close();
     }
@@ -601,7 +599,7 @@ describe("Rotas de avisos integradas", () => {
         403
       );
       // Visualizador lê os avisos normalmente.
-      assert.equal((await f.call("view1", "/api/avisos")).status, 200);
+      assert.equal((await f.call("view1", "/api/avisos")).status, 403);
       // Corpo inválido rejeitado com mensagem em PT-BR.
       const invalido = await f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo: "", mensagem: "" } });
       assert.equal(invalido.status, 400);
@@ -723,7 +721,7 @@ describe("Rotas de avisos integradas", () => {
     }
   });
 
-  it("conferente publica mensagem no canal; visualizador só acompanha", async () => {
+  it("conferente publica mensagem no canal; visualizador não acessa", async () => {
     const f = fixture();
     try {
       const envio = await f.call("conf1", "/api/avisos", {
@@ -756,9 +754,8 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(visaoConf2.avisos[0].proprio, false, "mensagem do colega não é própria");
       const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
       assert.equal(visaoAdm.naoLidos, 1);
-      const visaoView = await (await f.call("view1", "/api/avisos")).json();
-      assert.equal(visaoView.avisos.length, 1);
-      // Visualizador acompanha, mas não escreve no canal.
+      assert.equal((await f.call("view1", "/api/avisos")).status, 403);
+      // Visualizador não acessa nem escreve no canal.
       const negado = await f.call("view1", "/api/avisos", {
         method: "POST", body: { mensagem: "Só observando." }
       });
@@ -856,3 +853,46 @@ describe("Rotas de avisos integradas", () => {
 
 });
 
+
+describe("Reações do canal", () => {
+  it("persiste uma reação por pessoa, permite troca e remoção, sem confirmar leitura", async () => {
+    const f = fixture();
+    try {
+      const published = await f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo: "Reação", mensagem: "Teste" } });
+      assert.equal(published.status, 201);
+      const { id } = await published.json();
+      const path = "/api/avisos/" + id + "/reacao";
+      const react = (user, emoji) => f.call(user, path, { method: "PUT", body: { emoji } });
+      assert.equal((await react("adm1", "👍")).status, 404);
+      assert.equal((await react("view1", "👍")).status, 403);
+      assert.equal((await react("conf1", "👏")).status, 400);
+      assert.equal((await react("conf1", "👍")).status, 200);
+      assert.equal((await react("conf1", "👍")).status, 200);
+      const changed = await (await react("conf1", "👀")).json();
+      assert.deepEqual(changed.reacoes, [{ emoji: "👀", nome: "Conferente 1", proprio: true }]);
+      assert.equal((await react("conf2", "😂")).status, 200);
+      const lista = await (await f.call("adm1", "/api/avisos")).json();
+      assert.equal(lista.avisos[0].reacoes.length, 2);
+      assert.ok(lista.avisos[0].reacoes.every(r => !r.proprio));
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_lidos").get().n, 0);
+      assert.equal((await react("conf1", null)).status, 200);
+      assert.equal((await react("conf1", null)).status, 200);
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get().n, 1);
+      assert.equal((await f.call("view1", "/api/avisos/" + id + "/lido", { method: "POST" })).status, 403);
+      assert.equal((await f.call("view1", "/api/avisos/marcar-todos", { method: "POST" })).status, 403);
+    } finally { f.sqlite.close(); }
+  });
+  it("bloqueia reações a avisos de outra loja, eventos e registros inexistentes", async () => {
+    const f = fixture();
+    try {
+      const pub = await f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo: "Direcionado", mensagem: "Teste", lojas: ["F01"] } });
+      assert.equal(pub.status, 201);
+      const { id } = await pub.json();
+      f.sqlite.prepare("INSERT INTO avisos (id, tipo, titulo, mensagem, criado_em) VALUES ('ev-reacao','evento','Evento','Teste','2026-11-12T12:00:00.000Z')").run();
+      for (const target of [id, "ev-reacao", "ausente"]) {
+        assert.equal((await f.call("conf2", "/api/avisos/" + target + "/reacao", { method: "PUT", body: { emoji: "👍" } })).status, 404);
+      }
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get().n, 0);
+    } finally { f.sqlite.close(); }
+  });
+});

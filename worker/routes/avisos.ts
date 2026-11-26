@@ -2,9 +2,11 @@ import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { auditStatement } from "../repositories/audit.ts";
 import { checkLoginRateLimit } from "../lib/login-rate-limit.ts";
-import { publicarAvisoSchema, publicarMensagemSchema } from "../../shared/avisos.ts";
+import { publishAvisosChanged } from "../services/realtime.ts";
+import { definirReacaoSchema, publicarAvisoSchema, publicarMensagemSchema } from "../../shared/avisos.ts";
 import {
   avisoJson,
+  definirReacao,
   listAvisos,
   listLeitoresDoAviso,
   markAvisoLido,
@@ -14,15 +16,22 @@ import {
 } from "../repositories/avisos.ts";
 
 // Rotas de avisos e do canal de avisos em chat (decisão do João, 25/11/2026).
-// - /api/avisos: qualquer papel autenticado lê avisos oficiais e mensagens.
+// - /api/avisos: somente administradores e conferentes acessam o canal.
 //   Eventos operacionais são consultados na auditoria. Admin e
-//   conferente publicam mensagens comuns aqui; o visualizador não publica.
+//   conferente publicam mensagens comuns aqui; o visualizador não tem acesso.
 // - /api/admin/avisos: publicação de aviso oficial e a régua "quem viu"
 //   exclusivas do admin (a cadeia /api/admin/* já exige requireAuth +
 //   requireAdmin). Não existe inativação/exclusão: registro permanente.
 
 const avisoRoutes = new Hono<AppEnv>();
 const adminAvisoRoutes = new Hono<AppEnv>();
+
+avisoRoutes.use("*", async (c, next) => {
+  const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
+  if (user.papel !== "admin" && user.papel !== "conferente") return c.json({ error: "SEM_PERMISSAO", message: "Canal restrito a administradores e conferentes." }, 403);
+  await next();
+});
 
 // Conferente vê os avisos da sua loja (e os de todas); os demais papéis,
 // sem loja, veem todos os comunicados. Nenhum papel recebe eventos operacionais.
@@ -63,12 +72,6 @@ avisoRoutes.get("/", async (c) => {
 avisoRoutes.post("/", async (c) => {
   const user = c.get("authUser");
   if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
-  if (user.papel === "visualizador") {
-    return c.json(
-      { error: "SEM_PERMISSAO", message: "Visualizadores acompanham o canal; a escrita é de administradores e conferentes." },
-      403
-    );
-  }
   const parsed = publicarMensagemSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
     return c.json(
@@ -110,6 +113,7 @@ avisoRoutes.post("/", async (c) => {
     })
   ];
   await c.env.DB.batch(statements);
+  await publishAvisosChanged(c.env, mensagemId);
   // Resposta é a mensagem completa (avisoSchema): o frontend faz parse dela.
   // próprio autor recebe com proprio=1 para alinhar a bolha à direita.
   return c.json(
@@ -127,6 +131,17 @@ avisoRoutes.post("/", async (c) => {
     }),
     201
   );
+});
+
+avisoRoutes.put("/:id/reacao", async (c) => {
+  const user = c.get("authUser")!;
+  const parsed = definirReacaoSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "REQUISICAO_INVALIDA", message: "Reação inválida." }, 400);
+  const id = c.req.param("id");
+  const reacoes = await definirReacao(c.env.DB, id, user.id, lojaDoUsuario(user), parsed.data.emoji, new Date().toISOString());
+  if (reacoes === null) return c.json({ error: "NAO_ENCONTRADO", message: "Publicação indisponível para reação." }, 404);
+  await publishAvisosChanged(c.env, id);
+  return c.json({ reacoes });
 });
 
 avisoRoutes.post("/:id/lido", async (c) => {
@@ -233,6 +248,7 @@ adminAvisoRoutes.post("/", async (c) => {
     })
   ];
   await c.env.DB.batch(statements);
+  await publishAvisosChanged(c.env, avisoId);
   // Resposta é o aviso completo (avisoSchema): o frontend faz parse dela.
   // Divergir aqui fazia o admin ver erro com o aviso já criado (bug corrigido
   // em revisão — o mock de E2E era fiel ao schema, não à rota).
@@ -248,7 +264,8 @@ adminAvisoRoutes.post("/", async (c) => {
       // char(31) é o separador do GROUP_CONCAT em repositories/avisos.ts:
       // código de loja com vírgula não pode quebrar o parse de avisoJson.
       lojas: lojas ? lojas.join("\u001f") : null,
-      lido: 0
+      lido: 0,
+      proprio: 1
     }),
     201
   );

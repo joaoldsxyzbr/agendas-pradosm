@@ -6,16 +6,16 @@ import { DatabaseSync } from "node:sqlite";
 
 // Somente SQLite em memória: nunca consulta ou escreve no D1 de produção.
 describe("Release candidata: migrations sobre schema de produção", () => {
-  it("aplica a sequência 0001–0025 mais a 0029 sem remover campos operacionais", () => {
+  it("aplica a sequência 0001–0025 mais 0029–0030 sem remover campos operacionais", () => {
     const files = readdirSync("migrations")
       .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
       .sort();
     // 0026–0028 são reservadas ao #248 na preview: chegam à main depois,
     // sem colisão em d1_migrations (que registra por nome de arquivo).
     const expected = Array.from({ length: 25 }, (_, i) => String(i + 1).padStart(4, "0"));
-    expected.push("0029");
+    expected.push("0029", "0030");
     assert.deepEqual(files.map(name => name.slice(0, 4)), expected,
-      "A candidata deve conter migrations 0001–0025 e 0029 (0026–0028 reservadas à #248)");
+      "A candidata deve conter migrations 0001–0025 e 0029–0030 (0026–0028 reservadas à #248)");
 
     const db = new DatabaseSync(":memory:");
     try {
@@ -63,6 +63,8 @@ describe("Release candidata: migrations sobre schema de produção", () => {
       // Migration 0029: canal em chat — tipos ampliados e título opcional,
       // preservando o restante do contrato da tabela reconstruída.
       assert.match(urgente.sql, /CHECK \(tipo IN \('aviso', 'evento', 'chat'\)\)/);
+      assert.deepEqual(names("avisos_reacoes"), ["aviso_id", "usuario_id", "emoji", "atualizado_em"]);
+      assert.deepEqual(db.prepare("PRAGMA table_info(avisos_reacoes)").all().filter(row => row.pk > 0).map(row => row.name), ["aviso_id", "usuario_id"]);
       const tituloRow = db.prepare("PRAGMA table_info(avisos)").all().find(row => row.name === "titulo");
       assert.equal(tituloRow?.notnull, 0, "titulo deve ser opcional para mensagens do canal");
     } finally {
