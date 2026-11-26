@@ -5,7 +5,7 @@
 O repositório oficial é `joaoldsxyzbr/Agendas-pradosm`.
 
 - `main`: branch de produção, com frontend **React 19 + Vite + TypeScript** em `apps/web/`.
-- `preview`: branch de **homologação** (recriada da `main` em 11/11/2026), com Worker e D1 próprios. Funcionalidades novas homologam-se nela via branch própria + PR + CI; a promoção para `main` só acontece após homologação aprovada.
+- `preview`: branch de experiências e homologação local; as configurações remotas são históricas. D1 Preview não está em uso. Validação de engenharia em branch própria com CI e fixtures sintéticas locais; promoção à `main` somente por PR e autorização explícita.
 - Mudanças devem passar por branch própria, PR e CI antes de chegar à `main`. O dependabot e as ferramentas de automação apontam para a `main`.
 
 A UI legada foi substituída pelo React na raiz do aplicativo. Documentos em `docs/archive/` e planos de migração registram etapas históricas, não a arquitetura atual.
@@ -20,8 +20,8 @@ A UI legada foi substituída pelo React na raiz do aplicativo. Documentos em `do
 - O cron diário (03:05 UTC) fecha agendas passadas, expurga diagnósticos antigos (30 dias), limpa sessões expiradas e monitora históricos sem exclusão automática. Sem R2.
 - `shared/`: contratos, validações, datas e parser de importação CSV/PDF (incluindo WASM para PDF).
 - `migrations/`: sequência imutável de migrations aplicada pelo Wrangler; não reescrever arquivos já aplicados.
-- `tests/unit/`: contratos, segurança, parsers e lógica de Worker; `apps/web/tests/`: navegação e fluxos React no Chromium, com APIs simuladas.
-- `.github/workflows/ci.yml`: segurança de dependências, testes, build, dry-run do Worker, E2E e CodeQL em PRs e pushes previstos.
+- `tests/unit/`: contratos, segurança, parsers, recuperação SQLite e lógica de Worker; `apps/web/tests/`: navegação e fluxos React no Chromium, com APIs simuladas. `scripts/test-local-worker.ts`: smoke integrado com Wrangler/workerd, D1 descartável, HTTP, WebSocket e Chromium sem mocks.
+- `.github/workflows/ci.yml`: segurança de dependências, TypeScript strict, testes, build, dry-run do Worker, benchmarks locais, integração, E2E e CodeQL. O gate `verify` deve estar verde no commit candidato.
 
 ## Tempo real e consistência
 
@@ -47,7 +47,7 @@ npx playwright test --config apps/web/playwright.config.mjs
 ```
 
 - `wrangler.local.jsonc`: desenvolvimento com D1 local e sem operações remotas.
-- `wrangler.preview.jsonc`: Worker da homologação e D1 separado (deploys automáticos a cada push/merge na `preview`).
+- `wrangler.preview.jsonc`: configuração histórica da homologação remota, preservada; não executar deploy nem recriar D1 Preview.
 - `wrangler.jsonc`: Worker e D1 de produção.
 - Cloudflare Workers Builds: build `npm run verify:production` e deploy `npm run deploy:cloudflare`. O comando local `npm run deploy` combina ambas as etapas e **não deve ser executado sem autorização para publicar**.
 
@@ -68,4 +68,4 @@ O canal de comunicação possui um fluxo cronológico único de mensagens e avis
 
 ### Limites de responsabilidade consolidados
 
-`agenda-imports.ts` concentra preparação e execução atômica das importações e seu orçamento de statements; `agenda-queries.ts` contém leituras e contratos de linhas; `agendas.ts` mantém alterações operacionais e reexports compatíveis. Sem camada extra de serviço. No React, cancelamento das consultas de agenda por data evita trabalho obsoleto e eventos realtime invalidam também o detalhe administrativo da agenda afetada. Polling e foco permanecem como reconciliação.
+`agenda-imports.ts` concentra preparação e execução atômica das importações e seu orçamento de statements; `agenda-queries.ts` contém leituras e contratos de linhas; `agendas.ts` mantém alterações operacionais e reexports compatíveis. Sem camada extra de serviço. No React, cancelamento das consultas de agenda por data, histórico, detalhes e relatórios evita trabalho obsoleto e eventos realtime invalidam também o detalhe administrativo da agenda afetada. Polling e foco permanecem como reconciliação.

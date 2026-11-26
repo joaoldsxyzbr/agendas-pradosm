@@ -10,6 +10,9 @@
 - [Isolamento do motor de PDF](operations/isolamento-parser-pdf-2026-10-20.md) — fachada estável para extração de texto e WASM carregado sob demanda
 - [Diagnóstico de consultas D1](operations/benchmark-consultas-d1-2026-10-19.md) — benchmark sintético, planos SQL, health público somente leitura e critérios para paginação
 - [Operação e publicação](operations/production-release.md) — Cloudflare, D1 e procedimento de produção
+- [Recuperação de dados](operations/data-recovery.md) — Time Travel, autorização e exercício local
+- [Matriz de segurança](operations/matriz-seguranca-engenharia.md) — controles, evidências e limitações
+- [Aceite e acompanhamento operacional](operations/aceite-qualidade-engenharia.md) — resultados, condições de release e riscos residuais
 - [Relatório Gerencial](operations/relatorio-gerencial-2026-10-19.md) e [Sem conferência](operations/relatorio-gerencial-sem-conferencia.md)
 - [Observações de recebimento](operations/observacao-recebimento-2026-10-19.md)
 - [Lucide e Chart.js](operations/bibliotecas-lucide-chartjs-2026-10-19.md)

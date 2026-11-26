@@ -15,6 +15,8 @@ Baseline: main 79b4903, auditoria de 26/11/2026. Esta consolidação não altera
 | Testabilidade e entrega | Testes unitários, integração local e navegador; gate verify obrigatório; PR e merge autorizado. |
 | Operação e documentação | Runbooks atuais, histórico separado de instruções vigentes; limites de recuperação explícitos. |
 
+O histórico de execução abaixo preserva as hipóteses e pendências de cada etapa. Para o estado consolidado, consulte [aceite e acompanhamento operacional](aceite-qualidade-engenharia.md). A PR #258 já incorpora as proteções da #257; não aplicar as duas separadamente.
+
 ## Primeira etapa
 
 - Descoberta automática dos módulos Worker/shared na verificação existente; novos módulos não dependem de atualizar uma lista manual.

@@ -11,6 +11,8 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": true,
     "types": [
       "node"
@@ -21,6 +23,7 @@
   },
   "include": [
     "scripts/**/*.ts",
+    "scripts/**/*.mjs",
     "worker/types.d.ts",
     "worker/pdf-types.d.ts",
     "tests/helpers/**/*.ts",
