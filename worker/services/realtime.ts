@@ -1,3 +1,4 @@
+import { realtimeFailureKind } from "../lib/realtime-failure.ts";
 import type { Env } from "../env.ts";
 interface AgendaChangedInput {
   agendaId: string;
@@ -41,9 +42,9 @@ async function publishAgendaChanged(env: Env, input: AgendaChangedInput): Promis
       JSON.stringify({
         event: "realtime_publish_failed",
         type: event.type,
-        reason: event.reason
-      }),
-      error
+        reason: event.reason,
+        kind: realtimeFailureKind(error)
+      })
     );
     return false;
   }
@@ -71,8 +72,7 @@ async function revokeRealtimeUser(env: Env, userId: string, mode: "terminate" | 
     return true;
   } catch (error) {
     console.error(
-      JSON.stringify({ event: "realtime_revoke_failed" }),
-      error
+      JSON.stringify({ event: "realtime_revoke_failed", kind: realtimeFailureKind(error) })
     );
     return false;
   }
@@ -90,8 +90,8 @@ async function publishAvisosChanged(env: Env, avisoId: string): Promise<boolean>
     }));
     if (!response.ok) console.error("realtime_avisos_publish_failed", { status: response.status });
     return response.ok;
-  } catch {
-    console.error("realtime_avisos_publish_failed");
+  } catch (error) {
+    console.error("realtime_avisos_publish_failed", { kind: realtimeFailureKind(error) });
     return false;
   }
 }

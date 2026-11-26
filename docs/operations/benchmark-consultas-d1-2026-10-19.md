@@ -55,3 +55,7 @@ Fonte: https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45887784001/
 | Avisos segunda página | 0,44 | 2,17 | 11,26 | 2 |
 
 Interpretação: o caminho paginado evita agregação de todas as agendas e escala melhor no cenário sintético; o caminho filtrado por data é estável. Relatórios e badge de avisos merecem observação de rows_read e CPU antes de otimizar. Ordenações temporárias aparecem nos planos de agendas; não são por si só um defeito. Manter paginação nos consumidores de histórico e evitar novos usos sem filtros. A comparação não é uma garantia de capacidade, SLA nem teste de concorrência. A #257 modifica destinos e índices de avisos; repetir a baseline depois de reconciliar as PRs. Sem criar índices especulativos.
+
+## Extensão: escrita em lote (CI seguinte)
+
+`npm run benchmark:imports` executa 121, 350 e 700 agendamentos em dez lojas, 5 medições por tamanho depois de aquecimento, contra migrations reais e repositório atômico. Mede criação e substituição sem alterar protocolos, IDs, status ou cardinalidade; registra contagem de statements, mediana/máximo local e planos das leituras de versão/itens. Lote disjunto de 700 deve exceder 800 statements e rejeitar sem gravação. Sem thresholds de tempo arbitrários e sem D1 remoto. Resultados pendentes de CI.

@@ -28,3 +28,7 @@ Publicação oficial rejeitada para visitante, visualizador e conferente; payloa
 ### Reconciliação de integridade
 
 Guardas SQL de cadastro impedem atualização concorrente perdida e exclusão/vínculo de loja incompatíveis; auditoria depende da gravação efetiva. Avisos vinculados por ID permanente, testes de renomeação/reutilização de código e migration com dados anteriores. Removido caminho de purge R2; testes comprovam preservação de registros antigos e recentes quando aprovados no CI. Fallback 503 para indisponibilidade realtime não comprova causa raiz dos erros antigos. CI pendente.
+
+### Diagnóstico de exceções e recuperação
+
+Falhas do upgrade realtime agora classificadas por etapa e categoria fechada sem mensagens brutas ou identificadores, e publish/revoke não registram objetos de erro externos. Exercício local de recuperação compara snapshot íntegro e isolamento de avisos. PBKDF2 permanece na política de 100.000 iterações; benchmark Node/workerd local avalia somente tempo observado, não CPU real. Os logs históricos não contêm causa suficiente para explicar todas as exceções; não afirmar resolução comprovada em produção. Validação do novo CI pendente.

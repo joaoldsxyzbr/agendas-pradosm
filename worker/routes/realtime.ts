@@ -1,3 +1,4 @@
+import { realtimeFailureKind } from "../lib/realtime-failure.ts";
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import {
@@ -58,11 +59,16 @@ realtimeRoutes.get("/", async (c) => {
   } else {
     headers.delete("X-Agenda-Realtime-Store-Id");
   }
+  let stage: "binding" | "request" | "hub_fetch" = "binding";
   try {
     const hubId = c.env.REALTIME_HUB.idFromName("agenda-prado");
-    return await c.env.REALTIME_HUB.get(hubId).fetch(new Request(c.req.url, { method: "GET", headers }));
-  } catch {
-    console.warn("realtime_upgrade_unavailable");
+    const hub = c.env.REALTIME_HUB.get(hubId);
+    stage = "request";
+    const request = new Request(c.req.url, { method: "GET", headers });
+    stage = "hub_fetch";
+    return await hub.fetch(request);
+  } catch (error) {
+    console.warn("realtime_upgrade_unavailable", { stage, kind: realtimeFailureKind(error) });
     return c.json({ error: "REALTIME_INDISPONIVEL", message: "Tempo real temporariamente indisponível." }, 503);
   }
 });
