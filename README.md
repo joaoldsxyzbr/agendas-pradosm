@@ -140,7 +140,7 @@ Os arquivos reais exportados não devem ser versionados. Testes usam dados sint�
 
 ## Avisos e notificações
 
-O sino no cabeçalho mostra avisos e eventos para todos os perfis autenticados, com badge de não lidos, polling de 60 segundos e marcação de lido por usuário. A lista é única, do mais recente para o mais antigo, com carregamento de avisos antigos por páginas de 50. O aviso é registro permanente: nunca é excluído nem expira, apenas marcado como lido. O administrador publica avisos com urgência (badge do sino pulsa em vermelho) e direcionamento opcional por loja — sem lojas escolhidas, todas veem; com lojas, só os conferentes dessas lojas (e os demais perfis) enxergam. O card mostra quem publicou. O sistema também gera eventos automáticos — agenda importada, importação em lote, dia concluído e agenda reaberta — gravados na mesma transação da operação.
+O módulo Avisos é o canal de comunicação de administradores e conferentes, com visualizadores em modo leitura. Avisos oficiais são permanentes, podem ser urgentes e direcionados por loja. Importações, conclusões e reaberturas ficam na auditoria e no histórico operacional, sem gerar novos eventos no canal. Eventos antigos permanecem armazenados.
 
 ## Dashboard
 

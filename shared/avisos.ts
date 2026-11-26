@@ -18,6 +18,7 @@ const avisoLojaCodigo = z
 
 export const avisoLojasSchema = z
   .array(avisoLojaCodigo)
+  .min(1, "Selecione ao menos uma loja.")
   .max(20, "Escolha no máximo 20 lojas.");
 
 export const avisoSchema = z.object({
@@ -44,6 +45,7 @@ export const avisoCursorSchema = z.object({
 export const avisosResponseSchema = z.object({
   avisos: z.array(avisoSchema),
   naoLidos: z.number().int().nonnegative(),
+  urgenteNaoLido: z.boolean().optional(),
   // Opcionais para tolerar respostas dos mocks e da API anterior.
   hasMore: z.boolean().optional(),
   nextCursor: avisoCursorSchema.nullable().optional(),

@@ -249,7 +249,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
     assert.match(db.statements[1].sql, /WHERE EXISTS/);
   });
 
-  it("importação em lote gera exatamente um aviso por lote no mesmo batch", async () => {
+  it("importação em lote mantém auditoria por loja sem eventos duplicados", async () => {
     const db = arityDb();
     const appointment = {
       protocol: "P1",
@@ -276,8 +276,8 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
       { storeId: "loja-2", existing: null, input: { ...input, storeCode: "02" } }
     ]);
     const avisos = db.statements.filter((statement) => statement.sql.includes("INSERT INTO avisos"));
-    assert.equal(avisos.length, 1, "o lote inteiro deve gerar um único aviso");
-    assert.match(avisos[0].values[2] ?? "", /2 agendas e 4 agendamentos/);
+    assert.equal(avisos.length, 0);
+    assert.equal(db.statements.filter(statement => statement.sql.includes("INSERT INTO auditoria")).length, 2);
   });
 });
 
@@ -447,7 +447,7 @@ describe("Rotas de avisos integradas", () => {
     }
   });
 
-  it("eventos do sistema não chegam ao conferente; ficam com admin e visualizador", async () => {
+  it("eventos históricos não entram no canal nem no badge de nenhum papel", async () => {
     const f = fixture();
     try {
       // Evento automático no mesmo formato dos statements de agendas.ts:
@@ -470,15 +470,13 @@ describe("Rotas de avisos integradas", () => {
       // Marcar-todos do conferente só grava o que ele enxerga.
       const marcar = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
       assert.equal((await marcar.json()).marcados, 1);
-      // Admin vê evento E aviso; nada foi lido por ele.
       const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
-      assert.equal(visaoAdmin.avisos.length, 2);
-      assert.equal(visaoAdmin.naoLidos, 2);
-      assert.equal(visaoAdmin.avisos.some((aviso) => aviso.tipo === "evento"), true);
-      // Visualizador (gerente) também vê o evento.
+      assert.equal(visaoAdmin.avisos.length, 1);
+      assert.equal(visaoAdmin.naoLidos, 1);
+      assert.equal(visaoAdmin.avisos.some(aviso => aviso.tipo === "evento"), false);
       const visaoView = await (await f.call("view1", "/api/avisos")).json();
-      assert.equal(visaoView.avisos.length, 2);
-      assert.equal(visaoView.avisos.some((aviso) => aviso.tipo === "evento"), true);
+      assert.equal(visaoView.avisos.length, 1);
+      assert.equal(visaoView.avisos.some(aviso => aviso.tipo === "evento"), false);
     } finally {
       f.sqlite.close();
     }
@@ -645,28 +643,15 @@ describe("Rotas de avisos integradas", () => {
     }
   });
 
-  it("concluir o dia e reabrir geram eventos de aviso na mesma transação", async () => {
+  it("concluir e reabrir preserva auditoria sem gerar eventos no canal", async () => {
     const f = fixture();
     try {
-      const conclusao = await f.call("conf1", "/api/store/agenda/2026-11-11/complete", { method: "POST" });
-      assert.equal(conclusao.status, 200);
-      let resposta = await (await f.call("adm1", "/api/avisos")).json();
-      assert.equal(resposta.naoLidos, 1);
-      assert.equal(resposta.avisos[0].tipo, "evento");
-      assert.equal(resposta.avisos[0].autor, "Sistema", "eventos automáticos têm autor Sistema");
-      assert.equal(resposta.avisos[0].urgente, false);
-      assert.match(resposta.avisos[0].titulo, /Dia conclu\u00eddo/);
-      assert.match(resposta.avisos[0].mensagem, /Loja sint\u00e9tica 1 em 11\/11\/2026/);
-
-      const reabertura = await f.call("adm1", "/api/admin/agendas/agenda1/status", {
-        method: "PATCH",
-        body: { status: "aberto" }
-      });
-      assert.equal(reabertura.status, 200);
-      resposta = await (await f.call("adm1", "/api/avisos")).json();
-      assert.equal(resposta.naoLidos, 2);
-      assert.match(resposta.avisos[0].titulo, /Agenda reaberta/);
-      assert.equal(resposta.avisos.filter((aviso) => aviso.tipo === "evento").length, 2);
+      assert.equal((await f.call("conf1", "/api/store/agenda/2026-11-11/complete", { method: "POST" })).status, 200);
+      assert.equal(f.auditCount("dia_concluido"), 1);
+      assert.equal((await f.call("adm1", "/api/admin/agendas/agenda1/status", { method: "PATCH", body: { status: "aberto" } })).status, 200);
+      assert.equal(f.auditCount("dia_reaberto"), 1);
+      assert.equal(f.avisosCount(), 0);
+      assert.equal((await (await f.call("adm1", "/api/avisos")).json()).naoLidos, 0);
     } finally {
       f.sqlite.close();
     }
@@ -708,7 +693,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await f.call("conf1", "/api/avisos?beforeId=qualquer")).status, 400);
       assert.equal((await f.call("conf1", "/api/avisos?before=invalido&beforeId=id")).status, 400);
       const adm = await (await f.call("adm1", "/api/avisos")).json();
-      assert.equal(adm.naoLidos, 65, "administrador também vê evento e direcionado");
+      assert.equal(adm.naoLidos, 64, "administrador vê direcionado, mas não evento");
       await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
       assert.equal((await (await f.call("conf1", "/api/avisos")).json()).naoLidos, 0);
     } finally {
