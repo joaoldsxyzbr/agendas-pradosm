@@ -5,7 +5,7 @@ import {
 } from "../../shared/realtime.ts";
 import { originMatchesRequest } from "../lib/http.ts";
 const realtimeRoutes = new Hono<AppEnv>();
-function realtimeMode(value) {
+function realtimeMode(value: string): "off" | "shadow" | "on" {
   return value === "shadow" || value === "on" ? value : "off";
 }
 realtimeRoutes.get("/config", (c) => {
@@ -36,6 +36,7 @@ realtimeRoutes.get("/", async (c) => {
     );
   }
   const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
   if (user.papel === "conferente" && !user.lojaId) {
     return c.json(
       {

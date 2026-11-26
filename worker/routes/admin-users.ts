@@ -1,5 +1,7 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
+import type { UserRow } from "../repositories/users.ts";
+import type { UserRole } from "../../shared/auth.ts";
 import { z } from "zod";
 import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
@@ -12,7 +14,7 @@ import {
   updateUser
 } from "../repositories/users.ts";
 const adminUserRoutes = new Hono<AppEnv>();
-function userJson(user) {
+function userJson(user: UserRow) {
   return {
     id: user.id,
     nome: user.nome,
@@ -22,13 +24,14 @@ function userJson(user) {
     ativo: user.ativo === 1
   };
 }
-function isDuplicateLogin(error) {
+function isDuplicateLogin(error: unknown) {
   return error instanceof Error && error.message.includes("UNIQUE constraint failed: usuarios.login");
 }
-function isLastAdmin(error) {
+function isLastAdmin(error: unknown) {
   return error instanceof Error && error.message.includes("ULTIMO_ADMIN_ATIVO");
 }
-async function validateStoreForRole(db, papel, lojaId) {
+type StoreCheck = { ok: true; lojaId: string | null } | { ok: false; reason: "required" | "missing" };
+async function validateStoreForRole(db: D1Database, papel: UserRole, lojaId: string | null | undefined): Promise<StoreCheck> {
   if (papel !== "conferente") return { ok: true, lojaId: null };
   if (!lojaId) return { ok: false, reason: "required" };
   const store = await findStoreById(db, lojaId);
@@ -65,6 +68,7 @@ adminUserRoutes.post("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if (!actor) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
     const user = await createUser(
       c.env.DB,
       {
@@ -73,6 +77,7 @@ adminUserRoutes.post("/", async (c) => {
       },
       actor.id
     );
+    if (!user) throw Error("Usuário criado não encontrado.");
     return c.json(userJson(user), 201);
   } catch (error) {
     if (isDuplicateLogin(error)) {
@@ -119,6 +124,7 @@ adminUserRoutes.patch("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if (!actor) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
     const user = await updateUser(
       c.env.DB,
       current,
@@ -129,6 +135,7 @@ adminUserRoutes.patch("/", async (c) => {
       },
       actor.id
     );
+    if (!user) return c.json({ error: "USUARIO_NAO_ENCONTRADO", message: "Usuário não encontrado." }, 404);
     // O versionamento da sessão é decidido no repositório (senha, status, login, papel, loja).
     if (user.session_version !== current.session_version) {
       await revokeRealtimeUser(c.env, current.id, "terminate");
@@ -173,6 +180,7 @@ adminUserRoutes.delete("/:id", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if (!actor) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
     const deleted = await softDeleteUser(c.env.DB, current, actor.id);
     if (deleted) {
       await revokeRealtimeUser(c.env, current.id);

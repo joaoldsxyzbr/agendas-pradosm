@@ -22,6 +22,14 @@
     "./repositories/audit.ts",
     "./repositories/presence.ts",
     "./routes/admin-audit.ts",
-    "./routes/presence.ts"
+    "./routes/presence.ts",
+    "./repositories/stores.ts",
+    "./repositories/users.ts",
+    "./middleware/auth.ts",
+    "./routes/auth.ts",
+    "./routes/admin-stores.ts",
+    "./routes/admin-users.ts",
+    "./services/realtime.ts",
+    "./routes/realtime.ts"
   ]
 }

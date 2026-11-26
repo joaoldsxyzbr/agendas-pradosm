@@ -1,5 +1,6 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { RegisterFirstAdminInput } from "../../shared/api.ts";
@@ -24,7 +25,7 @@ const LoginInput = z.object({
   senha: z.string().min(8).max(200),
 });
 
-function invalidCredentials(c) {
+function invalidCredentials(c: Context<AppEnv>) {
   return c.json(
     {
       error: "CREDENCIAIS_INVALIDAS",
@@ -34,7 +35,7 @@ function invalidCredentials(c) {
   );
 }
 
-function bootstrapClosed(c) {
+function bootstrapClosed(c: Context<AppEnv>) {
   return c.json(
     {
       error: "BOOTSTRAP_ENCERRADO",
@@ -44,7 +45,7 @@ function bootstrapClosed(c) {
   );
 }
 
-function isDuplicateLogin(error) {
+function isDuplicateLogin(error: unknown) {
   return (
     error instanceof Error &&
     error.message.includes("UNIQUE constraint failed: usuarios.login")
@@ -103,7 +104,7 @@ authRoutes.post("/bootstrap-register", async (c) => {
 });
 
 authRoutes.post("/login", async (c) => {
-  let body;
+  let body: unknown;
   try {
     body = await c.req.json();
   } catch {

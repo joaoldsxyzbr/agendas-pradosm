@@ -1,47 +1,64 @@
+import type { z } from "zod";
+import type { CreateUserInput, UpdateUserInput, RegisterFirstAdminInput } from "../../shared/api.ts";
+import type { UserRole } from "../../shared/auth.ts";
 import { hashPassword } from "../lib/password.ts";
 import { auditStatement } from "./audit.ts";
+export interface UserRow {
+  id: string;
+  loja_id: string | null;
+  nome: string;
+  login: string;
+  senha_hash: string;
+  papel: UserRole;
+  ativo: number;
+  session_version: number;
+  excluido_em: string | null;
+}
+type UserCreate = z.infer<typeof CreateUserInput>;
+type UserUpdate = Omit<z.infer<typeof UpdateUserInput>, "id">;
+type AdminCreate = z.infer<typeof RegisterFirstAdminInput>;
 const USER_COLUMNS = "id, loja_id, nome, login, senha_hash, papel, ativo, session_version, excluido_em";
-async function findUserByLogin(db, login) {
+async function findUserByLogin(db: D1Database, login: string): Promise<UserRow | null> {
   return db.prepare(
     `SELECT ${USER_COLUMNS} FROM usuarios WHERE login = ? COLLATE NOCASE AND excluido_em IS NULL LIMIT 1`
-  ).bind(login).first();
+  ).bind(login).first<UserRow>();
 }
-async function findUserById(db, id) {
+async function findUserById(db: D1Database, id: string): Promise<UserRow | null> {
   return db.prepare(
     `SELECT ${USER_COLUMNS} FROM usuarios WHERE id = ? AND excluido_em IS NULL LIMIT 1`
-  ).bind(id).first();
+  ).bind(id).first<UserRow>();
 }
 // A consulta autenticada verifica a revogação na mesma leitura do usuário,
 // evitando uma segunda operação D1 em cada requisição.
-async function findUserForSession(db, id, sessionKey) {
+async function findUserForSession(db: D1Database, id: string, sessionKey: string): Promise<UserRow | null> {
   return db.prepare(
     `SELECT ${USER_COLUMNS} FROM usuarios WHERE id = ? AND excluido_em IS NULL
        AND NOT EXISTS (SELECT 1 FROM sessoes_revogadas WHERE session_key = ?) LIMIT 1`
-  ).bind(id, sessionKey).first();
+  ).bind(id, sessionKey).first<UserRow>();
 }
-async function revokeSession(db, sessionKey, expiresAt) {
+async function revokeSession(db: D1Database, sessionKey: string, expiresAt: number): Promise<void> {
   await db.prepare(
     "INSERT INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?) ON CONFLICT(session_key) DO UPDATE SET expira_em = MAX(sessoes_revogadas.expira_em, excluded.expira_em)"
   ).bind(sessionKey, expiresAt).run();
 }
-async function pruneRevokedSessions(db, nowSeconds = Math.floor(Date.now() / 1000)) {
+async function pruneRevokedSessions(db: D1Database, nowSeconds = Math.floor(Date.now() / 1000)) {
   return db.prepare("DELETE FROM sessoes_revogadas WHERE expira_em <= ?")
     .bind(nowSeconds).run();
 }
-async function upgradeUserPasswordHash(db, userId, expectedHash, passwordHash) {
+async function upgradeUserPasswordHash(db: D1Database, userId: string, expectedHash: string, passwordHash: string): Promise<boolean> {
   // Não sobrescrever uma senha alterada por outra sessão/admin durante o login.
   const result = await db.prepare(
     "UPDATE usuarios SET senha_hash = ?, atualizado_em = ? WHERE id = ? AND senha_hash = ? AND excluido_em IS NULL"
   ).bind(passwordHash, new Date().toISOString(), userId, expectedHash).run();
-  return (result.meta?.changes ?? 0) > 0;
+  return Number(result.meta?.changes ?? 0) > 0;
 }
-async function hasAdmin(db) {
+async function hasAdmin(db: D1Database): Promise<boolean> {
   const result = await db.prepare(
     "SELECT 1 AS presente FROM usuarios WHERE papel = 'admin' AND excluido_em IS NULL LIMIT 1"
   ).first();
   return result !== null;
 }
-async function createInactiveFirstAdmin(db, input) {
+async function createInactiveFirstAdmin(db: D1Database, input: AdminCreate): Promise<UserRow | null> {
   const id = crypto.randomUUID();
   const auditId = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -73,23 +90,23 @@ async function createInactiveFirstAdmin(db, input) {
         )`
     ).bind(auditId, id, auditAfter, now, id)
   ]);
-  if (insertResult.meta.changes === 0) return null;
+  if (insertResult.meta?.changes !== 1) return null;
   return findUserById(db, id);
 }
-async function listUsers(db) {
+async function listUsers(db: D1Database): Promise<UserRow[]> {
   const result = await db.prepare(
     `SELECT ${USER_COLUMNS} FROM usuarios WHERE excluido_em IS NULL ORDER BY nome ASC`
-  ).all();
-  return result.results;
+  ).all<UserRow>();
+  return result.results ?? [];
 }
-async function createUser(db, input, actorUserId) {
+async function createUser(db: D1Database, input: UserCreate, actorUserId: string): Promise<UserRow | null> {
   if (input.papel === "conferente" && !input.lojaId) {
     throw new Error("LOJA_OBRIGATORIA");
   }
   const id = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const passwordHash = await hashPassword(input.senha);
-  const lojaId = input.papel === "conferente" ? input.lojaId : null;
+  const lojaId = input.papel === "conferente" ? input.lojaId ?? null : null;
   const statements = [
     db.prepare(
       "INSERT INTO usuarios (id, loja_id, nome, login, senha_hash, papel, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)"
@@ -126,7 +143,7 @@ async function createUser(db, input, actorUserId) {
   await db.batch(statements);
   return await findUserById(db, id);
 }
-async function updateUser(db, current, input, actorUserId) {
+async function updateUser(db: D1Database, current: UserRow, input: UserUpdate, actorUserId: string): Promise<UserRow | null> {
   const nome = input.nome ?? current.nome;
   const login = input.login ?? current.login;
   const papel = input.papel ?? current.papel;
@@ -196,7 +213,7 @@ async function updateUser(db, current, input, actorUserId) {
   }
   return await findUserById(db, current.id);
 }
-async function softDeleteUser(db, current, actorUserId) {
+async function softDeleteUser(db: D1Database, current: UserRow, actorUserId: string): Promise<boolean> {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const [result] = await db.batch([
     db.prepare(
@@ -228,7 +245,7 @@ async function softDeleteUser(db, current, actorUserId) {
       createdAt: now
     })
   ]);
-  return result.meta.changes > 0;
+  return Number(result.meta?.changes ?? 0) > 0;
 }
 export {
   createInactiveFirstAdmin,

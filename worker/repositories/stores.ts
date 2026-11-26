@@ -1,22 +1,36 @@
+import type { z } from "zod";
+import type { CreateStoreInput, UpdateStoreInput } from "../../shared/api.ts";
 import { auditStatement } from "./audit.ts";
+export interface StoreRow {
+  id: string;
+  codigo: string;
+  nome: string;
+  ativo: number;
+  excluido_em: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  tem_conferente_ativo: number;
+}
+type StoreCreate = z.infer<typeof CreateStoreInput>;
+type StoreUpdate = Omit<z.infer<typeof UpdateStoreInput>, "id">;
 const STORE_COLUMNS = "id, codigo, nome, ativo, excluido_em, criado_em, atualizado_em, CASE WHEN EXISTS (SELECT 1 FROM usuarios u WHERE u.loja_id = lojas.id AND u.papel = 'conferente' AND u.ativo = 1 AND u.excluido_em IS NULL) THEN 1 ELSE 0 END AS tem_conferente_ativo";
-async function listStores(db) {
+async function listStores(db: D1Database): Promise<StoreRow[]> {
   const result = await db.prepare(
     `SELECT ${STORE_COLUMNS} FROM lojas WHERE excluido_em IS NULL ORDER BY codigo ASC`
-  ).all();
-  return result.results;
+  ).all<StoreRow>();
+  return result.results ?? [];
 }
-async function findStoreById(db, id) {
+async function findStoreById(db: D1Database, id: string): Promise<StoreRow | null> {
   return db.prepare(
     `SELECT ${STORE_COLUMNS} FROM lojas WHERE id = ? AND excluido_em IS NULL LIMIT 1`
-  ).bind(id).first();
+  ).bind(id).first<StoreRow>();
 }
-async function findActiveStoreById(db, id) {
+async function findActiveStoreById(db: D1Database, id: string): Promise<StoreRow | null> {
   return db.prepare(
     `SELECT ${STORE_COLUMNS} FROM lojas WHERE id = ? AND ativo = 1 AND excluido_em IS NULL LIMIT 1`
-  ).bind(id).first();
+  ).bind(id).first<StoreRow>();
 }
-async function createStore(db, input, actorUserId) {
+async function createStore(db: D1Database, input: StoreCreate, actorUserId: string): Promise<StoreRow | null> {
   const id = crypto.randomUUID();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   await db.batch([
@@ -40,7 +54,7 @@ async function createStore(db, input, actorUserId) {
   ]);
   return await findStoreById(db, id);
 }
-async function updateStore(db, current, input, actorUserId) {
+async function updateStore(db: D1Database, current: StoreRow, input: StoreUpdate, actorUserId: string): Promise<StoreRow | null> {
   const codigo = input.codigo ?? current.codigo;
   const nome = input.nome ?? current.nome;
   const ativo = input.ativo === void 0 ? current.ativo : input.ativo ? 1 : 0;
@@ -71,13 +85,13 @@ async function updateStore(db, current, input, actorUserId) {
   ]);
   return await findStoreById(db, current.id);
 }
-async function hasStoreUsers(db, storeId) {
+async function hasStoreUsers(db: D1Database, storeId: string): Promise<boolean> {
   const result = await db.prepare(
     "SELECT 1 AS presente FROM usuarios WHERE loja_id = ? AND papel = 'conferente' AND excluido_em IS NULL LIMIT 1"
   ).bind(storeId).first();
   return result !== null;
 }
-async function softDeleteStore(db, current, actorUserId) {
+async function softDeleteStore(db: D1Database, current: StoreRow, actorUserId: string): Promise<boolean> {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const [result] = await db.batch([
     db.prepare(
@@ -104,7 +118,7 @@ async function softDeleteStore(db, current, actorUserId) {
       createdAt: now
     })
   ]);
-  return result.meta.changes > 0;
+  return Number(result.meta?.changes ?? 0) > 0;
 }
 export {
   createStore,
