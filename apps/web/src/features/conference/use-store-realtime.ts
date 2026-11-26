@@ -17,6 +17,7 @@ const changedSchema = z.object({
   date: z.iso.date(),
   reason: z.enum(["status", "exchanges", "manual", "day-status", "import", "observation"]),
 });
+const avisosChangedSchema = z.object({ version: z.literal(1), type: z.literal("avisos.changed") });
 const readySchema = z.object({ version: z.literal(1), type: z.literal("realtime.ready") });
 
 const delays = [1_000, 2_000, 5_000, 10_000, 30_000];
@@ -145,6 +146,11 @@ export function useStoreRealtime(selectedDate: string) {
           attempt = 0;
           setStatus("connected");
           refreshAgenda(); // Recupera eventos ocorridos durante a reconexao.
+          void client.invalidateQueries({ queryKey: ["avisos"] });
+          return;
+        }
+        if (avisosChangedSchema.safeParse(raw).success) {
+          if (mode === "on") void client.invalidateQueries({ queryKey: ["avisos"] });
           return;
         }
         const parsed = changedSchema.safeParse(raw);

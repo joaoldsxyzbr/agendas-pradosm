@@ -29,6 +29,7 @@ const presenceChangedSchema = z.object({
 });
 const realtimeEventSchema = z.discriminatedUnion("type", [
   changedSchema, snapshotSchema, presenceChangedSchema,
+  z.object({ version: z.literal(1), type: z.literal("avisos.changed") }),
   z.object({ version: z.literal(1), type: z.literal("realtime.ready") }),
 ]);
 
@@ -105,9 +106,12 @@ export function useReceivingRealtime(sessionId: string | undefined, selectedDate
         if (event.type === "realtime.ready") {
           attempt = 0;
           setStatus("connected");
+          void client.invalidateQueries({ queryKey: ["avisos"] });
           // Recupera eventos que possam ter ocorrido durante uma reconexão.
           void client.invalidateQueries({ queryKey: ["receiving", "agendas", selectedDateRef.current], exact: true });
           void client.invalidateQueries({ queryKey: ["receiving", "presence"], exact: true });
+        } else if (event.type === "avisos.changed") {
+          if (mode === "on") void client.invalidateQueries({ queryKey: ["avisos"] });
         } else if (event.type === "agenda.changed") {
           if (event.date === selectedDateRef.current) {
             void client.invalidateQueries({ queryKey: ["receiving", "agendas", selectedDateRef.current], exact: true });

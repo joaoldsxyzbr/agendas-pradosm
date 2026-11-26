@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { logout, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
+import { AvisosToasts } from "@/features/avisos/avisos-toasts";
+import { useReceivingRealtime } from "@/features/receiving/use-realtime";
 
 // O canal de Avisos tem página própria e badge de não lidos na navegação.
 const menu = [
@@ -16,7 +18,7 @@ const menu = [
   { path: "/admin/stores", label: "Lojas", icon: Store, roles: ["admin"] },
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },
   { path: "/admin/diagnostics", label: "Logs e Auditoria", icon: Settings2, roles: ["admin"] },
-  { path: "/admin/avisos", label: "Avisos", icon: Megaphone, roles: ["admin", "visualizador"] },
+  { path: "/admin/avisos", label: "Avisos", icon: Megaphone, roles: ["admin"] },
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
   { path: "/app/avisos", label: "Avisos", icon: Megaphone, roles: ["conferente"] },
 ] as const;
@@ -55,7 +57,12 @@ function writeSidebarCollapsed(role: Role, collapsed: boolean) {
 
 export function AppLayout({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
-  const canal = useLocation().pathname.endsWith("/avisos");
+  const pathname = useLocation().pathname;
+  const canal = pathname.endsWith("/avisos");
+  const temCanal = user.papel === "admin" || user.papel === "conferente";
+  // Recebimento/Conferência já mantêm sua conexão. Nas outras páginas usamos
+  // o mesmo cliente WebSocket, apenas para invalidação do canal.
+  useReceivingRealtime(temCanal && pathname !== "/admin" && pathname !== "/app" ? user.id : undefined, "");
   const client = useQueryClient();
   const [collapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
   const signout = useMutation({
@@ -118,6 +125,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] shrink-0 overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
       <main className={cn("w-full min-w-0 max-w-full flex-1", canal ? "flex min-h-0 flex-col overflow-hidden" : "overflow-x-clip p-4 md:p-6")}><Outlet /></main>
+      {temCanal && <AvisosToasts key={user.id} userId={user.id} canalPath={user.papel === "admin" ? "/admin/avisos" : "/app/avisos"} />}
     </div>
   </div>;
 }

@@ -56,3 +56,6 @@ npx playwright test --config apps/web/playwright.config.mjs
 Preferir alterações incrementais, testes e CI antes da mesclagem. Não mexer em credenciais, sessões, permissões, D1 remoto ou lógica operacional como efeito colateral de reorganizações.
 
 O canal de comunicação possui um fluxo cronológico único de mensagens e avisos oficiais, busca paginada, leitura individual de mensagens visíveis e confirmação explícita de avisos. A consulta de pendências considera o conjunto completo, não apenas a primeira página. Leituras históricas podem ter sido automáticas.
+
+- Reações: migration aditiva `0030_avisos_reacoes.sql`, chave composta por aviso e usuário, emojis 👍/👀/😂. A API `PUT /api/avisos/:id/reacao` define ou remove (emoji null), exige visibilidade e impede autoria própria. Visualizadores não acessam nenhuma rota do canal.
+- O evento realtime `avisos.changed` sinaliza atualização a administradores e conferentes destinatários (sem conteúdo); D1/API permanecem fonte de verdade. Toasts locais só para novas publicações de terceiros, sem alertar reações ou histórico inicial; polling de fallback preservado.
