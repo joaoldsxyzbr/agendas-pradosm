@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { required, requestBody, type AppointmentFixture } from "./fixtures.ts";
-import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
+import { test, expect, type Page, type WebSocketRoute, type Locator } from "@playwright/test";
 
 const conf = { id:"c1",nome:"Conferente Doca",papel:"conferente",lojaId:"s1",lojaCodigo:"F03",lojaNome:"Loja Central" };
 const entry = { id:"a1",supplier:"FORNECEDOR TESTE",protocol:"1234567",type:"Nota fiscal",
@@ -374,7 +374,7 @@ test("Conferência exibe ações em linha única e altura compacta inclusive par
   await page.setViewportSize({width:1200,height:800});
   await setup(page);
   const regular=page.getByTestId("conference-row-a1");
-  const assertCompact=async(row,expected)=>{
+  const assertCompact=async(row: Locator,expected: number)=>{
     await expect(row).toBeVisible();
     const actionCell=row.locator("tr").first().locator("td").nth(3);
     await expect(actionCell.locator("button")).toHaveCount(expected);

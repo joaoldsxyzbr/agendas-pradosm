@@ -2,9 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
+      "ES2022"
     ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -25,7 +23,12 @@
     "types": []
   },
   "include": [
-    "./**/*.ts",
-    "../shared/**/*.ts"
+    "./**/*.ts"
+  ],
+  "files": [
+    "./.tmp/runtime.d.ts"
+  ],
+  "exclude": [
+    "./types.d.ts"
   ]
 }

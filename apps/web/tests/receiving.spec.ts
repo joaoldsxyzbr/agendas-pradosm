@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { required, requestBody, type AppointmentFixture } from "./fixtures.ts";
 
-import { test, expect, type Page, type WebSocketRoute } from "@playwright/test";
+import { test, expect, type Page, type WebSocketRoute, type Locator } from "@playwright/test";
 
 const admin = { id: "adm", nome: "ADM de teste", papel: "admin" };
 const viewer = { id: "viewer", nome: "Visualizador de teste", papel: "visualizador" };
@@ -475,7 +475,7 @@ test("Admin organiza ações em linha única e mantém linhas baixas na agenda d
   await page.getByTestId("receiving-store-F02").getByRole("button",{name:"Ver detalhes"}).click();
   const dialog=page.getByRole("dialog",{name:/Agenda F02/});
   await dialog.getByRole("button",{name:"Editar agenda"}).click();
-  const check=async(row,count)=>{
+  const check=async(row: Locator,count: number)=>{
     const cell=row.locator("tr").first().locator("td").nth(3);
     const tops=await cell.locator("button").evaluateAll(buttons=>buttons.map(button=>{
       const {top,width}=button.getBoundingClientRect();return {top,width};

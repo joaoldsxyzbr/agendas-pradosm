@@ -156,7 +156,7 @@ test("Polimento mantém os números visíveis em tela estreita e informa progres
   const documentsBox = await documents.boundingBox();
   expect(nameBox).not.toBeNull();
   expect(documentsBox).not.toBeNull();
-  expect(documentsBox.y).toBeGreaterThan(nameBox.y);
+  expect(required(documentsBox).y).toBeGreaterThan(required(nameBox).y);
   const progress = section.getByRole("progressbar", { name: "Progresso de digitação" });
   await expect(progress).toHaveAttribute("aria-valuenow", "0");
   await expect(progress).toHaveAttribute("aria-valuemax", "1");

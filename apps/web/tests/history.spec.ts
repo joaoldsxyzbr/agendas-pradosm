@@ -169,7 +169,7 @@ test("Histórico React reabre dia concluído e consulta histórico de status", a
 });
 
 test("Histórico React mostra conflito 409 sem alterar status", async ({ page }) => {
-  const state = await setup(page, { conflict: true });
+  await setup(page, { conflict: true });
   await openAgenda(page);
   await page.getByRole("combobox", { name: "Status de Transporte Beta" }).selectOption("recebido");
   await expect(page.getByRole("alert").filter({ hasText: "A agenda mudou desde a consulta" })).toBeVisible();
@@ -177,7 +177,7 @@ test("Histórico React mostra conflito 409 sem alterar status", async ({ page })
 });
 
 test("Histórico React recupera falha de listagem com tentativa novamente", async ({ page }) => {
-  const state = await setup(page, { listError: true });
+  await setup(page, { listError: true });
   await page.getByRole("button", { name: "Filtrar" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Não foi possível consultar as agendas." })).toBeVisible();
   await page.getByRole("button", { name: "Tentar novamente" }).click();
@@ -192,7 +192,7 @@ test("Histórico React bloqueia visualizador", async ({ page }) => {
 
 test("Histórico React usa cartões no celular sem rolagem horizontal do documento", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const state = await setup(page);
+  await setup(page);
   await expect(page.getByRole("heading", { name: "Histórico", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Loja" }).selectOption("F01");
   await page.getByLabel("Data").fill("2026-10-28");

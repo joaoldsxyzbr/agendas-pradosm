@@ -24,6 +24,7 @@
     "worker/types.d.ts",
     "worker/pdf-types.d.ts",
     "tests/helpers/**/*.ts",
-    "tests/unit/**/*.ts"
+    "tests/unit/**/*.ts",
+    "shared/**/*.ts"
   ]
 }
