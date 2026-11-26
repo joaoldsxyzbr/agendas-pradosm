@@ -8,9 +8,9 @@ import { logout, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
 
 // O canal de Avisos virou página própria com badge na navegação (decisão de
-// 25/11/2026): o item "Avisos (Desenvolvimento)" carrega a contagem de não
-// lidos — o rótulo "(Desenvolvimento)" é removível quando o canal for
-// promovido a recurso oficial.
+// 25/11/2026). Em 26/11/2026 o rótulo "(Desenvolvimento)" saiu: o canal roda
+// em produção com D1 e usuários reais, e rótulo de estágio não pertence ao
+// menu do usuário final.
 const menu = [
   { path: "/admin", label: "Recebimento", icon: ClipboardCheck, roles: ["admin", "visualizador"] },
   { path: "/admin/reports", label: "Relatório Gerencial", icon: FileBarChart, roles: ["admin", "visualizador"] },
@@ -19,9 +19,9 @@ const menu = [
   { path: "/admin/stores", label: "Lojas", icon: Store, roles: ["admin"] },
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },
   { path: "/admin/diagnostics", label: "Logs e Auditoria", icon: Settings2, roles: ["admin"] },
-  { path: "/admin/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["admin", "visualizador"] },
+  { path: "/admin/avisos", label: "Avisos", icon: Megaphone, roles: ["admin", "visualizador"] },
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
-  { path: "/app/avisos", label: "Avisos (Desenvolvimento)", icon: Megaphone, roles: ["conferente"] },
+  { path: "/app/avisos", label: "Avisos", icon: Megaphone, roles: ["conferente"] },
 ] as const;
 
 const labels: Record<Role, string> = {
