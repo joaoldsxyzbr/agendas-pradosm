@@ -485,7 +485,7 @@ describe("Rotas de avisos integradas", () => {
   it("marcar lido respeita a visibilidade: evento e aviso de outra loja não são gravados", async () => {
     const f = fixture();
     try {
-      // Evento do sistema (só admin/gerente enxerga) + aviso direcionado à loja 02.
+      // Evento legado (não visível no canal) + aviso direcionado à loja 02.
       f.sqlite.prepare(
         "INSERT INTO avisos (id, tipo, titulo, mensagem, criado_em) " +
         "VALUES ('ev1', 'evento', 'Agenda importada', '10 agendas importadas.', '2026-11-12T12:00:00.000Z')"
@@ -510,13 +510,13 @@ describe("Rotas de avisos integradas", () => {
       const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
       assert.equal(visaoConf.naoLidos, 0);
 
-      // Admin marca o evento normalmente (enxerga tudo).
+      // Admin também não marca eventos legados do sistema.
       const admResp = await f.call("adm1", "/api/avisos/ev1/lido", { method: "POST" });
-      assert.equal((await admResp.json()).jaLido, false);
+      assert.equal((await admResp.json()).jaLido, true);
       const leiturasAdm = f.sqlite
         .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'adm1' AND aviso_id = 'ev1'")
         .get().n;
-      assert.equal(leiturasAdm, 1);
+      assert.equal(leiturasAdm, 0);
     } finally {
       f.sqlite.close();
     }
@@ -741,10 +741,13 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(contrato.success && contrato.data.autor, "Conferente 1");
       assert.equal(contrato.success && contrato.data.urgente, false);
       assert.equal(contrato.success && contrato.data.lojas, null);
-      assert.equal(contrato.success && contrato.data.lido, false);
+      assert.equal(contrato.success && contrato.data.lido, true);
       assert.equal(contrato.success && contrato.data.proprio, true, "quem publica recebe a própria mensagem");
       assert.equal(f.auditCount("mensagem_do_canal_publicada"), 1);
-      // Mensagem é global: entra na lista (e no badge) de todos os papéis.
+      const visaoAutor = await (await f.call("conf1", "/api/avisos")).json();
+      assert.equal(visaoAutor.naoLidos, 0);
+      assert.equal(visaoAutor.avisos[0].lido, true);
+      // Mensagem é global: entra na lista e no badge dos outros usuários.
       const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
       assert.equal(visaoConf2.naoLidos, 1);
       assert.equal(visaoConf2.avisos[0].tipo, "chat");
