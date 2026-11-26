@@ -163,7 +163,8 @@ class RealtimeHub extends DurableObject {
       return;
     }
     const attachment = this.attachment(ws);
-    if (!attachment || attachment.role !== "conferente" || !attachment.storeId) {
+    if (!attachment || Date.now() >= attachment.sessionExpiresAt) { ws.close(4003, "Sessão realtime expirada."); return; }
+    if (attachment.role !== "conferente" || !attachment.storeId) {
       this.rejectMessage(ws);
       return;
     }
@@ -224,7 +225,7 @@ class RealtimeHub extends DurableObject {
     const affectedStores = /* @__PURE__ */ new Set<string>();
     for (const ws of this.ctx.getWebSockets()) {
       const attachment = this.attachment(ws);
-      if (!attachment) continue;
+      if (!attachment) { expired.add(ws); continue; }
       if (now >= attachment.sessionExpiresAt) {
         expired.add(ws);
         if (attachment.role === "conferente" && attachment.storeId) {
@@ -252,8 +253,10 @@ class RealtimeHub extends DurableObject {
     await this.ensureAlarm(excluded);
   }
   attachment(ws: WebSocket): SocketAttachment | null {
-    const parsed = attachmentSchema.safeParse(ws.deserializeAttachment());
-    return parsed.success ? parsed.data : null;
+    try {
+      const parsed = attachmentSchema.safeParse(ws.deserializeAttachment());
+      return parsed.success ? parsed.data : null;
+    } catch { return null; }
   }
   rejectMessage(ws: WebSocket) {
     console.warn(
@@ -277,7 +280,7 @@ class RealtimeHub extends DurableObject {
     for (const ws of this.ctx.getWebSockets(connectionTag("store", storeId))) {
       if (excluded.has(ws)) continue;
       const attachment = this.attachment(ws);
-      if (attachment?.role !== "conferente" || attachment.storeId !== storeId || !attachment.presenceStatus) {
+      if (attachment?.role !== "conferente" || attachment.storeId !== storeId || !attachment.presenceStatus || now >= attachment.sessionExpiresAt) {
         continue;
       }
       const lastSeen = this.connectionLastSeen(ws, attachment);
@@ -311,20 +314,26 @@ class RealtimeHub extends DurableObject {
     });
     for (const role of ["admin", "visualizador"]) {
       for (const ws of this.ctx.getWebSockets(connectionTag("role", role))) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(event);
-        }
+        this.sendLive(ws, event);
       }
     }
   }
+  sendLive(ws: WebSocket, payload: string) {
+    const identity = this.attachment(ws);
+    if (!identity || Date.now() >= identity.sessionExpiresAt || ws.readyState !== WebSocket.OPEN) return;
+    try { ws.send(payload); } catch { /* conexão individual não bloqueia as demais; polling reconcilia */ }
+  }
   broadcastAvisosChanged(storeIds: string[] | null) {
     const payload = JSON.stringify({ version: REALTIME_PROTOCOL_VERSION, type: "avisos.changed" });
-    const sockets = [...this.ctx.getWebSockets(connectionTag("role", "admin")), ...this.ctx.getWebSockets(connectionTag("role", "conferente"))];
+    const recipients = storeIds === null
+      ? this.ctx.getWebSockets(connectionTag("role", "conferente"))
+      : [...new Set(storeIds)].flatMap(id => this.ctx.getWebSockets(connectionTag("store", id)));
+    const sockets = new Set([...this.ctx.getWebSockets(connectionTag("role", "admin")), ...recipients]);
     for (const ws of sockets) {
       const identity = this.attachment(ws);
       if (!identity || Date.now() >= identity.sessionExpiresAt || ws.readyState !== WebSocket.OPEN) continue;
       if (identity.role === "admin" || (identity.role === "conferente" && (storeIds === null || (identity.storeId !== null && storeIds.includes(identity.storeId))))) {
-        try { ws.send(payload); } catch { /* HTTP mantém reconciliação. */ }
+        this.sendLive(ws, payload);
       }
     }
   }
@@ -332,9 +341,7 @@ class RealtimeHub extends DurableObject {
     const payload = JSON.stringify(event);
     for (const role of ["admin", "visualizador"]) {
       for (const ws of this.ctx.getWebSockets(connectionTag("role", role))) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(payload);
-        }
+        this.sendLive(ws, payload);
       }
     }
   }

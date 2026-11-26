@@ -81,7 +81,7 @@ interface WebSocketRequestResponsePair {}
 
 interface WebSocket {
   serializeAttachment(data: unknown): void;
-  deserializeAttachment(): any;
+  deserializeAttachment(): unknown;
 }
 
 interface ResponseInit {

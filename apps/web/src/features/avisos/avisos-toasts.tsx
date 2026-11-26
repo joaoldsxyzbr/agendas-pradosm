@@ -65,11 +65,11 @@ export function AvisosToasts({ userId, canalPath }: { userId: string; canalPath:
       return;
     }
     const fresh = items.filter(a => !seen.current.has(a.id) && a.criadoEm >= baseline.current!);
-    items.forEach(a => seen.current.add(a.id));
-    if (newest > baseline.current) baseline.current = newest;
-    // Limita memória mantendo a página atual; a data impede replay de antigos.
-    if (seen.current.size > 500) seen.current = new Set(items.map(a => a.id));
     const frame = requestAnimationFrame(() => {
+      // Um refetch que cancela o frame não deve descartar publicações ainda não processadas.
+      items.forEach(a => seen.current.add(a.id));
+      if (baseline.current !== null && newest > baseline.current) baseline.current = newest;
+      if (seen.current.size > 500) seen.current = new Set(items.map(a => a.id));
       if (document.visibilityState !== "visible" || !document.hasFocus()) return;
       const incoming = fresh.filter(a => !a.proprio && !a.lido && !visibleInChannel(a.id) && claim(userId, a.id));
       if (!incoming.length) return;

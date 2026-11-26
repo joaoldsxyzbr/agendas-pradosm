@@ -72,9 +72,21 @@ const limitAgendaImportBody = createMiddleware<AppEnv>(
     if (Number.isFinite(contentLength) && contentLength > MAX_IMPORT_JSON_BYTES) {
       return requestTooLarge(c);
     }
-    const bytes = (await c.req.raw.clone().arrayBuffer()).byteLength;
-    if (bytes > MAX_IMPORT_JSON_BYTES) {
-      return requestTooLarge(c);
+    // Limita a leitura mesmo sem Content-Length confiável. O clone preserva o corpo original.
+    const reader = c.req.raw.clone().body?.getReader();
+    if (reader) {
+      try {
+        let bytes = 0;
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > MAX_IMPORT_JSON_BYTES) {
+            void reader.cancel().catch(() => undefined);
+            return requestTooLarge(c);
+          }
+        }
+      } finally { reader.releaseLock(); }
     }
     await next();
   }
