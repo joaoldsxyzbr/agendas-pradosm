@@ -14,25 +14,25 @@ import {
 } from "../repositories/avisos.ts";
 
 // Rotas de avisos e do canal de avisos em chat (decisão do João, 25/11/2026).
-// - /api/avisos: qualquer papel autenticado lê o canal (avisos oficiais,
-//   mensagens e, para admin/visualizador, eventos do sistema) e marca leituras
-//   — a leitura automática ao abrir a página usa o marcar-todos. Admin e
-//   conferente publicam mensagens comuns aqui; o visualizador não publica.
+// - /api/avisos: qualquer papel autenticado lê o canal (avisos oficiais e
+//   mensagens de chat) e marca leituras — a leitura automática ao abrir a
+//   página usa o marcar-todos. Admin e conferente publicam mensagens comuns
+//   aqui; o visualizador não publica.
 // - /api/admin/avisos: publicação de aviso oficial e a régua "quem viu"
 //   exclusivas do admin (a cadeia /api/admin/* já exige requireAuth +
 //   requireAdmin). Não existe inativação/exclusão: registro permanente.
-
-const avisoRoutes = new Hono<AppEnv>();
-const adminAvisoRoutes = new Hono<AppEnv>();
-
-// Conferente vê os avisos da sua loja (e os de todas) e nenhum evento; os
-// demais papéis, sem loja, veem tudo (avisos, mensagens e eventos).
+//
+// Desde 26/11/2026 (decisão do João) o canal é só conversa humana: eventos
+// do sistema não aparecem mais para NENHUM papel — todas as rotas de leitura
+// e leitura passam verEventos=false, e a listagem e as leituras filtram
+// tipo IN ('aviso', 'chat'). Os eventos continuam gravados na tabela avisos
+// pelas operações que os originam (registro preservado) e são candidatos a
+// integração futura com o módulo Logs e Auditoria.
+//
+// Conferente vê os avisos da sua loja (e os globais); os demais papéis, sem
+// loja, veem tudo — sempre sem eventos do sistema.
 function lojaDoUsuario(user) {
   return user.papel === "conferente" ? user.lojaCodigo : null;
-}
-
-function verEventosDoUsuario(user) {
-  return user.papel !== "conferente";
 }
 
 avisoRoutes.get("/", async (c) => {
@@ -47,7 +47,7 @@ avisoRoutes.get("/", async (c) => {
   }
   const cursor = before && beforeId ? { criadoEm: before, id: beforeId } : null;
   const { avisos, naoLidos, hasMore, nextCursor } = await listAvisos(
-    c.env.DB, user.id, lojaDoUsuario(user), verEventosDoUsuario(user), 50, cursor
+    c.env.DB, user.id, lojaDoUsuario(user), false, 50, cursor
   );
   return c.json({ avisos: avisos.map(avisoJson), naoLidos, hasMore, nextCursor });
 });
@@ -134,7 +134,7 @@ avisoRoutes.post("/:id/lido", async (c) => {
     user.id,
     new Date().toISOString(),
     lojaDoUsuario(user),
-    verEventosDoUsuario(user)
+    false
   );
   if (!inserted) {
     // Idempotente: já lido OU aviso invisível ao usuário (fora do filtro de
@@ -155,7 +155,7 @@ avisoRoutes.post("/marcar-todos", async (c) => {
     user.id,
     new Date().toISOString(),
     lojaDoUsuario(user),
-    verEventosDoUsuario(user)
+    false
   );
   return c.json({ ok: true, marcados });
 });
