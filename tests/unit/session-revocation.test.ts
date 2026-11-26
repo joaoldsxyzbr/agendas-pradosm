@@ -85,6 +85,7 @@ describe("Revogação individual de sessões com D1 sintético", () => {
       const payload = await verifySessionToken(old, SECRET);
       assert.equal(payload?.sessionId, null);
       assert.match(await sessionKey(old, payload), /^legacy:[a-f0-9]{64}$/);
+      assert.equal(await verifySessionToken(old + "=", SECRET), null);
       assert.equal((await f.call(old, "/api/auth/me")).status, 200);
       assert.equal((await f.call(old, "/api/auth/logout", "POST")).status, 204);
       assert.equal((await f.call(old, "/api/auth/me")).status, 401);
@@ -128,5 +129,23 @@ describe("Formato e validade do token de sessão", () => {
     const altered = (signature[0] === "A" ? "B" : "A") + signature.slice(1);
     assert.equal(await verifySessionToken(payload + "." + altered, SECRET), null);
     assert.equal(await verifySessionToken(token, SECRET, Date.now() + 31 * 86400000), null);
+  });
+});
+
+describe("Revogação durante toda a janela de renovação", () => {
+  it("logout com token anterior não ressuscita a versão renovada após expiração antiga", async () => {
+    const f = fixture();
+    try {
+      const old = await createSessionToken("adm", 1, SECRET, Date.now() - 29 * 86400000);
+      const payload = await verifySessionToken(old, SECRET);
+      const renewed = await createSessionToken("adm", 1, SECRET, Date.now(), payload.sessionId);
+      assert.equal((await f.call(renewed, "/api/auth/me")).status, 200);
+      assert.equal((await f.call(old, "/api/auth/logout", "POST")).status, 204);
+      await pruneRevokedSessions(f.db, payload.exp + 1);
+      assert.equal(f.count(), 1);
+      assert.equal((await f.call(renewed, "/api/auth/me")).status, 401);
+      assert.equal((await f.call(old, "/api/auth/logout", "POST")).status, 204);
+      assert.equal(f.count(), 1);
+    } finally { f.sqlite.close(); }
   });
 });

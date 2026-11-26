@@ -63,7 +63,10 @@ async function verifySessionToken(token: string, secret: string, nowMs = Date.no
   try {
     const expected = await hmac(secret, encodedPayload);
     const actual = fromBase64Url(encodedSignature);
-    if (!constantTimeEqual(actual, expected)) return null;
+    // Exige a representação canônica emitida pelo servidor. Cookies legados
+    // são revogados pelo hash do token exato, portanto padding/aliases não
+    // podem criar outra representação válida da mesma assinatura.
+    if (toBase64Url(actual) !== encodedSignature || !constantTimeEqual(actual, expected)) return null;
     const decoded: unknown = JSON.parse(new TextDecoder().decode(fromBase64Url(encodedPayload)));
     const parsed = sessionPayloadSchema.safeParse(decoded);
     if (!parsed.success || parsed.data.exp <= Math.floor(nowMs / 1e3)) return null;

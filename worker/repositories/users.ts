@@ -21,7 +21,7 @@ async function findUserForSession(db, id, sessionKey) {
 }
 async function revokeSession(db, sessionKey, expiresAt) {
   await db.prepare(
-    "INSERT OR IGNORE INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?)"
+    "INSERT INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?) ON CONFLICT(session_key) DO UPDATE SET expira_em = MAX(sessoes_revogadas.expira_em, excluded.expira_em)"
   ).bind(sessionKey, expiresAt).run();
 }
 async function pruneRevokedSessions(db, nowSeconds = Math.floor(Date.now() / 1000)) {

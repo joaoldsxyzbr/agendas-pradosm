@@ -201,7 +201,12 @@ authRoutes.post("/logout", async (c) => {
     if (payload) {
       // Grava antes de apagar o cookie: um logout só é confirmado depois da
       // revogação no D1. O identificador permanece estável nas renovações.
-      await revokeSession(c.env.DB, await sessionKey(token, payload), payload.exp);
+      // Uma versão renovada do mesmo sessionId pode expirar depois do cookie
+      // apresentado no logout. A revogação deve cobrir toda a janela possível.
+      const revokedUntil = payload.sessionId
+        ? Math.max(payload.exp, Math.floor(Date.now() / 1000) + SESSION_MAX_AGE)
+        : payload.exp;
+      await revokeSession(c.env.DB, await sessionKey(token, payload), revokedUntil);
       await revokeRealtimeUser(c.env, payload.userId);
     }
   }
