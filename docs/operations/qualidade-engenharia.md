@@ -134,3 +134,7 @@ Mais dois testes migrados: guardas concorrentes com schema real, rollback integr
 ### Último lote de mocks SQL
 
 Cinco arquivos adicionais no strict Node; adaptador de statements registrados tipado, separado do SQLite real, preservando asserções de aridade, SQL, binds e batches. Fixtures completas com tipos de domínio, sem casts nos chamadores; resultados genéricos ficam na fronteira do mock. Restam avisos e validação CI deste lote.
+
+### Cobertura integral de testes TypeScript
+
+Todos os 29 arquivos unitários e helpers passam a integrar o gate Node automaticamente por glob; novos testes não precisam ser acrescentados manualmente. Canal de avisos usa adaptadores tipados e valida contratos de listagem, leitores e reações com schemas compartilhados. Nenhuma alteração de produto ou dados reais neste lote. A aprovação depende do CI do novo head; não confundir cobertura configurada com execução validada. Scripts JavaScript .mjs permanecem fora do escopo de TypeScript estrito.

@@ -1,3 +1,7 @@
+import { recordingD1 } from "../helpers/recording-d1.ts";
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
+import type { ImportEntry } from "../../worker/repositories/agendas.ts";
+import { reacoesResponseSchema } from "../../shared/avisos.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -148,37 +152,7 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
 // ---------------------------------------------------------------------------
 
 function arityDb() {
-  const statements = [];
-  const placeholderCount = (sql) => (sql.match(/\?/g) ?? []).length;
-  const assertArity = (sql, values) => {
-    assert.equal(
-      values.length,
-      placeholderCount(sql),
-      `bind com ${values.length} valores para ${placeholderCount(sql)} placeholders: ${sql}`
-    );
-  };
-  return {
-    statements,
-    prepare(sql) {
-      const statement = {
-        sql,
-        async all() { return { results: [] }; },
-        async first() { return null; },
-        async run() { return { meta: { changes: 1 } }; }
-      };
-      statement.bind = (...values) => {
-        assertArity(sql, values);
-        statement.values = values;
-        statements.push(statement);
-        return statement;
-      };
-      return statement;
-    },
-    async batch(batchStatements) {
-      // Os statements já entram no array via bind(); não duplicar aqui.
-      return batchStatements.map(() => ({ meta: { changes: 1 } }));
-    }
-  };
+  return recordingD1({ arity: true });
 }
 
 describe("Statements de avisos: bind igual aos placeholders", () => {
@@ -228,9 +202,10 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 
   it("publishMensagemStatements e listLeitoresDoAviso têm arity exata", async () => {
     const db = arityDb();
-    const statement = publishMensagemStatements(db, {
+    publishMensagemStatements(db, {
       id: "msg-1", mensagem: "M", criadoPor: "conf1", autor: "Conferente 1", criadoEm: "t0"
     });
+    const statement = db.statements[0];
     assert.equal(statement.values.length, 5);
     assert.equal(statement.values[0], "msg-1");
     assert.equal(statement.values[1], "M");
@@ -263,9 +238,10 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
       type: "Carga seca",
       nfe: [],
       orders: ["P1"],
-      csvFields: null
+      csvFields: undefined
     };
-    const input = {
+    const input: ImportEntry["input"] = {
+      replace: false,
       storeCode: "01",
       date: "2026-11-11",
       originalFileName: "lote.csv",
@@ -286,7 +262,7 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 // (mesmo padrão do recebimento-api-integrated).
 // ---------------------------------------------------------------------------
 
-function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) {
+function fixture({ limiter = { limit: async () => ({ success: true }) } }: { limiter?: RateLimit | null } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
     "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
@@ -314,45 +290,10 @@ function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) 
   sqlite.prepare("INSERT INTO agendas (id,loja_id,data_agenda,arquivo_original,criado_por,status_dia,criado_em,atualizado_em) VALUES (?,?,?,?,?,?,?,?)")
     .run("agenda1", "loja1", "2026-11-11", "sintetico.csv", "adm1", "aberto", now, now);
 
-  const db = {
-    prepare(sql) {
-      const statement = sqlite.prepare(sql);
-      let bindings = [];
-      const request = {
-        sql,
-        bind(...values) { bindings = values; return request; },
-        async first() { return statement.get(...bindings) ?? null; },
-        async all() { return { results: statement.all(...bindings) }; },
-        async run() {
-          const result = statement.run(...bindings);
-          return { success: true, meta: { changes: Number(result.changes) } };
-        }
-      };
-      return request;
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
-      }
-    }
-  };
-  // O canal reutiliza o limitador do login no POST /api/avisos; sem limitador
-  // a rota falha fechado com 503, então o padrão é um limitador sintético
-  // que sempre libera — cada teste injeta o comportamento que quiser.
-  const env = {
-    DB: db,
-    SESSION_SECRET: SECRET,
-    REALTIME_MODE: "off",
-    ...(limiter === null ? {} : { LOGIN_RATE_LIMITER: limiter })
-  };
-  async function call(userId, path, { method = "GET", body } = {}) {
+  const db = sqliteD1(sqlite);
+  // Sem limitador, o canal falha fechado com 503, inclusive na fixture.
+  const env = testEnv(db, SECRET, limiter ?? undefined);
+  async function call(userId: string, path: string, { method = "GET", body }: { method?: string; body?: unknown } = {}) {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method,
@@ -364,8 +305,8 @@ function fixture({ limiter = { limit: async () => ({ success: true }) } } = {}) 
       ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
     }, env);
   }
-  const avisosCount = () => sqlite.prepare("SELECT count(*) AS n FROM avisos").get().n;
-  const auditCount = (acao) => sqlite.prepare("SELECT count(*) AS n FROM auditoria WHERE acao = ?").get(acao).n;
+  const avisosCount = () => sqlite.prepare("SELECT count(*) AS n FROM avisos").get()?.n;
+  const auditCount = (acao: string) => sqlite.prepare("SELECT count(*) AS n FROM auditoria WHERE acao = ?").get(acao)?.n;
   return { sqlite, call, avisosCount, auditCount };
 }
 
@@ -387,7 +328,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(contrato.success && contrato.data.autor, "Administrador");
       assert.equal(contrato.success && contrato.data.urgente, false);
       assert.equal(contrato.success && contrato.data.lojas, null);
-      const resposta = await (await f.call("conf1", "/api/avisos")).json();
+      const resposta = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(resposta.naoLidos, 1);
       assert.equal(resposta.avisos.length, 1);
       assert.equal(resposta.avisos[0].titulo, "Doca 3 fechada");
@@ -401,7 +342,7 @@ describe("Rotas de avisos integradas", () => {
 
       const lido = await f.call("conf1", `/api/avisos/${publicado.id}/lido`, { method: "POST" });
       assert.equal(lido.status, 200);
-      const aposLer = await (await f.call("conf1", "/api/avisos")).json();
+      const aposLer = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(aposLer.naoLidos, 0);
       assert.equal(aposLer.avisos[0].lido, true);
       // Marcar de novo é idempotente.
@@ -409,7 +350,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(reMarcar.status, 200);
       assert.equal((await reMarcar.json()).jaLido, true);
       // O estado "lido" é por usuário: o admin continua com badge.
-      const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
+      const visaoAdmin = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       assert.equal(visaoAdmin.naoLidos, 1);
     } finally {
       f.sqlite.close();
@@ -428,16 +369,16 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(publicado.urgente, true);
       assert.deepEqual(publicado.lojas, ["01"]);
 
-      const visaoConf1 = await (await f.call("conf1", "/api/avisos")).json();
+      const visaoConf1 = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(visaoConf1.naoLidos, 1);
       assert.equal(visaoConf1.avisos[0].urgente, true);
       assert.deepEqual(visaoConf1.avisos[0].lojas, ["01"]);
       // Conferente de outra loja não vê o aviso direcionado.
-      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      const visaoConf2 = avisosResponseSchema.parse(await (await f.call("conf2", "/api/avisos")).json());
       assert.equal(visaoConf2.naoLidos, 0);
       assert.equal(visaoConf2.avisos.length, 0);
       // Admin vê tudo (inclusive direcionado).
-      const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
+      const visaoAdmin = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       assert.equal(visaoAdmin.avisos.length, 1);
       // Visualizador também vê tudo.
       assert.equal((await f.call("view1", "/api/avisos")).status, 403);
@@ -462,14 +403,14 @@ describe("Rotas de avisos integradas", () => {
       // Conferente: só o aviso — o evento não entra na lista nem no badge
       // (o conferente recebe avisos do admin e mensagens do canal; eventos
       // automáticos ficam com admin e visualizador — decisão de 12/11).
-      const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
+      const visaoConf = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(visaoConf.avisos.length, 1);
       assert.equal(visaoConf.avisos.every((aviso) => aviso.tipo === "aviso"), true, "nenhum evento na lista do conferente");
       assert.equal(visaoConf.naoLidos, 1, "o evento não conta no badge do conferente");
       // Marcar-todos do conferente só grava o que ele enxerga.
       const marcar = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
       assert.equal((await marcar.json()).marcados, 1);
-      const visaoAdmin = await (await f.call("adm1", "/api/avisos")).json();
+      const visaoAdmin = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       assert.equal(visaoAdmin.avisos.length, 1);
       assert.equal(visaoAdmin.naoLidos, 1);
       assert.equal(visaoAdmin.avisos.some(aviso => aviso.tipo === "evento"), false);
@@ -502,9 +443,9 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await outroResp.json()).jaLido, true);
       const leiturasConf1 = f.sqlite
         .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'conf1'")
-        .get().n;
+        .get()?.n;
       assert.equal(leiturasConf1, 0, "conferente não grava leitura do que não enxerga");
-      const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
+      const visaoConf = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(visaoConf.naoLidos, 0);
 
       // Admin também não marca eventos legados do sistema.
@@ -512,7 +453,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await admResp.json()).jaLido, true);
       const leiturasAdm = f.sqlite
         .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'adm1' AND aviso_id = 'ev1'")
-        .get().n;
+        .get()?.n;
       assert.equal(leiturasAdm, 0);
     } finally {
       f.sqlite.close();
@@ -532,8 +473,9 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(publicacao.status, 201);
       const publicado = await publicacao.json();
       assert.deepEqual(publicado.lojas, ["A,B"]);
-      const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
+      const visaoAdm = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       const alvo = visaoAdm.avisos.find((aviso) => aviso.titulo === "Loja com vírgula");
+      assert.ok(alvo);
       assert.deepEqual(alvo.lojas, ["A,B"], "o código inteiro chega como um único elemento");
     } finally {
       f.sqlite.close();
@@ -555,14 +497,14 @@ describe("Rotas de avisos integradas", () => {
         method: "POST",
         body: { titulo: "Só loja 02", mensagem: "Três.", lojas: ["02"] }
       });
-      const antes = await (await f.call("conf1", "/api/avisos")).json();
+      const antes = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(antes.naoLidos, 2, "o direcionado à loja 02 não conta para o conferente da 01");
       const marcar = await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
       assert.equal(marcar.status, 200);
       const corpo = await marcar.json();
       assert.equal(corpo.ok, true);
       assert.equal(corpo.marcados, 2);
-      const depois = await (await f.call("conf1", "/api/avisos")).json();
+      const depois = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(depois.naoLidos, 0);
       assert.equal(depois.avisos.filter((aviso) => aviso.lido).length, 2);
       // Idempotente: de novo não regrava nada.
@@ -570,7 +512,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await deNovo.json()).marcados, 0);
       // A leitura é por usuário: marcar-todos do conferente da 01 não toca
       // o estado do conferente da 02 (que ainda vê 3 não lidos).
-      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      const visaoConf2 = avisosResponseSchema.parse(await (await f.call("conf2", "/api/avisos")).json());
       assert.equal(visaoConf2.naoLidos, 3, "marcar-todos de um usuário não marca por outro");
     } finally {
       f.sqlite.close();
@@ -628,7 +570,7 @@ describe("Rotas de avisos integradas", () => {
         method: "POST",
         body: { titulo: "Aviso vigente", mensagem: "Também está." }
       });
-      const resposta = await (await f.call("conf1", "/api/avisos")).json();
+      const resposta = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(resposta.avisos.length, 2, "nenhum aviso sai da lista");
       assert.equal(resposta.naoLidos, 2);
       // Rota de inativação não existe mais.
@@ -656,21 +598,21 @@ describe("Rotas de avisos integradas", () => {
   it("busca e filtra avisos sem vazar público e conta urgência além da primeira página", async () => {
     const f = fixture();
     try {
-      const post = (titulo, lojas = null, urgente = false) => f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo, mensagem: "Comunicado sintético", lojas, urgente } });
+      const post = (titulo: string, lojas: string[] | null = null, urgente = false) => f.call("adm1", "/api/admin/avisos", { method: "POST", body: { titulo, mensagem: "Comunicado sintético", lojas, urgente } });
       assert.equal((await post("Urgente antigo", ["01"], true)).status, 201);
       assert.equal((await post("Restrito loja 02", ["02"])).status, 201);
       assert.equal((await post("Inválido", [])).status, 400);
       const add = f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES (?,'chat',NULL,'Mensagem nova','2099-01-01T00:00:00.000Z')");
       for (let i = 0; i < 51; i++) add.run("nova-" + i);
-      const recente = await (await f.call("conf1", "/api/avisos")).json();
+      const recente = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(recente.avisos.length, 50);
       assert.equal(recente.avisos.every(a => a.tipo === "chat"), true);
       assert.equal(recente.urgenteNaoLido, true);
-      const oficiais = await (await f.call("conf1", "/api/avisos?tipo=aviso&q=urgente")).json();
+      const oficiais = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos?tipo=aviso&q=urgente")).json());
       assert.equal(oficiais.avisos.length, 1);
       assert.equal(oficiais.avisos[0].titulo, "Urgente antigo");
       assert.equal(oficiais.naoLidos, recente.naoLidos);
-      const restrito = await (await f.call("conf1", "/api/avisos?q=Restrito")).json();
+      const restrito = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos?q=Restrito")).json());
       assert.equal(restrito.avisos.length, 0);
       assert.equal((await f.call("conf1", "/api/avisos?tipo=evento")).status, 400);
     } finally { f.sqlite.close(); }
@@ -688,7 +630,7 @@ describe("Rotas de avisos integradas", () => {
       f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('evento','evento','Evento','Sintético','2026-11-20T10:00:00.000Z')").run();
       f.sqlite.prepare("INSERT INTO avisos (id,tipo,titulo,mensagem,criado_em) VALUES ('so-loja-02','aviso','Direcionado','Sintético','2026-11-20T10:00:00.000Z')").run();
       f.sqlite.prepare("INSERT INTO avisos_lojas VALUES ('so-loja-02','02')").run();
-      const primeira = await (await f.call("conf1", "/api/avisos")).json();
+      const primeira = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(primeira.avisos.length, 50);
       assert.equal(primeira.naoLidos, 62);
       assert.equal(primeira.hasMore, true);
@@ -700,7 +642,7 @@ describe("Rotas de avisos integradas", () => {
       const query = new URLSearchParams({
         before: primeira.nextCursor.criadoEm, beforeId: primeira.nextCursor.id
       });
-      const segunda = await (await f.call("conf1", "/api/avisos?" + query)).json();
+      const segunda = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos?" + query)).json());
       assert.equal(segunda.avisos.length, 12);
       assert.equal(segunda.hasMore, false);
       assert.equal(segunda.nextCursor, null);
@@ -711,7 +653,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await f.call("conf1", "/api/avisos?before=2026-11-20")).status, 400);
       assert.equal((await f.call("conf1", "/api/avisos?beforeId=qualquer")).status, 400);
       assert.equal((await f.call("conf1", "/api/avisos?before=invalido&beforeId=id")).status, 400);
-      const adm = await (await f.call("adm1", "/api/avisos")).json();
+      const adm = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       assert.equal(adm.naoLidos, 64, "administrador vê direcionado, mas não evento");
       await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
       assert.equal((await (await f.call("conf1", "/api/avisos")).json()).naoLidos, 0);
@@ -741,17 +683,17 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(contrato.success && contrato.data.lido, true);
       assert.equal(contrato.success && contrato.data.proprio, true, "quem publica recebe a própria mensagem");
       assert.equal(f.auditCount("mensagem_do_canal_publicada"), 1);
-      const visaoAutor = await (await f.call("conf1", "/api/avisos")).json();
+      const visaoAutor = avisosResponseSchema.parse(await (await f.call("conf1", "/api/avisos")).json());
       assert.equal(visaoAutor.naoLidos, 0);
       assert.equal(visaoAutor.avisos[0].lido, true);
       // Mensagem é global: entra na lista e no badge dos outros usuários.
-      const visaoConf2 = await (await f.call("conf2", "/api/avisos")).json();
+      const visaoConf2 = avisosResponseSchema.parse(await (await f.call("conf2", "/api/avisos")).json());
       assert.equal(visaoConf2.naoLidos, 1);
       assert.equal(visaoConf2.avisos[0].tipo, "chat");
       assert.equal(visaoConf2.avisos[0].titulo, null);
       assert.equal(visaoConf2.avisos[0].autor, "Conferente 1");
       assert.equal(visaoConf2.avisos[0].proprio, false, "mensagem do colega não é própria");
-      const visaoAdm = await (await f.call("adm1", "/api/avisos")).json();
+      const visaoAdm = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
       assert.equal(visaoAdm.naoLidos, 1);
       assert.equal((await f.call("view1", "/api/avisos")).status, 403);
       // Visualizador não acessa nem escreve no canal.
@@ -812,7 +754,7 @@ describe("Rotas de avisos integradas", () => {
       });
       const aviso01 = (await publicacao.json()).id;
       // Antes da leitura: o conferente destinatário é o público pendente.
-      const antes = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      const antes = leitoresAvisoSchema.parse(await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json());
       assert.equal(leitoresAvisoSchema.safeParse(antes).success, true);
       assert.deepEqual(antes.vistos, []);
       assert.deepEqual(antes.faltantes, [
@@ -825,7 +767,7 @@ describe("Rotas de avisos integradas", () => {
       const avisoGeral = (await geral.json()).id;
       // Conferente abre o canal: leitura automática (marcar-todos).
       await f.call("conf2", "/api/avisos/marcar-todos", { method: "POST" });
-      const meio = await (await f.call("adm1", `/api/admin/avisos/${avisoGeral}/leitores`)).json();
+      const meio = leitoresAvisoSchema.parse(await (await f.call("adm1", `/api/admin/avisos/${avisoGeral}/leitores`)).json());
       assert.equal(meio.vistos.length, 1);
       assert.equal(meio.vistos[0].id, "conf2");
       assert.equal(meio.vistos[0].loja, "02");
@@ -834,10 +776,10 @@ describe("Rotas de avisos integradas", () => {
       assert.equal(meio.faltantes[0].id, "conf1");
       // O direcionado à 01 não é visível ao conf2: marcar-todos dele não
       // gravou leitura fora do que enxerga.
-      const direcionadoDepois = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      const direcionadoDepois = leitoresAvisoSchema.parse(await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json());
       assert.deepEqual(direcionadoDepois.faltantes.map(p => p.id), ["conf1"]);
       await f.call("conf1", "/api/avisos/marcar-todos", { method: "POST" });
-      const depois = await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json();
+      const depois = leitoresAvisoSchema.parse(await (await f.call("adm1", `/api/admin/avisos/${aviso01}/leitores`)).json());
       assert.equal(depois.vistos.length, 1);
       assert.equal(depois.vistos[0].id, "conf1");
       assert.ok(depois.vistos[0].lidoEm);
@@ -861,22 +803,23 @@ describe("Reações do canal", () => {
       assert.equal(published.status, 201);
       const { id } = await published.json();
       const path = "/api/avisos/" + id + "/reacao";
-      const react = (user, emoji) => f.call(user, path, { method: "PUT", body: { emoji } });
+      const react = (user: string, emoji: string | null) => f.call(user, path, { method: "PUT", body: { emoji } });
       assert.equal((await react("adm1", "👍")).status, 404);
       assert.equal((await react("view1", "👍")).status, 403);
       assert.equal((await react("conf1", "👏")).status, 400);
       assert.equal((await react("conf1", "👍")).status, 200);
       assert.equal((await react("conf1", "👍")).status, 200);
-      const changed = await (await react("conf1", "👀")).json();
+      const changed = reacoesResponseSchema.parse(await (await react("conf1", "👀")).json());
       assert.deepEqual(changed.reacoes, [{ emoji: "👀", nome: "Conferente 1", proprio: true }]);
       assert.equal((await react("conf2", "😂")).status, 200);
-      const lista = await (await f.call("adm1", "/api/avisos")).json();
+      const lista = avisosResponseSchema.parse(await (await f.call("adm1", "/api/avisos")).json());
+      assert.ok(lista.avisos[0].reacoes);
       assert.equal(lista.avisos[0].reacoes.length, 2);
       assert.ok(lista.avisos[0].reacoes.every(r => !r.proprio));
-      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_lidos").get().n, 0);
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_lidos").get()?.n, 0);
       assert.equal((await react("conf1", null)).status, 200);
       assert.equal((await react("conf1", null)).status, 200);
-      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get().n, 1);
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get()?.n, 1);
       assert.equal((await f.call("view1", "/api/avisos/" + id + "/lido", { method: "POST" })).status, 403);
       assert.equal((await f.call("view1", "/api/avisos/marcar-todos", { method: "POST" })).status, 403);
     } finally { f.sqlite.close(); }
@@ -891,7 +834,7 @@ describe("Reações do canal", () => {
       for (const target of [id, "ev-reacao", "ausente"]) {
         assert.equal((await f.call("conf2", "/api/avisos/" + target + "/reacao", { method: "PUT", body: { emoji: "👍" } })).status, 404);
       }
-      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get().n, 0);
+      assert.equal(f.sqlite.prepare("SELECT COUNT(*) AS n FROM avisos_reacoes").get()?.n, 0);
     } finally { f.sqlite.close(); }
   });
 });
