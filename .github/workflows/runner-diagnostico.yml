@@ -20,12 +20,14 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - name: Medir consultas com SQLite sintético (sem D1 remoto)
-        run: npm run benchmark:agendas
+      - name: Instalar dependências reproduzíveis
+        run: npm ci --legacy-peer-deps
+      - name: Medir consultas e importações com SQLite sintético (sem D1 remoto)
+        run: |
+          npm run benchmark:agendas
+          npm run benchmark:imports
       - name: Medir PBKDF2 com senhas sintéticas (sem usuários reais)
         run: npm run benchmark:password
-      - name: Instalar Wrangler oficial para Workerd local
-        run: npm ci --legacy-peer-deps
       - name: Medir PBKDF2 no Workerd isolado (loopback; sem Worker remoto)
         shell: bash
         run: |
