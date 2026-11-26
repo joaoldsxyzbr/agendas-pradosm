@@ -33,7 +33,7 @@ O D1 é a fonte de verdade de agendas. O Worker publica eventos `agenda.changed`
 - Avisos são registro permanente (decisão de 12/11/2026): sem expiração e sem inativação — os últimos 50 são consultados automaticamente e as páginas mais antigas ficam disponíveis por cursor estável, sem aumentar o polling do cabeçalho. As colunas `expira_em`/`inativo_em` de 0022 ficam sem uso.
 - Rotas `GET /api/avisos` (histórico + não lidos, filtrado pela loja do conferente e pelo tipo), `POST /api/avisos/:id/lido` (idempotente, restrito ao que o usuário enxerga — mesmo filtro de loja/tipo da listagem), `POST /api/avisos/marcar-todos` (leitura em lote do que o usuário vê) e, para admin, `POST /api/admin/avisos` (publicar com `urgente` e `lojas` opcionais, auditado).
 - O canal exclui eventos automáticos para todos os perfis e não gera novos registros desse tipo. Importações, substituições, conclusões e reaberturas preservam a auditoria atômica existente e o histórico da agenda. Eventos legados permanecem no D1, sem exclusão ou migration. A situação da loja continua no Recebimento.
-- UI: sino no cabeçalho de todos os perfis (`apps/web/src/features/avisos/`), badge de não lidos (pulsa em vermelho com urgente pendente), "Marcar todos", marcação otimista de lido e polling de 60 segundos. Contratos em `shared/avisos.ts`.
+- UI: página Avisos integrada à área principal (`apps/web/src/features/avisos/`), badge de não lidos no menu (pulsa em vermelho com urgente pendente), polling de 30 segundos no canal e 60 segundos no menu. Contratos em `shared/avisos.ts`.
 
 ## Comandos
 
@@ -55,4 +55,4 @@ npx playwright test --config apps/web/playwright.config.mjs
 
 Preferir alterações incrementais, testes e CI antes da mesclagem. Não mexer em credenciais, sessões, permissões, D1 remoto ou lógica operacional como efeito colateral de reorganizações.
 
-O canal de comunicação possui abas Conversas e Avisos oficiais, busca paginada, leitura individual de mensagens visíveis e confirmação explícita de avisos. A consulta de pendências considera o conjunto completo, não apenas a primeira página. Leituras históricas podem ter sido automáticas.
+O canal de comunicação possui um fluxo cronológico único de mensagens e avisos oficiais, busca paginada, leitura individual de mensagens visíveis e confirmação explícita de avisos. A consulta de pendências considera o conjunto completo, não apenas a primeira página. Leituras históricas podem ter sido automáticas.

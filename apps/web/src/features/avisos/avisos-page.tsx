@@ -18,7 +18,7 @@ import { PublishAvisoDialog } from "./publish-aviso-dialog";
 // Canal de comunicação: mensagens comuns e avisos oficiais. Eventos operacionais ficam na auditoria.
 function DiaSeparador({ dia }: { dia: string }) {
   return <div role="separator" aria-label={dia}
-    className="my-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+    className="my-2 flex items-center gap-3 text-center text-xs font-medium text-slate-400 before:h-px before:flex-1 before:bg-slate-700/60 after:h-px after:flex-1 after:bg-slate-700/60">
     {dia}
   </div>;
 }
@@ -28,7 +28,7 @@ function BolhaChat({ aviso }: { aviso: Aviso }) {
   return <div className={`flex w-full flex-col ${propria ? "items-end" : "items-start"}`}>
     {!propria && <span className="mb-0.5 px-1 text-[11px] font-semibold text-slate-400">{aviso.autor}</span>}
     <div data-testid={propria ? "chat-proprio" : "chat-outro"}
-      className={`max-w-[85%] whitespace-pre-wrap break-words px-3.5 py-2 text-sm ${
+      className={`max-w-[85%] md:max-w-[72%] whitespace-pre-wrap break-words px-3.5 py-2 text-sm ${
         propria
           ? "rounded-2xl rounded-br-sm bg-sky-600/80 text-white"
           : "rounded-2xl rounded-bl-sm bg-[#1c2f47] text-slate-100"}`}
@@ -55,7 +55,7 @@ function LeitoresDoAviso({ avisoId }: { avisoId: string }) {
   const vistos = dados?.vistos ?? [];
   const faltantes = dados?.faltantes ?? [];
   const total = vistos.length + faltantes.length;
-  return <details className="mt-1.5" onToggle={event => setAberto((event.target as HTMLDetailsElement).open)}
+  return <details className="text-xs" onToggle={event => setAberto((event.target as HTMLDetailsElement).open)}
     data-testid={`leitores-${avisoId}`}>
     <summary className="cursor-pointer select-none text-[11px] font-semibold text-sky-300">
       {leitores.isError ? "Consultar leitores novamente" : dados ? `Visto por ${vistos.length} de ${total}` : aberto ? "Consultando quem viu…" : "Consultar leituras"}
@@ -76,7 +76,7 @@ function LeitoresDoAviso({ avisoId }: { avisoId: string }) {
 
 function CartaoAviso({ aviso, isAdmin, onRead, reading }: { aviso: Aviso; isAdmin: boolean; onRead: () => void; reading: boolean }) {
   return <article aria-label={aviso.titulo ?? "Aviso"}
-    className={`w-full rounded-lg border-l-4 px-4 py-3 ${
+    className={`w-full min-w-0 rounded-md border-l-4 px-4 py-3 ${
       aviso.lido
         ? "border-amber-500/50 bg-amber-500/5"
         : aviso.urgente
@@ -105,7 +105,6 @@ export function AvisosPage() {
   const podeEscrever = isAdmin || user?.papel === "conferente";
   const [publishing, setPublishing] = useState(false);
   const [texto, setTexto] = useState("");
-  const [aba, setAba] = useState<"conversas" | "avisos">("conversas");
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
   const [olderPages, setOlderPages] = useState<AvisosResponse[]>([]);
@@ -120,10 +119,9 @@ export function AvisosPage() {
   const prependHeight = useRef<number | null>(null);
   const generation = useRef(0);
   const previousLatest = useRef<string | undefined>(undefined);
-  const filtros = { tipo: aba === "avisos" ? "aviso" as const : undefined, busca };
-  const filtrado = aba === "avisos" || busca !== "";
+  const filtros = { busca };
   const avisos = useQuery({
-    queryKey: filtrado ? ["avisos", "filtro", aba, busca] : ["avisos"],
+    queryKey: busca ? ["avisos", "filtro", busca] : ["avisos"],
     queryFn: () => getAvisos(null, filtros),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
@@ -150,7 +148,11 @@ export function AvisosPage() {
 
   const enviar = useMutation({
     mutationFn: enviarMensagem,
-    onSuccess: () => { setTexto(""); nearBottom.current = true; setNewMessages(false); },
+    onSuccess: () => {
+      setTexto(""); setBuscaInput(""); trocarBusca("");
+      nearBottom.current = true; setNewMessages(false);
+      scrollEnd();
+    },
     onSettled: () => { void client.invalidateQueries({ queryKey: ["avisos"] }); },
   });
   const enviarTexto = (mensagem: string) => {
@@ -158,10 +160,10 @@ export function AvisosPage() {
     enviar.mutate({ mensagem });
   };
 
-  const trocarFiltro = (nextAba: "conversas" | "avisos", nextBusca: string) => {
-    if (nextAba === aba && nextBusca === busca) return;
+  const trocarBusca = (nextBusca: string) => {
+    if (nextBusca === busca) return;
     generation.current++;
-    setAba(nextAba); setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
+    setBusca(nextBusca); setOlderPages([]); setLoadingMore(false); setOlderError(false);
     prependHeight.current = null; previousLatest.current = undefined; nearBottom.current = true; setNewMessages(false);
   };
 
@@ -208,7 +210,7 @@ export function AvisosPage() {
     previousLatest.current = ultimoId;
   }, [ultimoId, olderPages.length]);
 
-  // Chat: leitura individual das bolhas visíveis, somente com a aba ativa.
+  // Chat: leitura individual das bolhas visíveis, somente com a página visível.
   // Avisos oficiais exigem confirmação explícita.
   useEffect(() => {
     const root = viewport.current;
@@ -226,35 +228,28 @@ export function AvisosPage() {
     document.addEventListener("visibilitychange", observe);
     return () => { active = false; observer.disconnect(); document.removeEventListener("visibilitychange", observe); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avisos.data, olderPages, aba, busca]);
+  }, [avisos.data, olderPages, busca]);
 
-  return <section aria-labelledby="avisos-heading" className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col overflow-hidden rounded-xl border border-[#2b415b] bg-[#142337]">
-    <header className="shrink-0 space-y-3 border-b border-[#2b415b] px-3 py-3 md:px-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-sky-500/15 p-2 text-sky-300"><Megaphone size={22} aria-hidden="true" /></div>
-          <div><h1 id="avisos-heading" className="text-lg font-bold text-slate-100">Avisos</h1><p className="text-xs text-slate-400">Canal de comunicação operacional</p></div>
-        </div>
-        {isAdmin && <Button size="sm" onClick={() => setPublishing(true)}><Megaphone size={14} aria-hidden="true" /> Novo aviso</Button>}
+  return <section aria-labelledby="avisos-heading" className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-3 border-b border-[#2b415b] px-4 py-3 md:px-6">
+      <div className="mr-auto flex min-w-0 items-center gap-3">
+        <Megaphone size={22} className="shrink-0 text-sky-300" aria-hidden="true" />
+        <div><h1 id="avisos-heading" className="text-lg font-bold text-slate-100">Avisos</h1><p className="text-xs text-slate-400">Canal de comunicação operacional</p></div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="Tipo de comunicação" className="flex gap-1">
-          <Button size="sm" variant={aba === "conversas" ? "default" : "secondary"} aria-pressed={aba === "conversas"} onClick={() => trocarFiltro("conversas", busca)}>Conversas</Button>
-          <Button size="sm" variant={aba === "avisos" ? "default" : "secondary"} aria-pressed={aba === "avisos"} onClick={() => trocarFiltro("avisos", busca)}>Avisos oficiais</Button>
-        </div>
-        <form className="flex min-w-0 flex-1 items-center gap-1 sm:max-w-sm" onSubmit={e => { e.preventDefault(); trocarFiltro(aba, buscaInput.trim()); }}>
-          <input aria-label="Pesquisar mensagens e avisos" value={buscaInput} onChange={e => setBuscaInput(e.target.value)} maxLength={200} placeholder="Pesquisar no canal…" className="min-w-0 flex-1 rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100" />
-          <Button type="submit" size="icon" variant="secondary" aria-label="Pesquisar"><Search size={16} /></Button>
-          {busca && <Button type="button" size="sm" variant="ghost" onClick={() => { setBuscaInput(""); trocarFiltro(aba, ""); }}>Limpar</Button>}
-        </form>
-      </div>
+      {isAdmin && <Button size="sm" onClick={() => setPublishing(true)}><Megaphone size={14} aria-hidden="true" /> Novo aviso</Button>}
+      <form className="order-last flex w-full min-w-0 items-center gap-1 lg:order-none lg:w-auto lg:flex-1 lg:max-w-sm" onSubmit={e => { e.preventDefault(); trocarBusca(buscaInput.trim()); }}>
+        <input aria-label="Pesquisar mensagens e avisos" value={buscaInput} onChange={e => setBuscaInput(e.target.value)} maxLength={200} placeholder="Pesquisar no canal…" className="h-9 min-w-0 flex-1 rounded-md border border-[#3b5876] bg-[#17283d] px-3 text-sm text-slate-100" />
+        <Button type="submit" size="icon" variant="secondary" aria-label="Pesquisar"><Search size={16} /></Button>
+        {busca && <Button type="button" size="sm" variant="ghost" onClick={() => { setBuscaInput(""); trocarBusca(""); }}>Limpar</Button>}
+      </form>
     </header>
-    <div className="relative flex min-h-0 flex-1 flex-col bg-[#101924]">
-      <div ref={viewport} data-testid="avisos-mensagens" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 md:px-6" onScroll={e => {
+    {busca && <p role="status" className="shrink-0 border-b border-[#2b415b] px-4 py-2 text-xs text-slate-400 md:px-6">Resultados para: <strong className="break-words text-slate-200">{busca}</strong></p>}
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={viewport} data-testid="avisos-mensagens" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6" onScroll={e => {
         const el = e.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
         if (nearBottom.current) setNewMessages(false);
       }}>
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
+        <div className="flex w-full min-w-0 flex-col gap-3">
           {avisos.isError && <p role="alert" className="rounded-md bg-rose-500/10 p-3 text-sm text-rose-200">Não foi possível carregar o canal. <button className="underline" onClick={() => void avisos.refetch()}>Tentar novamente</button></p>}
           {avisos.isPending && <p className="py-6 text-center text-sm text-slate-400">Carregando canal…</p>}
           {!avisos.isPending && !avisos.isError && lista.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{busca ? "Nenhum resultado encontrado." : "Nenhuma mensagem ou aviso no canal ainda."}</p>}
@@ -273,9 +268,9 @@ export function AvisosPage() {
       </div>
       {newMessages && <div className="absolute bottom-3 right-5"><Button size="sm" onClick={scrollEnd}><ArrowDown size={14} /> Novas mensagens</Button></div>}
     </div>
-    <footer className="shrink-0 border-t border-[#2b415b] bg-[#142337] px-3 py-3 md:px-5">
+    <footer className="shrink-0 border-t border-[#2b415b] bg-[#142337] px-4 py-3 md:px-6">
       {readError && <p role="alert" className="mb-2 text-xs text-rose-300">{readError}</p>}
-      {podeEscrever && !filtrado ? <form className="flex items-end gap-2" onSubmit={event => { event.preventDefault(); enviarTexto(texto.trim()); }}>
+      {podeEscrever ? <form className="flex items-end gap-2" onSubmit={event => { event.preventDefault(); enviarTexto(texto.trim()); }}>
         <label className="min-w-0 flex-1"><span className="sr-only">Mensagem do canal</span>
           <textarea value={texto} onChange={event => setTexto(event.target.value)} onKeyDown={event => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); enviarTexto(texto.trim()); }
@@ -283,7 +278,7 @@ export function AvisosPage() {
             className="w-full resize-y rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-sky-400 max-h-32" />
         </label>
         <Button type="submit" disabled={enviar.isPending || !texto.trim()}><Send size={16} aria-hidden="true" /> {enviar.isPending ? "Enviando…" : "Enviar"}</Button>
-      </form> : <p className="text-center text-xs text-slate-400">{podeEscrever ? "Volte a Conversas e limpe a pesquisa para enviar mensagens." : "Somente leitura: visualizadores acompanham o canal; a escrita é de administradores e conferentes."}</p>}
+      </form> : <p className="text-center text-xs text-slate-400">Somente leitura: visualizadores acompanham o canal; a escrita é de administradores e conferentes.</p>}
       {enviar.isError && <p role="alert" className="mt-1.5 text-xs text-rose-300">{enviar.error instanceof ApiError ? enviar.error.message : "Não foi possível enviar a mensagem."}</p>}
     </footer>
     {publishing && <PublishAvisoDialog onClose={() => setPublishing(false)} />}

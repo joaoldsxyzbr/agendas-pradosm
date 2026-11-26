@@ -127,7 +127,7 @@ test("Conferente lê mensagens, confirma aviso oficial e escreve", async ({ page
   const requests = await setup(page, { role: "conferente" });
   // O menu renderiza duas cópias (aside desktop e navegação móvel): os
   // locators do link e do badge ficam escopados no aside visível.
-  const linkAvisos = page.locator("aside").getByRole("link", { name: "Avisos (Desenvolvimento)" });
+  const linkAvisos = page.locator("aside").getByRole("link", { name: "Avisos" });
   await expect(linkAvisos).toBeVisible();
   // Badge da migração do sino: conta TODAS as pendências e pulsa vermelho
   // enquanto houver urgente não lido.
@@ -139,7 +139,7 @@ test("Conferente lê mensagens, confirma aviso oficial e escreve", async ({ page
   await expect(page.getByRole("heading", { name: "Avisos" })).toBeVisible();
   // Mensagens visíveis são lidas automaticamente; aviso oficial exige confirmação.
   await expect(badge).toHaveText("1");
-  // Canal cronológico: evento antigo, mensagem do colega e aviso urgente.
+  // Canal único: mensagem do colega e aviso urgente, sem eventos automáticos.
   const canal = page.getByTestId("avisos-mensagens");
   await expect(canal.getByRole("heading", { name: "Dia concluído" })).toHaveCount(0);
   await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
@@ -212,15 +212,24 @@ test("Canal carrega mensagens anteriores sem substituir as recentes", async ({ p
   expect(requests.some(request => request.path === "/api/avisos" && request.search.includes("before="))).toBe(true);
 });
 
-test("Filtros pesquisam o canal e preservam texto quando o envio falha", async ({ page }) => {
-  await setup(page, { role: "admin" });
-  await page.getByRole("button", { name: "Avisos oficiais" }).click();
-  await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
+test("Canal único pesquisa avisos e mensagens e preserva texto quando o envio falha", async ({ page }) => {
+  const requests = await setup(page, { role: "admin" });
+  const canal = page.getByTestId("avisos-mensagens");
+  await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
+  await expect(canal.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Conversas|Avisos oficiais)$/ })).toHaveCount(0);
+  await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca");
+  await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
+  await expect.poll(() => requests.some(r => r.path === "/api/avisos" && r.method === "GET" && r.search === "?q=Doca")).toBe(true);
+  await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
+  await expect(canal.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
   await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca 3");
   await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
   await expect(page.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+  await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
+  await expect(page.getByLabel("Mensagem do canal")).toBeVisible();
   await page.getByRole("button", { name: "Limpar", exact: true }).click();
-  await page.getByRole("button", { name: "Conversas" }).click();
+  await expect(canal.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
   await page.route("**/api/avisos", async route => {
     if (route.request().method() === "POST") return route.fulfill({ status: 503, json: { message: "Envio indisponível." } });
     return route.fallback();
@@ -230,3 +239,38 @@ test("Filtros pesquisam o canal e preservam texto quando o envio falha", async (
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Mensagem do canal")).toHaveValue("Texto preservado");
 });
+
+
+test("Enviar durante a pesquisa volta ao canal completo", async ({ page }) => {
+  await setup(page, { role: "admin" });
+  await page.getByLabel("Pesquisar mensagens e avisos").fill("Doca 3");
+  await page.getByRole("button", { name: "Pesquisar", exact: true }).click();
+  await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toHaveCount(0);
+  await page.getByLabel("Mensagem do canal").fill("Nova mensagem do canal");
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await expect(page.getByText("Nova mensagem do canal")).toBeVisible();
+  await expect(page.getByLabel("Pesquisar mensagens e avisos")).toHaveValue("");
+  await expect(page.getByText("Bom dia! Doca 2 liberada para descarregamento.")).toBeVisible();
+});
+
+for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 740 }]) {
+  test(`Canal integrado ocupa a área útil em ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await setup(page, { role: "admin", paginated: true });
+    const canal = page.getByTestId("avisos-mensagens");
+    const section = page.getByRole("region", { name: "Avisos", exact: true });
+    const heading = page.getByRole("heading", { name: "Avisos", exact: true });
+    const composer = page.getByLabel("Mensagem do canal");
+    await expect(heading).toBeInViewport();
+    await expect(composer).toBeInViewport();
+    await expect(canal.getByRole("article", { name: "Doca 3 fechada" })).toBeVisible();
+    const area = await section.boundingBox();
+    const main = await page.getByRole("main").boundingBox();
+    expect(area).not.toBeNull();
+    expect(main).not.toBeNull();
+    expect(Math.abs(area!.width - main!.width)).toBeLessThan(1);
+    expect(Math.abs(area!.height - main!.height)).toBeLessThan(1);
+    await expect(page.getByRole("button", { name: /^(Conversas|Avisos oficiais)$/ })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+  });
+}
