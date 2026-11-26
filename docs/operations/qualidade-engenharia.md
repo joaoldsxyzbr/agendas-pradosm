@@ -106,3 +106,7 @@ Tipos explícitos de linhas de lojas/usuários, inputs derivados dos schemas com
 ### Lote ampliado — avisos, diagnósticos, relatórios e importação
 
 Corrige o narrowing de StoreCheck em configuração mista strict/permissiva. Tipos de entradas, linhas SQL e saídas do canal, diagnósticos e relatórios; reação JSON validada com schema. Inclui todo shared/import no gate strict, isolando a declaração externa do parser PDF do runtime manual e usando unknown no retorno do parser. Nenhuma migration nova; a troca de destinos por ID continua na #257. CI do lote pendente; não declarar aprovação antes do resultado.
+
+### Durable Object — contratos realtime
+
+Incluído RealtimeHub no gate strict. Validação Zod de mensagens, eventos internos e anexos de hibernação, com tipos explícitos de presença, conexão e alarmes; removido cast any do evento. Mantidos protocolo, tags, prazos e semântica de publicação. CI pendente; smoke anterior usa REALTIME_MODE=off, então comportamento de WebSocket real ainda precisa de teste dedicado.

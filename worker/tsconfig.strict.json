@@ -42,6 +42,7 @@
     "../shared/import/parseAgendaText.ts",
     "../shared/import/pdf-engine-liteparse.ts",
     "../shared/import/readCsvText.ts",
-    "../shared/import/validateImportBatch.ts"
+    "../shared/import/validateImportBatch.ts",
+    "./realtime/RealtimeHub.ts"
   ]
 }
