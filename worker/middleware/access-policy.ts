@@ -1,5 +1,5 @@
-// Matriz de rotas para contas personalizadas (#248). Não substitui ainda os guards vigentes.
-// Um identificador de loja do cliente nunca é suficiente: a integração deverá resolver a entidade real.
+// Matriz de rotas para contas personalizadas; complementa autenticação e guards.
+// Um identificador de loja do cliente nunca é suficiente: resolver a entidade real no servidor.
 import { canAccessStore, type Permission, type StoreScope } from "../../shared/permissions.ts";
 
 export type ScopeCheck="none"|"all-stores"|"filtered-list"|"agenda-id"|"appointment-id"|"store-id"|"import-batch"|"selected-store"|"notice-filter"|"realtime";
@@ -11,6 +11,8 @@ const route=(method:string,path:string,policy:RoutePolicy):Rule=>[method,new Reg
 const A="/api/admin",S="/api/store";
 const RULES:Rule[]=[
   route("GET",A+"/stores",rule(["lojas.ver","recebimento.ver","agendas.ver","importacao.ver","relatorios.ver"],"filtered-list")),
+  route("GET",A+"/stores/nexello-destinos",rule("lojas.ver","all-stores")),
+  route("POST",A+"/stores/nexello-destinos",rule("lojas.editar","all-stores")),
   route("POST",A+"/stores",rule("lojas.criar","all-stores")),
   route("PATCH",A+"/stores",rule("lojas.editar","store-id")),
   route("DELETE",A+"/stores/"+id,rule("lojas.excluir","store-id")),
@@ -20,6 +22,8 @@ const RULES:Rule[]=[
   route("POST",A+"/users",rule("usuarios.criar","all-stores",["usuarios.permissoes"])),
   route("PATCH",A+"/users",rule("usuarios.editar","all-stores",["usuarios.permissoes"])),
   route("DELETE",A+"/users/"+id,rule("usuarios.excluir","all-stores",["usuarios.permissoes"])),
+  route("GET",A+"/nexello/config",rule("importacao.ver","all-stores",["importacao.executar"])),
+  route("POST",A+"/nexello/pages/[1-9][0-9]?",rule("importacao.executar","all-stores",["importacao.ver"])),
   route("POST",A+"/agendas/import(?:/bulk)?",rule("importacao.executar","import-batch")),
   route("GET",A+"/agendas(?:/today)?",rule(["recebimento.ver","agendas.ver","importacao.ver"],"filtered-list")),
   route("GET",A+"/agendas/"+id+"/digitacao",rule("agendas.ver","agenda-id")),

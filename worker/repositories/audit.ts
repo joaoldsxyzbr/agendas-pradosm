@@ -1,7 +1,16 @@
-function jsonValue(value) {
-  return value === void 0 ? null : JSON.stringify(value);
+interface AuditInput {
+  id?:string; userId:string|null; action:string; entity:string; entityId:string;
+  storeId?:string|null; agendaId?:string|null; appointmentId?:string|null;
+  before?:unknown; after?:unknown; details?:string|null; createdAt?:string; onlyIfPreviousWrite?:boolean;
 }
-function auditStatement(db, input) {
+interface AuditRow {
+  id:string; usuario_id:string|null; usuario_nome:string|null; acao:string; entidade:string; entidade_id:string;
+  loja_id:string|null; agenda_id:string|null; agendamento_id:string|null; antes:string|null; depois:string|null; detalhes:string|null; criado_em:string;
+}
+function jsonValue(value:unknown):string|null {
+  return value === void 0 ? null : JSON.stringify(value) ?? null;
+}
+function auditStatement(db:D1Database, input:AuditInput):D1PreparedStatement {
   const createdAt = input.createdAt ?? (/* @__PURE__ */ new Date()).toISOString();
   // Dentro de D1.batch(), changes() identifica se o UPDATE anterior
   // realmente alterou a linha. Sem alteração não deve existir auditoria.
@@ -39,12 +48,13 @@ function auditStatement(db, input) {
     createdAt
   );
 }
-async function recordAudit(db, input) {
-  await auditStatement(db, input).run();
+async function recordAudit(db:D1Database, input:AuditInput):Promise<void> {
+  const result=await auditStatement(db,input).run();
+  if(!result.success||result.meta?.changes!==1)throw new Error("AUDITORIA_GRAVACAO_FALHOU");
 }
-async function listAudit(db, filters: { entity?: string; entityId?: string; agendaId?: string; userId?: string; storeId?: string; date?: string; limit?: number } = {}) {
+async function listAudit(db:D1Database, filters: { entity?: string; entityId?: string; agendaId?: string; userId?: string; storeId?: string; date?: string; limit?: number } = {}) {
   const clauses = [];
-  const values = [];
+  const values: (string|number)[] = [];
   if (filters.entity) {
     clauses.push("a.entidade = ?");
     values.push(filters.entity);
@@ -67,7 +77,9 @@ async function listAudit(db, filters: { entity?: string; entityId?: string; agen
   }
   if (filters.date) {
     clauses.push("a.criado_em >= ? AND a.criado_em < ?");
-    values.push(filters.date + "T00:00:00.000Z", filters.date + "T23:59:59.999Z");
+    const start=new Date(filters.date+"T00:00:00.000Z");
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==filters.date)throw new Error("AUDITORIA_DATA_INVALIDA");
+    values.push(start.toISOString(),new Date(start.getTime()+86400000).toISOString());
   }
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500);
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -91,10 +103,11 @@ async function listAudit(db, filters: { entity?: string; entityId?: string; agen
        ${where}
        ORDER BY a.criado_em DESC, a.id DESC
        LIMIT ?`
-  ).bind(...values, limit).all();
+  ).bind(...values, limit).all<AuditRow>();
+  if(!result.success||!result.results)throw new Error("AUDITORIA_CONSULTA_FALHOU");
   return result.results;
 }
-function parseAuditJson(value) {
+function parseAuditJson(value:string|null):unknown {
   if (!value) return null;
   try {
     return JSON.parse(value);

@@ -5,7 +5,7 @@ import { hashPassword } from "../worker/lib/password.ts";
 
 export const MOCK_ACCOUNTS = Object.freeze([
   { login: "admin.mock", name: "Administrador de teste", role: "admin", store: null },
-  { login: "agendador.mock", name: "Agendador de teste", role: "visualizador", profile: "agendador", store: null },
+  { login: "digitador.mock", name: "Digitador de teste", role: "visualizador", profile: "digitador", store: null },
   { login: "gerente.mock", name: "Gerente de depósito de teste", role: "visualizador", store: null },
   { login: "conferente01.mock", name: "Conferente 01 de teste", role: "conferente", store: 1 },
   { login: "conferente02.mock", name: "Conferente 02 de teste", role: "conferente", store: 2 },
@@ -52,7 +52,7 @@ export async function buildMockSql(password, now = new Date(), options = {}) {
   const stores = [1, 2, 3].map(i => ({ id: mockId("store:"+i), codigo: "F90"+i,
     nome: "Loja fictícia 0"+i, ativo: 1, criado_em: stamp, atualizado_em: stamp }));
   for (const store of stores) rows.push(insert("lojas",store));
-  for (const user of MOCK_ACCOUNTS.filter(u=>!u.profile||options.access)) {
+  for (const user of MOCK_ACCOUNTS.filter(u=>!u.profile||(options.access&&options.v2))) {
     const id = mockId("user:"+user.login);
     const lojaId = user.store ? stores[user.store-1].id : null;
     rows.push(insert("usuarios",{id,loja_id:lojaId,nome:user.name,login:user.login,

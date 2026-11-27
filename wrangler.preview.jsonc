@@ -1,13 +1,9 @@
+// V2: somente dry-run até provisionamento e autorização explícita.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "agendas-pradosm-preview",
+  "name": "agendas-pradosm-v2",
   "compatibility_date": "2026-09-24",
   "main": "./worker/index.ts",
-  "triggers": {
-    "crons": [
-      "5 3 * * *"
-    ]
-  },
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": [
@@ -19,15 +15,15 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "agendas-pradosm-preview",
-      "database_id": "716cc88e-7da8-400e-b4be-edc4be0c9c03",
-      "migrations_dir": "migrations"
+      "database_name": "agendas-pradosm-v2-unconfigured",
+      "database_id": "00000000-0000-4000-8000-000000000002",
+      "migrations_dir": "migrations-v2"
     }
   ],
   "ratelimits": [
     {
       "name": "LOGIN_RATE_LIMITER",
-      "namespace_id": "2026100101",
+      "namespace_id": "2026112702",
       "simple": {
         "limit": 10,
         "period": 60
@@ -70,6 +66,7 @@
   },
   "vars": {
     "REALTIME_MODE": "off",
+    "ACCESS_MODE": "on",
     "RETENTION_ROW_LIMIT_WARNING": "500000"
   }
 }

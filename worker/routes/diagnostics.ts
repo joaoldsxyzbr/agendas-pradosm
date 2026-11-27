@@ -1,7 +1,7 @@
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import { z } from "zod";
-import { DIAGNOSTIC_EVENTS, recordDiagnostic, listDiagnostics } from "../repositories/diagnostics.ts";
+import { DIAGNOSTIC_EVENTS, recordBrowserDiagnostic, listDiagnostics } from "../repositories/diagnostics.ts";
 
 export const diagnosticRoutes = new Hono<AppEnv>();
 export const adminDiagnosticRoutes = new Hono<AppEnv>();
@@ -21,7 +21,7 @@ const FilterInput = z.object({
   origem: z.enum(["browser", "worker"]).optional(),
   userId: z.string().trim().min(1).max(80).optional(),
   storeId: z.string().trim().min(1).max(80).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const d=new Date(value+"T00:00:00.000Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional()
 });
 
@@ -31,14 +31,11 @@ diagnosticRoutes.post("/events", async c => {
   const parsed = DiagnosticInput.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "EVENTO_INVALIDO" }, 400);
   const user = c.get("authUser");
-  const since = new Date(Date.now() - 60000).toISOString();
-  const count = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM diagnosticos WHERE usuario_id = ? AND criado_em >= ?"
-  ).bind(user.id, since).first();
-  if (Number(count?.n ?? 0) >= 30) return c.json({ error: "LIMITE_DE_EVENTOS" }, 429);
-  await recordDiagnostic(c.env.DB, {
+  if(!user)return c.json({error:"ACESSO_NEGADO"},403);
+  const result=await recordBrowserDiagnostic(c.env.DB, {
     ...parsed.data, origem: "browser", userId: user.id, storeId: user.lojaId ?? null
   });
+  if(!result)return c.json({error:"LIMITE_DE_EVENTOS"},429);
   return c.body(null, 204);
 });
 

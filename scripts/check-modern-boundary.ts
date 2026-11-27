@@ -14,6 +14,18 @@ for (const file of files.filter(file => /\.(tsx?|jsx)$/.test(file))) {
 const modern = JSON.parse(readFileSync("apps/web/package.json", "utf8"));
 for (const name of ["react", "react-dom", "react-router"]) assert.ok(modern.dependencies[name], name);
 for (const name of ["vite", "typescript", "@tailwindcss/vite"]) assert.ok(modern.devDependencies[name], name);
-const worker = readFileSync("wrangler.preview.jsonc", "utf8");
-assert.match(worker, /agendas-pradosm-preview/);
+const configs = ["wrangler.jsonc", "wrangler.preview.jsonc", "wrangler.preview-migrations.jsonc", "wrangler.preview-agendas-migrations.jsonc"];
+for (const file of configs) {
+  const config = JSON.parse(readFileSync(file, "utf8").replace(/^\/\/[^\n]*\n/, ""));
+  assert.match(config.name, /^agendas-pradosm-v2(?:-|$)/, file);
+  assert.ok(!config.triggers?.crons?.length, file + ": cron não autorizado");
+  assert.equal(config.previews, undefined, file + ": binding legado de preview");
+  assert.equal(config.d1_databases?.length, 1, file);
+  assert.equal(config.d1_databases[0].database_name, "agendas-pradosm-v2-unconfigured", file);
+  assert.equal(config.d1_databases[0].migrations_dir, "migrations-v2", file);
+  assert.equal(config.d1_databases[0].database_id, "00000000-0000-4000-8000-000000000002", file);
+}
+for (const name of ["deploy", "deploy:cloudflare", "deploy:preview", "db:migrate:preview", "db:migrate:preview:agendas", "bootstrap-admin"]) {
+  assert.equal(pkg.scripts[name], "node scripts/block-v2-remote.mjs", name + ": operação remota bloqueada");
+}
 console.log("Isolamento React/Worker e configuração de preview preservados.");

@@ -17,8 +17,8 @@ import {
   usersKey, validUser, type AdminUser, type UserForm,
 } from "./api";
 
-const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#344d69] bg-[#142338] shadow-lg";
-const input = "h-9 min-w-0 w-full rounded-md border border-[#48617b] bg-[#192d46] px-3 text-xs text-white outline-none focus-visible:border-sky-400";
+const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#344956] bg-[#192734]";
+const input = "h-9 min-w-0 w-full rounded-md border border-[#526777] bg-[#223443] px-3 text-sm text-white outline-none focus-visible:border-[#90c8df]";
 const errorText = (e: unknown) => e instanceof ApiError ? e.message : "A operação não pôde ser concluída. Tente novamente.";
 const auditActions: Record<string, string> = {
   usuario_criado: "Usuário criado", usuario_atualizado: "Usuário atualizado",
@@ -90,10 +90,10 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
   };
   return <dialog ref={modalRef} aria-label={user ? "Editar usuário" : "Cadastrar usuário"}
     onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}
-    className="fixed inset-0 m-auto max-h-[90vh] w-[min(560px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-[#48617b] bg-[#142338] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
-    <div className="flex items-start justify-between gap-3 border-b border-[#344d69] px-5 py-4">
-      <div><p className="text-[10px] font-bold uppercase tracking-widest text-sky-400">{user ? "Gerenciar acesso" : "Novo acesso"}</p>
-        <h2 className="mt-1 text-lg font-bold">{user ? "Editar usuário" : "Cadastrar usuário"}</h2></div>
+    className="fixed inset-0 m-auto max-h-[90vh] w-[min(560px,calc(100vw-24px))] overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
+    <div className="flex items-start justify-between gap-3 border-b border-[#344956] px-5 py-4">
+      <div><p className="text-xs font-medium text-slate-400">{user ? "Gerenciar acesso" : "Novo acesso"}</p>
+        <h2 className="mt-1 text-lg font-semibold">{user ? "Editar usuário" : "Cadastrar usuário"}</h2></div>
       <Button size="icon" variant="ghost" aria-label="Fechar" disabled={busy} onClick={onClose}><X size={18} /></Button>
     </div>
     <form onSubmit={submit} className="space-y-4 p-5" aria-label="Formulário do usuário">
@@ -124,7 +124,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
         {!form.access&&form.papel === "conferente"&&!user?.acessoPersonalizado &&
           <StoreSelect form={form} setForm={setForm} stores={stores} editing={Boolean(user)} />}
       </div>
-      {!user&&configurable&&<label className="flex items-center gap-2 text-xs text-slate-200"><input type="checkbox" checked={!!form.access} onChange={event=>setForm(v=>({...v,access:event.target.checked?{profile:"agendador",scope:{mode:"all"},overrides:[]}:undefined}))}/>Configurar perfil, lojas e permissões</label>}
+      {!user&&configurable&&<label className="flex items-center gap-2 text-xs text-slate-200"><input type="checkbox" checked={!!form.access} onChange={event=>setForm(v=>({...v,access:event.target.checked?{profile:"digitador",scope:{mode:"all"},overrides:[]}:undefined}))}/>Configurar perfil, lojas e permissões</label>}
       {form.access&&<AccessEditor value={form.access} stores={stores} disabled={busy} onChange={access=>setForm(v=>({...v,access}))}/>}
       {save.isError && <p role="alert" className="text-xs text-rose-300">{errorText(save.error)}</p>}
       <div className="flex flex-wrap justify-end gap-2">
@@ -138,17 +138,17 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
       <Button variant="secondary" onClick={()=>setAccessVisible(v=>!v)}>{accessVisible?"Ocultar permissões":"Configurar perfil e permissões"}</Button>
       {accessVisible&&<ExistingAccessEditor id={user.id} stores={stores} onSaved={onClose}/>}
     </div>}
-    {user && <div className="space-y-4 border-t border-[#344d69] p-5">
+    {user && <div className="space-y-4 border-t border-[#344956] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="text-sm font-semibold">Histórico de alterações</h3><p className="text-xs text-slate-400">Auditoria deste cadastro</p></div>
         <Button variant="secondary" size="sm" disabled={busy} onClick={() => setAuditVisible(value => !value)}>{auditVisible ? "Ocultar histórico" : "Ver histórico"}</Button>
       </div>
-      {auditVisible && <div className="max-h-56 overflow-auto rounded-lg border border-[#344d69] bg-[#101e30] p-3">
+      {auditVisible && <div className="max-h-56 overflow-auto rounded-lg border border-[#344956] bg-[#131c25] p-3">
         {audit.isPending && <Loading label="Carregando histórico…" className="text-xs text-slate-400" />}
         {audit.isError && <p role="alert" className="text-xs text-rose-300">Não foi possível carregar o histórico.
           <Button variant="secondary" size="sm" onClick={() => void audit.refetch()}>Tentar novamente</Button></p>}
         {audit.data && (!audit.data.length ? <p className="text-xs text-slate-400">Nenhuma alteração registrada.</p>
-          : <ol className="space-y-3">{audit.data.map(event => <li key={event.id} className="space-y-1 border-b border-[#344d69] pb-3 text-xs">
+          : <ol className="space-y-3">{audit.data.map(event => <li key={event.id} className="space-y-1 border-b border-[#344956] pb-3 text-xs">
             <strong className="block text-white">{auditActions[event.action] ?? event.action.replaceAll("_", " ")}</strong>
             <span className="block text-slate-400">{event.user?.name ?? "Sistema"} · {new Date(event.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
             {event.details && <span className="block text-slate-300">{event.details}</span>}
@@ -163,7 +163,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
               {confirmToggle ? (user.ativo ? `Desativar ${user.nome}?` : `Ativar ${user.nome}?`)
                 : user.ativo ? "Desativar usuário" : "Ativar usuário"}
             </strong>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-xs text-slate-400">
               {confirmToggle
                 ? user.ativo ? "O acesso será bloqueado, mas o usuário continuará cadastrado."
                   : "O usuário poderá acessar novamente com sua senha atual."
@@ -201,15 +201,15 @@ export function UsersPage() {
   const stores = storesQuery.data ?? [];
   const visible = filterUsers(users, stores, search, role, status);
   const storeNames = new Map(stores.map(store => [store.id, `${store.codigo} - ${store.nome}`]));
-  return <section className="mx-auto w-full min-w-0 max-w-[1450px] overflow-x-clip space-y-5" aria-label="Cadastro de usuários">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] overflow-x-clip space-y-5" aria-label="Cadastro de usuários">
     <PageHeader eyebrow="Cadastros" title="Usuários" description="Gerencie os acessos ao sistema."
       actions={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         <span className="text-xs tabular-nums text-slate-400">{users.length} {users.length === 1 ? "usuário" : "usuários"} · {users.filter(user => user.ativo).length} ativos</span>
         <Button disabled={!canCreate} onClick={() => setEditing("new")}><Plus size={14} />Novo usuário</Button>
       </div>} />
     <div className={surface}>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344d69] p-4">
-        <label className="flex w-full min-w-0 items-center gap-2 rounded-md border border-[#48617b] bg-[#192d46] px-3 sm:max-w-sm">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344956] p-4">
+        <label className="flex w-full min-w-0 items-center gap-2 rounded-md border border-[#526777] bg-[#223443] px-3 sm:max-w-sm">
           <Search size={15} className="shrink-0 text-slate-400" aria-hidden="true" /><span className="sr-only">Buscar usuário</span>
           <input type="search" aria-label="Buscar usuário" value={search} onChange={event => setSearch(event.target.value)}
             className="h-9 w-full min-w-0 bg-transparent text-xs text-white outline-none" placeholder="Buscar por nome, login ou loja..." />
@@ -218,7 +218,7 @@ export function UsersPage() {
           <select aria-label="Filtrar por papel" value={role}
             onChange={event => setRole(event.target.value as typeof role)} className={input + " max-w-[170px]"}>
             <option value="todos">Todos os papéis</option>
-            {session?.acessoConfiguravel&&<option value="agendador">Agendador</option>}
+            {session?.acessoConfiguravel&&<option value="digitador">Digitador</option>}
             <option value="admin">Administrador</option>
             <option value="conferente">Conferente</option>
             <option value="visualizador">Visualizador</option>
@@ -238,7 +238,7 @@ export function UsersPage() {
       {usersQuery.isError && <div role="alert" className="flex flex-wrap items-center gap-3 p-5 text-xs text-rose-300">Não foi possível carregar os usuários.
         <Button size="sm" variant="secondary" onClick={() => void usersQuery.refetch()}>Tentar novamente</Button></div>}
       {usersQuery.data && <>
-        <div className="min-w-0 max-w-full divide-y divide-[#344d69] sm:hidden" aria-label="Usuários no celular">
+        <div className="min-w-0 max-w-full divide-y divide-[#344956] sm:hidden" aria-label="Usuários no celular">
           {visible.map(user => <article key={user.id} data-testid={"mobile-user-" + user.login}
             className="flex min-w-0 items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -247,7 +247,7 @@ export function UsersPage() {
                 <StatusBadge tone={user.ativo ? "success" : "neutral"}>{user.ativo ? "Ativo" : "Inativo"}</StatusBadge>
               </div>
               <p className="mt-1 break-words text-xs text-slate-300">{user.login}</p>
-              <p className="mt-1 break-words text-[11px] text-slate-400">
+              <p className="mt-1 break-words text-xs text-slate-400">
                 {user.escopo?.mode==="all"?"Todas as lojas":user.escopo?.mode==="assigned"?user.escopo.storeIds.map(id=>storeNames.get(id)??id).join(", "):user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"} · {ROLE_LABELS[user.perfil??user.papel]}
               </p>
             </div>
@@ -259,12 +259,12 @@ export function UsersPage() {
         </div>
         <div className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain sm:block">
           <table aria-label="Usuários cadastrados" className="w-full min-w-[720px] border-collapse">
-            <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+            <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
               <th className="px-4 py-3">Nome</th><th className="px-4 py-3">Login</th><th className="px-4 py-3">Loja</th>
               <th className="px-4 py-3">Papel</th><th className="px-4 py-3">Situação</th>
               <th className="px-4 py-3"><span className="sr-only">Ações</span></th></tr></thead>
-            <tbody className="divide-y divide-[#344d69]">
-              {visible.map(user => <tr key={user.id} data-testid={"user-" + user.login} className="hover:bg-[#1c3047]">
+            <tbody className="divide-y divide-[#344956]">
+              {visible.map(user => <tr key={user.id} data-testid={"user-" + user.login} className="hover:bg-[#263948]">
                 <td className="px-4 py-3 text-xs font-bold text-white">{user.nome}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{user.login}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{user.escopo?.mode==="all"?"Todas as lojas":user.escopo?.mode==="assigned"?user.escopo.storeIds.map(id=>storeNames.get(id)??id).join(", "):user.lojaId ? storeNames.get(user.lojaId) ?? "Loja não localizada" : "—"}</td>

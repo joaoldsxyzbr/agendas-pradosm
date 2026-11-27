@@ -1,12 +1,13 @@
 const PRESENCE_ONLINE_WINDOW_MS = 3 * 60 * 1e3;
 const PRESENCE_SIGNAL_WINDOW_MS = 7 * 60 * 1e3;
-function ageMs(value, nowMs) {
+function ageMs(value:string|null|undefined, nowMs:number):number {
   if (!value) return Number.POSITIVE_INFINITY;
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return Number.POSITIVE_INFINITY;
   return Math.max(0, nowMs - timestamp);
 }
-function conferentePresenceStatus(lastInteractionAt, lastSignalAt, nowMs = Date.now()) {
+export type PresenceStatus="online"|"away"|"offline";
+function conferentePresenceStatus(lastInteractionAt:string|null|undefined, lastSignalAt:string|null|undefined, nowMs = Date.now()):PresenceStatus {
   const signalAge = ageMs(lastSignalAt, nowMs);
   if (signalAge > PRESENCE_SIGNAL_WINDOW_MS) {
     return "offline";

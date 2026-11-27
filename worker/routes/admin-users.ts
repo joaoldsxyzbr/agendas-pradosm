@@ -1,5 +1,5 @@
 import type { AppEnv } from "../env.ts";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { ACCESS_PROFILES, PERMISSIONS } from "../../shared/permissions.ts";
 import { accessJson, findEffectiveAccess, listUsersWithAccess, saveAccessConfiguration, validChange, type AccessChange } from "../repositories/access.ts";
@@ -7,6 +7,7 @@ import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findStoreById } from "../repositories/stores.ts";
 import {
+  type UserSummary,
   createUser,
   findUserById,
   listUsers,
@@ -19,11 +20,11 @@ const AccessInput=z.object({
   scope:z.discriminatedUnion("mode",[z.object({mode:z.literal("all")}).strict(),z.object({mode:z.literal("assigned"),storeIds:z.array(z.string().uuid()).max(50)}).strict()]),
   overrides:z.array(z.object({permission:z.enum(PERMISSIONS),effect:z.enum(["allow","deny"])})).max(PERMISSIONS.length)
 }).transform(value=>value as AccessChange).refine(validChange);
-function integralAdmin(c){
+function integralAdmin(c:Context<AppEnv>){
   return c.env.ACCESS_MODE==="on"&&c.get("authUser")?.papel==="admin"&&!c.get("effectiveAccess")?.customized;
 }
-function accessError(c,error){
-  if(error instanceof Error&&/ACESSO_|ULTIMO_ADMIN|NOT NULL|FOREIGN KEY|UNIQUE constraint/.test(error.message))
+function accessError(c:Context<AppEnv>,error:unknown){
+  if(error instanceof Error&&/ACESSO_|ULTIMO_ADMIN|LOJA_NAO_ENCONTRADA|DIGITADOR_PERMISSAO_RESTRITA|NOT NULL|FOREIGN KEY|UNIQUE constraint/.test(error.message))
     return c.json({error:"ACESSO_CONFLITO",message:"Configuração inválida, loja indisponível ou usuário alterado. Atualize e tente novamente."},409);
   throw error;
 }
@@ -36,14 +37,15 @@ adminUserRoutes.put("/:id/access",async c=>{
   if(!integralAdmin(c))return c.json({error:"ACESSO_NEGADO"},403);
   const parsed=z.object({version:z.number().int().positive(),access:AccessInput}).safeParse(await c.req.json().catch(()=>null));
   if(!parsed.success)return c.json({error:"REQUISICAO_INVALIDA",message:"Configuração de acesso inválida."},400);
-  const actor=c.get("authUser");
+  const actor=c.get("authUser"),version=c.get("sessionVersion");
+  if(!actor||version===undefined)return c.json({error:"ACESSO_NEGADO"},403);
   try{
-    const result=await saveAccessConfiguration(c.env.DB,{id:actor.id,sessionVersion:c.get("sessionVersion")},c.req.param("id"),parsed.data.version,parsed.data.access);
+    const result=await saveAccessConfiguration(c.env.DB,{id:actor.id,sessionVersion:version},c.req.param("id"),parsed.data.version,parsed.data.access);
     await revokeRealtimeUser(c.env,c.req.param("id"),"terminate");
     return c.json(accessJson(result));
   }catch(error){return accessError(c,error);}
 });
-function userJson(user) {
+function userJson(user:UserSummary) {
   return {
     id: user.id,
     nome: user.nome,
@@ -53,13 +55,13 @@ function userJson(user) {
     ativo: user.ativo === 1
   };
 }
-function isDuplicateLogin(error) {
+function isDuplicateLogin(error:unknown) {
   return error instanceof Error && error.message.includes("UNIQUE constraint failed: usuarios.login");
 }
-function isLastAdmin(error) {
+function isLastAdmin(error:unknown) {
   return error instanceof Error && error.message.includes("ULTIMO_ADMIN_ATIVO");
 }
-async function validateStoreForRole(db, papel, lojaId) {
+async function validateStoreForRole(db:D1Database, papel:string, lojaId:string|null|undefined):Promise<{ok:true;lojaId:string|null}|{ok:false;reason:"required"|"missing"}> {
   if (papel !== "conferente") return { ok: true, lojaId: null };
   if (!lojaId) return { ok: false, reason: "required" };
   const store = await findStoreById(db, lojaId);
@@ -100,6 +102,7 @@ adminUserRoutes.post("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
     const user = await createUser(
       c.env.DB,
       {
@@ -112,6 +115,7 @@ adminUserRoutes.post("/", async (c) => {
     );
     return c.json({...userJson(user),...(access?.success?{perfil:access.data.profile,acessoPersonalizado:true,ativo:true,escopo:access.data.scope}:{})}, 201);
   } catch (error) {
+    if(error instanceof Error&&error.message.includes("LOJA_NAO_ENCONTRADA"))return c.json({error:"LOJA_NAO_ENCONTRADA",message:"A loja foi removida ou está indisponível. Atualize a lista e tente novamente."},409);
     if (isDuplicateLogin(error)) {
       return c.json(
         { error: "LOGIN_EM_USO", message: "Login j\xE1 est\xE1 em uso." },
@@ -163,6 +167,7 @@ adminUserRoutes.patch("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
     const user = await updateUser(
       c.env.DB,
       current,
@@ -181,6 +186,7 @@ adminUserRoutes.patch("/", async (c) => {
     const updatedAccess=currentAccess?.customized?await findEffectiveAccess(c.env.DB,user.id,true):null;
     return c.json({...userJson(user),...(updatedAccess?{perfil:updatedAccess.profile,acessoPersonalizado:true,ativo:updatedAccess.active,escopo:updatedAccess.scope}:{})});
   } catch (error) {
+    if(error instanceof Error&&error.message.includes("LOJA_NAO_ENCONTRADA"))return c.json({error:"LOJA_NAO_ENCONTRADA",message:"A loja foi removida ou está indisponível. Atualize a lista e tente novamente."},409);
     if (isDuplicateLogin(error)) {
       return c.json(
         { error: "LOGIN_EM_USO", message: "Login j\xE1 est\xE1 em uso." },
@@ -219,6 +225,7 @@ adminUserRoutes.delete("/:id", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
     const deleted = await softDeleteUser(c.env.DB, current, actor.id);
     if (deleted) {
       await revokeRealtimeUser(c.env, current.id);

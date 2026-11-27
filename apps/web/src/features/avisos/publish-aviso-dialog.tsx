@@ -72,10 +72,10 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={ref} aria-labelledby="publish-aviso-heading"
     onCancel={event => { if (submitting) { event.preventDefault(); return; } onClose(); }}
     onClick={event => { if (event.target === ref.current && !submitting) onClose(); }}
-    className="m-auto max-h-[min(94dvh,860px)] w-[min(94vw,560px)] max-w-none overflow-y-auto rounded-xl border border-[#45617c] bg-[#162538] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#34516d] bg-[#1a2b40] px-4 py-3">
+    className="m-auto max-h-[min(94dvh,860px)] w-[min(94vw,560px)] max-w-none overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#344956] bg-[#223443] px-4 py-3">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Avisos</p>
+        <p className="text-xs font-medium text-slate-400">Avisos</p>
         <h2 id="publish-aviso-heading" className="text-base font-bold">Novo aviso</h2>
       </div>
       <Button aria-label="Fechar publicação de aviso" size="icon" variant="secondary" disabled={submitting}
@@ -116,11 +116,11 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
                 title={store.nome} disabled={submitting}
                 onClick={() => toggleLoja(store.codigo)}>{store.codigo}</Button>
             ))}
-            {selecionadas.length === 0 && <p className="w-full text-[11px] text-amber-300">Selecione ao menos uma loja.</p>}
+            {selecionadas.length === 0 && <p className="w-full text-xs text-amber-300">Selecione ao menos uma loja.</p>}
           </div>
         )}
       </fieldset>
-      <p className="rounded-md border border-[#34516d] bg-[#12213a] px-3 py-2 text-[11px] text-slate-400">
+      <p className="rounded-md border border-[#344956] bg-[#12213a] px-3 py-2 text-xs text-slate-400">
         O aviso fica registrado permanentemente: nunca é excluído, apenas marcado como lido. A lista de avisos é o histórico completo, visível a todas as lojas destinatárias.
       </p>
       {error && <p role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}

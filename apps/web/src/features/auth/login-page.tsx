@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
-import { LockKeyhole } from "lucide-react";
+import { CalendarDays, ClipboardCheck, PackageCheck } from "lucide-react";
+import { PradoMark } from "@/components/operations/prado-mark";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { homeForUser, login, isLocalMockOrigin, loadQuickAccounts, quickLogin } from "./session";
@@ -44,23 +45,34 @@ export function LoginPage() {
     setErrorMessage("");
     if (loginValue.trim() && senha) signin.mutate(undefined);
   };
-  return <main className="flex min-h-svh items-center justify-center bg-[#101923] p-4">
-    <section aria-labelledby="login-title" className="w-full max-w-sm rounded-xl border border-slate-700 bg-[#172638] p-6 shadow-2xl">
-      <div className="mb-5 inline-flex size-11 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-500/15 text-sky-300"><LockKeyhole aria-hidden="true" size={22} /></div>
-      <p className="text-[11px] font-bold uppercase tracking-widest text-sky-400">Agenda Prado</p>
-      <h1 id="login-title" className="mt-1 text-2xl font-bold tracking-tight text-white">Entrar</h1>
-      <p className="mt-2 text-sm text-slate-400">Acesse sua operação com segurança.</p>
+  return <main className="prado-login grid min-h-svh lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
+    <section aria-label="Agenda Prado" className="prado-login-identity flex flex-col justify-between gap-12 border-b p-6 sm:p-10 lg:min-h-svh lg:border-b-0 lg:border-r lg:p-14">
+      <div className="flex items-center gap-3"><PradoMark /><div><p className="text-lg font-semibold tracking-tight text-white">Agenda Prado</p><p className="text-sm text-slate-400">Gestão de recebimentos</p></div></div>
+      <div className="max-w-xl">
+        <h2 className="max-w-[17ch] text-3xl font-semibold leading-[1.15] tracking-tight text-slate-50 sm:text-5xl">Da agenda ao recebimento.</h2>
+        <p className="mt-4 max-w-[46ch] text-sm leading-relaxed text-slate-300 sm:text-base">Acompanhe as entregas previstas, a conferência e a operação de cada unidade.</p>
+        <div className="prado-flow mt-10" aria-label="Etapas da operação">
+          {([{ label: "Agendas", Icon: CalendarDays }, { label: "Conferência", Icon: ClipboardCheck }, { label: "Recebimento", Icon: PackageCheck }]).map(({ label, Icon }) =>
+            <div key={label} className="prado-flow-step"><Icon size={24} aria-hidden="true" className="mb-3 text-[#90c8df]" /><p className="text-xs font-medium text-slate-200 sm:text-sm">{label}</p></div>
+          )}
+        </div>
+      </div>
+      <p className="hidden text-xs text-slate-400 lg:block">Acesso interno da operação Prado</p>
+    </section>
+    <section aria-labelledby="login-title" className="mx-auto flex w-full max-w-[460px] flex-col justify-center px-6 py-10 sm:px-10 lg:py-14">
+      <h1 id="login-title" className="text-3xl font-semibold tracking-tight text-white">Entrar</h1>
+      <p className="mt-2 text-sm text-slate-400">Informe suas credenciais para acessar o sistema.</p>
       <form onSubmit={onSubmit} className="mt-6 grid gap-4">
         <label className="grid gap-1.5 text-xs font-semibold text-slate-200">Login
           <input name="login" autoComplete="username" required value={loginValue} onChange={(event) => setLoginValue(event.target.value)}
-            className="h-10 w-full rounded-md border border-slate-600 bg-[#101e30] px-3 text-sm text-white outline-none focus-visible:border-sky-400" />
+            className="prado-login-input text-sm" />
         </label>
         <label className="grid gap-1.5 text-xs font-semibold text-slate-200">Senha
           <input name="senha" type="password" autoComplete="current-password" required value={senha} onChange={(event) => setSenha(event.target.value)}
-            className="h-10 w-full rounded-md border border-slate-600 bg-[#101e30] px-3 text-sm text-white outline-none focus-visible:border-sky-400" />
+            className="prado-login-input text-sm" />
         </label>
         {errorMessage && <p role="alert" className="text-xs text-rose-300">{errorMessage}</p>}
-        <Button type="submit" disabled={signin.isPending} className="mt-1 w-full">{signin.isPending ? "Entrando…" : "Entrar"}</Button>
+        <Button type="submit" disabled={signin.isPending} className="mt-1 h-11 w-full">{signin.isPending ? "Entrando…" : "Entrar"}</Button>
       </form>
       {quickAccounts.length > 0 && <section aria-label="Acesso rápido local" className="mt-5 grid gap-2 border-t border-slate-700 pt-4">
         <h2 className="text-xs font-bold text-sky-300">Acesso rápido · ambiente local</h2>
@@ -71,7 +83,7 @@ export function LoginPage() {
           {account.label}
         </Button>)}
       </section>}
-      <p className="mt-5 text-center text-[11px] text-slate-500">Agenda Prado · Gestão de recebimentos</p>
+
     </section>
   </main>;
 }

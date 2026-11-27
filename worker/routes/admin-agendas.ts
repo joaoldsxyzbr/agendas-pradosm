@@ -106,6 +106,9 @@ async function details(db, agendaId) {
     appointments: appointments.map(appointmentJson)
   };
 }
+function isNexelloProtected(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("NEXELLO_AGENDA_PROTEGIDA");
+}
 function isAgendaConflict(error) {
   if (error?.code === "CONFLITO_ESTADO") return true;
   return error instanceof Error && (
@@ -174,6 +177,7 @@ adminAgendaRoutes.post("/import", async (c) => {
     });
     return c.json(result, existing ? 200 : 201);
   } catch (error) {
+    if (isNexelloProtected(error)) return c.json({ error: "NEXELLO_AGENDA_PROTEGIDA", message: "Agenda vinculada à Nexello. A substituição integral por arquivo foi bloqueada; nenhum registro foi alterado." },409);
     if (isAgendaConflict(error)) {
       return c.json(
         {
@@ -287,6 +291,7 @@ adminAgendaRoutes.post("/import/bulk", async (c) => {
       results.some((item) => item.replaced) ? 200 : 201
     );
   } catch (error) {
+    if (isNexelloProtected(error)) return c.json({ error: "NEXELLO_AGENDA_PROTEGIDA", message: "O lote contém agenda vinculada à Nexello. Nenhum registro foi alterado." },409);
     if (error instanceof AgendaBatchQueryBudgetError) {
       return c.json(
         {

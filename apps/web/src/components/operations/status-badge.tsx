@@ -12,5 +12,5 @@ export function StatusBadge({ children, tone = "neutral" }: {
   children: React.ReactNode;
   tone?: Tone;
 }) {
-  return <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold", tones[tone])}>{children}</span>;
+  return <span className={cn("inline-flex items-center gap-1 rounded-[4px] border px-2 py-1 text-xs font-medium", tones[tone])}>{children}</span>;
 }

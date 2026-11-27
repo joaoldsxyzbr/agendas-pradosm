@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ACCESS_PROFILES, PERMISSIONS, resolvePermissions, type AccessProfile, type Permission } from "../../../../../shared/permissions.ts";
+import { ACCESS_PROFILES, PERMISSIONS, resolvePermissions, isDigitadorRestricted, type AccessProfile, type Permission } from "../../../../../shared/permissions.ts";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import type { Store } from "@/features/receiving/model";
@@ -8,7 +8,7 @@ import { ROLE_LABELS, getAccess, setAccess, usersKey, type AccessForm } from "./
 
 const groups:Record<string,string>={recebimento:"Recebimento",conferencia:"Conferência",agendas:"Agendas",importacao:"Importação",relatorios:"Relatório gerencial",lojas:"Lojas",usuarios:"Usuários",auditoria:"Auditoria",diagnosticos:"Diagnósticos",retencao:"Retenção",avisos:"Avisos"};
 const actions:Record<string,string>={ver:"Visualizar",editar:"Editar",criar:"Criar",excluir:"Excluir",concluir:"Concluir",reabrir:"Reabrir",exportar:"Exportar PDF",historico:"Histórico",executar:"Executar",substituir:"Substituir importação",permissoes:"Configurar permissões",marcar_lido:"Marcar como lido",publicar:"Publicar", "manual.criar":"Adicionar fornecedor sem agenda","manual.editar":"Editar fornecedor sem agenda","manual.excluir":"Excluir fornecedor sem agenda"};
-const field="rounded-md border border-slate-600 bg-[#192d46] px-2 py-1.5 text-xs text-white";
+const field="rounded-md border border-slate-600 bg-[#223443] px-2 py-1.5 text-xs text-white";
 export function validAccess(form:AccessForm){return !!resolvePermissions(form.profile,form.overrides)&& (form.scope.mode==="all"||form.scope.storeIds.length>0);}
 export function AccessEditor({value,onChange,stores,disabled=false}:{value:AccessForm;onChange:(value:AccessForm)=>void;stores:Store[];disabled?:boolean}){
   const effective=resolvePermissions(value.profile,value.overrides);
@@ -40,6 +40,7 @@ export function AccessEditor({value,onChange,stores,disabled=false}:{value:Acces
         }}/>{store.codigo} — {store.nome}
       </label>)}
     </div>}
+    {value.profile==="digitador"&&<p className="text-xs text-slate-300">Digitador: operação completa, sem cadastros de lojas e usuários, logs, auditoria ou retenção. Essas áreas não podem ser concedidas por exceção.</p>}
     <p className="text-xs text-slate-400">Herdar usa o padrão do perfil. Permitir e negar substituem esse padrão. Apenas o administrador integral pode cadastrar, editar ou excluir usuários e delegar direitos. A exportação é uma permissão de interface; dados visíveis podem ser copiados.</p>
     <Button variant="secondary" size="sm" disabled={value.overrides.length===0} onClick={()=>onChange({...value,overrides:[]})}>Restaurar permissões do perfil</Button>
     <div className="max-h-80 overflow-auto space-y-3">
@@ -51,7 +52,7 @@ export function AccessEditor({value,onChange,stores,disabled=false}:{value:Acces
           return <label key={permission} className="grid grid-cols-[1fr_auto] items-center gap-2 py-1 text-xs">
             <span>{actions[action]??action}<small className="block text-slate-400">{effective?.has(permission)?"Permitido":"Negado"}</small></span>
             <select className={field} aria-label={label+" — "+(actions[action]??action)} value={selected} onChange={e=>choose(permission,e.target.value)}>
-              <option value="inherit">Herdar ({defaults?.has(permission)?"sim":"não"})</option><option value="allow">Permitir</option><option value="deny">Negar</option>
+              <option value="inherit">Herdar ({defaults?.has(permission)?"sim":"não"})</option><option value="allow" disabled={value.profile==="digitador"&&isDigitadorRestricted(permission)}>Permitir</option><option value="deny">Negar</option>
             </select>
           </label>;
         })}

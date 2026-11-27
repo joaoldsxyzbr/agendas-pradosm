@@ -16,8 +16,8 @@ import {
 
 type Appointment = AgendaDetail["appointments"][number];
 
-const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#344d69] bg-[#142338] shadow-lg";
-const input = "h-9 min-w-0 w-full rounded-md border border-[#48617b] bg-[#192d46] px-3 text-xs text-white outline-none focus-visible:border-sky-400";
+const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#344956] bg-[#192734]";
+const input = "h-9 min-w-0 w-full rounded-md border border-[#526777] bg-[#223443] px-3 text-sm text-white outline-none focus-visible:border-[#90c8df]";
 const statusLabels: Record<string, string> = {
   aguardando: "Aguardando", recebido: "Recebido", nao_chegou: "Não recebido", recusado: "Recusado",
 };
@@ -86,10 +86,10 @@ function ReasonDialog({ supplier, busy, error, onConfirm, onClose }: {
   };
   return <dialog ref={modalRef} aria-label={`Motivo de não recebimento de ${supplier}`}
     onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}
-    className="fixed inset-0 m-auto max-h-[90vh] w-[min(460px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-[#48617b] bg-[#142338] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
-    <div className="flex items-start justify-between gap-3 border-b border-[#344d69] px-5 py-4">
-      <div><p className="text-[10px] font-bold uppercase tracking-widest text-sky-400">Não recebido</p>
-        <h2 className="mt-1 text-lg font-bold">Motivo de não recebimento</h2>
+    className="fixed inset-0 m-auto max-h-[90vh] w-[min(460px,calc(100vw-24px))] overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
+    <div className="flex items-start justify-between gap-3 border-b border-[#344956] px-5 py-4">
+      <div><p className="text-xs font-medium text-slate-400">Não recebido</p>
+        <h2 className="mt-1 text-lg font-semibold">Motivo de não recebimento</h2>
         <p className="mt-1 break-words text-xs text-slate-400">{supplier}</p></div>
       <Button size="icon" variant="ghost" aria-label="Fechar" disabled={busy} onClick={onClose}><X size={18} /></Button>
     </div>
@@ -127,7 +127,7 @@ function AppointmentControls({ item, busy, onStatus, onExchanges }: {
       {Object.entries(statusLabels).map(([value, label]) =>
         <option key={value} value={value}>{label}</option>)}
     </select>
-    <label className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-slate-200">
+    <label className="inline-flex shrink-0 items-center gap-1.5 text-xs text-slate-200">
       <input type="checkbox" aria-label={`Trocas de ${item.supplier}`} checked={Boolean(item.hasExchanges)}
         disabled={busy} onChange={event => onExchanges(item, event.target.checked)}
         className="size-4 accent-sky-500" />Trocas
@@ -227,7 +227,7 @@ export function HistoryPage() {
   const agenda = detail.data?.agenda;
   const appointments = detail.data?.appointments ?? [];
 
-  return <section className="mx-auto w-full min-w-0 max-w-[1450px] overflow-x-clip space-y-5" aria-label="Histórico de agendas">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] overflow-x-clip space-y-5" aria-label="Histórico de agendas">
     <PageHeader eyebrow="Administração" title="Histórico"
       description="Consulte agendas anteriores e a trilha de alterações de status." />
     <form onSubmit={submitFilters} aria-label="Filtros do histórico"
@@ -254,7 +254,7 @@ export function HistoryPage() {
         <Button size="sm" variant="secondary" onClick={() => void agendas.refetch()}>Tentar novamente</Button>
       </div>}
       {filters && agendas.data && <>
-        <div className="min-w-0 divide-y divide-[#344d69] sm:hidden" aria-label="Agendas no celular">
+        <div className="min-w-0 divide-y divide-[#344956] sm:hidden" aria-label="Agendas no celular">
           {rows.map(row => <article key={row.id} data-testid={"mobile-history-" + row.storeCode}
             className="flex min-w-0 items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -265,7 +265,7 @@ export function HistoryPage() {
                 </StatusBadge>
               </div>
               <p className="mt-1 break-words text-xs text-slate-300">{row.date ? formatDay(row.date) : "—"} · {row.storeName ?? ""}</p>
-              <p className="mt-1 text-[11px] text-slate-400">{row.total} agendamentos · {row.recebido} recebidos · {row.aguardando} aguardando</p>
+              <p className="mt-1 text-xs text-slate-400">{row.total} agendamentos · {row.recebido} recebidos · {row.aguardando} aguardando</p>
             </div>
             <Button size="sm" variant="secondary" onClick={() => { setAgendaId(row.id); setStatusAppointmentId(null); }}>Abrir agenda</Button>
           </article>)}
@@ -273,12 +273,12 @@ export function HistoryPage() {
         </div>
         <div className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain sm:block">
           <table aria-label="Agendas do histórico" className="w-full min-w-[700px] border-collapse">
-            <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+            <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
               <th className="px-4 py-3">Data</th><th className="px-4 py-3">Loja</th><th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Aguardando</th><th className="px-4 py-3">Recebidos</th>
               <th className="px-4 py-3">Status do dia</th><th className="px-4 py-3"><span className="sr-only">Ações</span></th></tr></thead>
-            <tbody className="divide-y divide-[#344d69]">
-              {rows.map(row => <tr key={row.id} data-testid={"history-" + row.storeCode} className="hover:bg-[#1c3047]">
+            <tbody className="divide-y divide-[#344956]">
+              {rows.map(row => <tr key={row.id} data-testid={"history-" + row.storeCode} className="hover:bg-[#263948]">
                 <td className="px-4 py-3 text-xs text-slate-200">{row.date ? formatDay(row.date) : "—"}</td>
                 <td className="px-4 py-3 text-xs text-slate-200">{row.storeName ?? row.storeCode}</td>
                 <td className="px-4 py-3 text-xs tabular-nums text-slate-200">{row.total}</td>
@@ -294,7 +294,7 @@ export function HistoryPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#344d69] px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#344956] px-4 py-3">
           <p className="text-xs text-slate-300" aria-live="polite">
             Página {page + 1} · {rows.length} {rows.length === 1 ? "agenda" : "agendas"} nesta página
             {agendas.data.hasMore ? " · há mais resultados" : ""}
@@ -328,7 +328,7 @@ export function HistoryPage() {
         </div>
       </div>
 
-      <div className="min-w-0 divide-y divide-[#344d69] sm:hidden" aria-label="Agendamentos no celular">
+      <div className="min-w-0 divide-y divide-[#344956] sm:hidden" aria-label="Agendamentos no celular">
         {appointments.map(item => <article key={item.id} className="space-y-2 px-1 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <strong className="text-xs text-white">{item.startTime} - {item.endTime}</strong>
@@ -337,7 +337,7 @@ export function HistoryPage() {
             </StatusBadge>
           </div>
           <p className="break-words text-xs text-slate-200">{item.supplier}</p>
-          <p className="break-words text-[11px] text-slate-400">Protocolo {item.protocol}</p>
+          <p className="break-words text-xs text-slate-400">Protocolo {item.protocol}</p>
           <AppointmentControls item={item} busy={busy} onStatus={selectStatus}
             onExchanges={(appointment, value) => exchanges.mutate({ id: appointment.id, hasExchanges: value })} />
           <Button size="sm" variant="ghost" aria-label={`Ver histórico de ${item.supplier}`}
@@ -347,11 +347,11 @@ export function HistoryPage() {
       </div>
       <div className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain sm:block">
         <table aria-label="Agendamentos da agenda" className="w-full min-w-[760px] border-collapse">
-          <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+          <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
             <th className="px-4 py-3">Horário</th><th className="px-4 py-3">Protocolo</th><th className="px-4 py-3">Fornecedor</th>
             <th className="px-4 py-3">Status</th><th className="px-4 py-3">Trocas</th><th className="px-4 py-3"><span className="sr-only">Ações</span></th></tr></thead>
-          <tbody className="divide-y divide-[#344d69]">
-            {appointments.map(item => <tr key={item.id} data-testid={"history-appointment-" + item.protocol} className="hover:bg-[#1c3047]">
+          <tbody className="divide-y divide-[#344956]">
+            {appointments.map(item => <tr key={item.id} data-testid={"history-appointment-" + item.protocol} className="hover:bg-[#263948]">
               <td className="px-4 py-3 text-xs text-slate-200">{item.startTime} - {item.endTime}</td>
               <td className="px-4 py-3 text-xs text-slate-300">{item.protocol}</td>
               <td className="px-4 py-3 text-xs text-slate-200">{item.supplier}</td>
@@ -376,14 +376,14 @@ export function HistoryPage() {
         </table>
       </div>
 
-      <div className="rounded-lg border border-[#344d69] bg-[#101e30] p-4">
+      <div className="rounded-lg border border-[#344956] bg-[#131c25] p-4">
         <h3 className="mb-3 text-sm font-semibold">Histórico do dia</h3>
         {dayEvents.isPending && <Loading label="Carregando eventos…" className="text-xs text-slate-400" />}
         {dayEvents.isError && <p role="alert" className="text-xs text-rose-300">Não foi possível carregar os eventos do dia.</p>}
         {dayEvents.data && <DayEvents events={dayEvents.data} />}
       </div>
 
-      {statusAppointmentId && <section aria-label="Histórico de status" className="rounded-lg border border-[#344d69] bg-[#101e30] p-4">
+      {statusAppointmentId && <section aria-label="Histórico de status" className="rounded-lg border border-[#344956] bg-[#131c25] p-4">
         <h3 className="mb-3 text-sm font-semibold">Histórico de status</h3>
         {statusEvents.isPending && <Loading label="Carregando alterações…" className="text-xs text-slate-400" />}
         {statusEvents.isError && <p role="alert" className="text-xs text-rose-300">Não foi possível consultar o histórico de status.

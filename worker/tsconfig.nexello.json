@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "types.d.ts",
+    "repositories/nexello-*.ts",
+    "services/nexello-*.ts",
+    "routes/admin-nexello.ts",
+    "repositories/access.ts",
+    "repositories/audit.ts",
+    "../shared/nexello-*.ts",
+    "repositories/stores.ts",
+    "repositories/presence.ts",
+    "lib/presence.ts",
+    "services/retention.ts",
+    "repositories/diagnostics.ts",
+    "routes/diagnostics.ts",
+    "routes/admin-audit.ts",
+    "routes/admin-retention.ts",
+    "services/access-session.ts",
+    "../shared/permissions.ts",
+    "lib/session.ts",
+    "lib/password.ts",
+    "lib/http.ts",
+    "lib/login-rate-limit.ts",
+    "repositories/users.ts",
+    "middleware/auth.ts",
+    "middleware/access-policy.ts",
+    "../shared/auth.ts"
+  ]
+}

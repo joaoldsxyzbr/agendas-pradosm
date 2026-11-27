@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { logout, ACCESS_PAGES, canUse, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosBell } from "@/features/avisos/avisos-bell";
+import { PradoMark } from "@/components/operations/prado-mark";
 
 const menu = [
   { path: "/admin", label: "Recebimento", icon: ClipboardCheck, roles: ["admin", "visualizador"] },
@@ -20,9 +21,9 @@ const menu = [
 ] as const;
 const defaultMenuOrder = menu.map(item => item.path);
 
-const labels: Record<Role | "agendador", string> = {
+const labels: Record<Role | "digitador", string> = {
   admin: "Administrador",
-  agendador: "Agendador",
+  digitador: "Digitador",
   visualizador: "Visualizador",
   conferente: "Conferente",
 };
@@ -121,9 +122,9 @@ export function AppLayout({ user }: { user: SessionUser }) {
       }}
       onDragEnd={clearDrag}
       onClick={event => { if (dragging) event.preventDefault(); }}
-      className={({ isActive }) => cn("flex shrink-0 select-none items-center gap-2.5 rounded-md px-3 py-2.5 text-xs font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400",
+      className={({ isActive }) => cn("flex shrink-0 select-none items-center gap-2.5 prado-nav-link rounded px-3 py-2.5 text-sm font-medium outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400",
         compact && "md:justify-center md:px-2",
-        isActive ? "bg-sky-500/15 text-sky-200" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+        isActive ? "text-slate-100" : "text-slate-300 hover:bg-slate-800 hover:text-slate-100",
         dragging === path && "opacity-50",
         dropTarget === path && "ring-1 ring-inset ring-sky-400 bg-sky-500/15")}>
       <Icon size={16} aria-hidden="true" />
@@ -131,29 +132,29 @@ export function AppLayout({ user }: { user: SessionUser }) {
     </NavLink>)}
   </nav>;
   return <div className="flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row">
-    <aside className={cn("hidden shrink-0 flex-col border-r border-[#2b415b] bg-[#111e2e] p-3 md:sticky md:top-0 md:flex md:h-svh md:max-h-svh md:overflow-y-auto", collapsed ? "w-[76px]" : "w-56")}>
+    <aside className={cn("hidden shrink-0 flex-col prado-sidebar border-r p-3 md:sticky md:top-0 md:flex md:h-svh md:max-h-svh md:overflow-y-auto", collapsed ? "w-[76px]" : "w-60")}>
       <div className={cn("mb-7 border-b border-slate-700/70 p-3", collapsed && "flex flex-col items-center gap-2")}>
         {collapsed ? <>
-          <strong className="text-sm tracking-tight text-white">AP</strong>
+          <PradoMark />
           <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Expandir navegação" aria-expanded={false} onClick={toggleCollapsed}>
             <PanelLeft size={16} aria-hidden="true" />
           </Button>
         </> : <>
           <div className="flex items-center justify-between gap-2">
-            <strong className="text-sm tracking-tight text-white">Agenda Prado</strong>
+            <div className="flex min-w-0 items-center gap-2.5"><PradoMark /><strong className="text-sm font-semibold tracking-tight text-white">Agenda Prado</strong></div>
             <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="Recolher navegação" aria-expanded onClick={toggleCollapsed}>
               <PanelLeft size={16} aria-hidden="true" />
             </Button>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Gestão de recebimentos</p>
+          <p className="mt-3 text-xs text-slate-400">Gestão de recebimentos</p>
         </>}
       </div>
       <div className="flex-1">{renderNav(collapsed)}</div>
-      <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-[11px] text-slate-500", collapsed && "truncate text-center")}>{labels[user.perfil??user.papel]}</div>
+      <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-xs text-slate-400", collapsed && "truncate text-center")}>{labels[user.perfil??user.papel]}</div>
     </aside>
     <div className="flex w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
-      <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[#2b415b] bg-[#142337] px-4">
-        <span className="text-sm font-semibold text-slate-200 md:text-xs">Painel operacional</span>
+      <header className="prado-topbar flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-4 py-2 md:px-6">
+        <span className="text-sm font-semibold text-slate-200">Painel operacional</span>
         <div className="flex items-center gap-3">
           {canUse(user,"avisos.ver",true)&&<AvisosBell papel={user.papel} canPublish={canUse(user,"avisos.publicar",user.papel==="admin")} canMarkRead={canUse(user,"avisos.marcar_lido",true)} />}
           {user.lojasDisponiveis && user.lojasDisponiveis.length>1 && canUse(user,"conferencia.ver",false) && <select aria-label="Loja de conferência" className="max-w-40 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white" value={user.lojaId??""}
@@ -166,11 +167,11 @@ export function AppLayout({ user }: { user: SessionUser }) {
           </Button>
         </div>
       </header>
-      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] overflow-x-auto overscroll-x-contain border-b border-[#2b415b] bg-[#111e2e] p-2 md:hidden">{renderNav(false)}</div>
+      <div data-testid="mobile-navigation" className="w-screen min-w-0 max-w-[100vw] overflow-x-auto overscroll-x-contain prado-sidebar border-b p-2 md:hidden">{renderNav(false)}</div>
       <span className="sr-only" aria-live="polite">{announcement}</span>
       {storageFailed && <p className="px-5 pt-2 text-xs text-amber-300" role="status">Não foi possível salvar a ordem neste navegador.</p>}
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
-      <main className="w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-6"><Outlet /></main>
+      <main className="w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-7"><Outlet /></main>
     </div>
   </div>;
 }

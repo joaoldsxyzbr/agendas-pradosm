@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { app } from "../../worker/app.ts";
 import { createSessionToken } from "../../worker/lib/session.ts";
 import {
-  normalizeDiagnostic, recordDiagnostic, listDiagnostics, pruneDiagnostics
+  normalizeDiagnostic, recordDiagnostic, recordBrowserDiagnostic, listDiagnostics, pruneDiagnostics
 } from "../../worker/repositories/diagnostics.ts";
 
 const secret = "diagnosticos-teste-local-credencial-sintetica-2026";
@@ -32,7 +32,7 @@ function fixture() {
     const bound = {
       bind(...values) { vals = values; return bound; },
       async first() { return stmt.get(...vals) ?? null; },
-      async all() { return { results: stmt.all(...vals) }; },
+      async all() { return { success:true,results: stmt.all(...vals) }; },
       async run() { const result = stmt.run(...vals); return { success:true,meta:{changes:Number(result.changes)} }; }
     };
     return bound;
@@ -109,4 +109,17 @@ describe("Diagnósticos seguros", () => {
       })).status,429);
     } finally { f.sql.close(); }
   });
+});
+it("limits concurrent browser events atomically without suppressing worker errors",async()=>{
+  const f=fixture();
+  try{
+    const now=new Date("2026-11-27T15:00:00Z");
+    const data={origem:"browser",nivel:"error",evento:"IMPORT_READ_FAILED",operacao:"importacao",userId:"admin1"};
+    const result=await Promise.all(Array.from({length:40},()=>recordBrowserDiagnostic(f.db,data,now)));
+    assert.equal(result.filter(Boolean).length,30);
+    assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get().n,30);
+    await recordDiagnostic(f.db,{...data,origem:"worker",evento:"WORKER_EXCEPTION"});
+    assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get().n,31);
+    assert.ok(await recordBrowserDiagnostic(f.db,data,new Date(now.getTime()+60001)));
+  }finally{f.sql.close();}
 });

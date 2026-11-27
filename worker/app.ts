@@ -15,6 +15,7 @@ import {
   adminAgendaRoutes,
   adminAppointmentRoutes,
 } from "./routes/admin-agendas.ts";
+import { adminNexelloRoutes } from "./routes/admin-nexello.ts";
 import { adminAuditRoutes } from "./routes/admin-audit.ts";
 import { adminRetentionRoutes } from "./routes/admin-retention.ts";
 import { diagnosticRoutes, adminDiagnosticRoutes } from "./routes/diagnostics.ts";
@@ -110,6 +111,7 @@ app.use("/api/admin/agendas", async (c, next) => {
   await closePastOpenAgendas(c.env.DB);
   await next();
 });
+app.route("/api/admin/nexello", adminNexelloRoutes);
 app.route("/api/admin/stores", adminStoreRoutes);
 app.route("/api/admin/users", adminUserRoutes);
 app.route("/api/admin/agendas", adminAgendaRoutes);

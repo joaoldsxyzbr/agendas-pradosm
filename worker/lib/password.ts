@@ -6,16 +6,16 @@ const SUPPORTED_ITERATIONS = /* @__PURE__ */ new Set([
   LEGACY_ITERATIONS,
   6e5
 ]);
-function toBase64(bytes) {
+function toBase64(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
-function fromBase64(value) {
+function fromBase64(value: string) {
   const binary = atob(value);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
-async function derive(password, salt, iterations) {
+async function derive(password: string, salt: Uint8Array<ArrayBuffer>, iterations: number) {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(password),
@@ -35,15 +35,15 @@ async function derive(password, salt, iterations) {
   );
   return new Uint8Array(bits);
 }
-function constantTimeEqual(a, b) {
+function constantTimeEqual(a: Uint8Array, b: Uint8Array) {
   if (a.length !== b.length) return false;
   let difference = 0;
   for (let index = 0; index < a.length; index += 1) {
-    difference |= a[index] ^ b[index];
+    difference |= a[index]! ^ b[index]!;
   }
   return difference === 0;
 }
-function parsePasswordHash(encoded) {
+function parsePasswordHash(encoded: unknown) {
   // Hash malformado ou inesperado deve falhar fechado, sem quebrar o login.
   if (typeof encoded !== "string" || encoded.length > 256) return null;
   const [algorithm, iterationsText, saltText, hashText, extra] = encoded.split("$");
@@ -68,12 +68,12 @@ function parsePasswordHash(encoded) {
 // quais logins existem (anti-enumeracao por timing). Respostas nao mudam.
 const DUMMY_HASH = "pbkdf2_sha256$100000$ny1ipR7Zngf83PRoODBDYA==$mphEmCCsGTu07+x0EGf4PnM+5tgqCDtXXpBQD9ABm1E=";
 
-async function hashPassword(password) {
+async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const hash = await derive(password, salt, CURRENT_ITERATIONS);
   return `pbkdf2_sha256$${CURRENT_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
 }
-async function verifyPassword(password, encoded) {
+async function verifyPassword(password: string, encoded: unknown): Promise<boolean> {
   const parsed = parsePasswordHash(encoded);
   if (!parsed) return false;
   try {
@@ -83,7 +83,7 @@ async function verifyPassword(password, encoded) {
     return false;
   }
 }
-function passwordNeedsUpgrade(encoded) {
+function passwordNeedsUpgrade(encoded: unknown): boolean {
   const parsed = parsePasswordHash(encoded);
   return Boolean(parsed && parsed.iterations < CURRENT_ITERATIONS);
 }

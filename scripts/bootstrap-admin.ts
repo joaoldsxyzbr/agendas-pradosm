@@ -4,7 +4,7 @@ import { pbkdf2Sync, randomBytes, randomUUID } from "node:crypto";
 const ITERATIONS = 100_000;
 const HASH_BYTES = 32;
 const SALT_BYTES = 16;
-const DATABASE_NAME = "agendas-prado";
+const DATABASE_NAME = "agendas-pradosm-v2-unconfigured";
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -19,6 +19,9 @@ function sqlString(value) {
 }
 
 function executeRemote(sql, captureOutput = false) {
+  if (DATABASE_NAME === "agendas-pradosm-v2-unconfigured") {
+    throw new Error("Bootstrap remoto V2 bloqueado até provisionamento e validação do novo D1.");
+  }
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 
   return execFileSync(

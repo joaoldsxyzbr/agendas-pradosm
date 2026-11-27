@@ -125,10 +125,10 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
         ref.current?.close();
       }
     }}
-    className="m-auto max-h-[min(94dvh,940px)] w-[min(96vw,1240px)] max-w-none overflow-y-auto rounded-xl border border-[#45617c] bg-[#162538] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#34516d] bg-[#1a2b40] px-4 py-3">
+    className="m-auto max-h-[min(94dvh,940px)] w-[min(96vw,1240px)] max-w-none overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#344956] bg-[#223443] px-4 py-3">
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Agenda por loja</p>
+        <p className="text-xs font-medium text-slate-400">Agenda por loja</p>
         <h2 id="detail-heading" className="truncate text-base font-bold">{agenda ? `Agenda ${agenda.storeCode} — ${agenda.storeName}` : "Detalhes da agenda"}</h2>
       </div>
       <Button aria-label="Fechar detalhes" size="icon" variant="secondary" disabled={busy}
@@ -177,7 +177,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
             ["Recebidos", metrics.recebido, CheckCircle2],
             ["Não recebidos", metrics.naoChegou, Ban],
             ["Trocas", metrics.trocas, ArrowLeftRight],
-          ] as const).map(([label, value, Icon]) => <div key={label} className="flex items-center gap-2 rounded-md border border-[#36516d] bg-[#1a2c41] px-2.5 py-1.5">
+          ] as const).map(([label, value, Icon]) => <div key={label} className="flex items-center gap-2 rounded-md border border-[#344956] bg-[#192734] px-2.5 py-1.5">
             <Icon size={14} className="shrink-0 text-sky-300" />
             <div className="min-w-0"><span className="block text-[10px] leading-tight text-slate-300">{label}</span>
               <strong className="block text-base font-bold leading-tight text-white tabular-nums">{value}</strong>
@@ -185,7 +185,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
             <small className="ml-auto text-[10px] text-slate-400 tabular-nums">{label === "Total" ? "100% do dia" : pct(value) + "%"}</small>
           </div>)}
         </div>
-        <section className="space-y-2 rounded-xl border border-[#36516d] bg-[#142438] p-2.5 sm:p-3">
+        <section className="space-y-2 rounded-md border border-[#344956] bg-[#192734] p-2.5 sm:p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="text-sm font-bold text-white">Agenda do dia</h3>
               <p className="text-xs text-slate-400">Fornecedores agendados para recebimento.</p></div>
@@ -193,17 +193,17 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
               <label className="relative min-w-0">
                 <Search aria-hidden="true" size={14} className="absolute top-2.5 left-2 text-slate-400" />
                 <input aria-label="Pesquisar fornecedor ou protocolo" type="search" placeholder="Pesquisar fornecedor ou protocolo"
-                  className="h-9 w-full rounded-md border border-[#3e5874] bg-[#101e30] pr-2 pl-7 text-xs text-white sm:w-56"
+                  className="h-9 w-full rounded-md border border-[#526777] bg-[#131c25] pr-2 pl-7 text-xs text-white sm:w-56"
                   value={search} onChange={event => setSearch(event.target.value)} />
               </label>
               {editable && !completed && canCreate && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
                 onClick={() => setManualTarget({ mode: "create" })}><Plus size={13} />Fornecedor sem agenda</Button>}
             </div>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-[#36516d]" aria-label="Fornecedores">
+          <div className="overflow-x-auto rounded-lg border border-[#344956]" aria-label="Fornecedores">
             <table className="w-full min-w-[760px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[#36516d] bg-[#16283c] text-[11px] uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-[#344956] bg-[#223443] text-xs uppercase tracking-wide text-slate-400">
                   {sortableColumns.map(column => {
                     const ariaSort = !sort || sort.key !== column.key ? "none"
                       : sort.direction === "ascending" ? "ascending" : "descending";
@@ -233,7 +233,7 @@ export function ConferenceAgendaDialog({ agendaId, canEdit = false, onClose }: {
             </table>
           </div>
         </section>
-        {!canEdit && <p className="border-t border-[#34516d] pt-3 text-[11px] text-slate-400">Somente consulta nesta etapa. Edição e reabertura não estão disponíveis para o perfil visualizador.</p>}
+        {!canEdit && <p className="border-t border-[#344956] pt-3 text-xs text-slate-400">Somente consulta nesta etapa. Edição e reabertura não estão disponíveis para o perfil visualizador.</p>}
       </>}
     </div>
     {manualTarget && agenda && <ManualSupplierDialog target={manualTarget}

@@ -4,12 +4,13 @@ import type { AuthUser } from "../shared/auth.ts";
 export interface Env {
   DB: D1Database;
   SESSION_SECRET: string;
+  NEXELLO_API_TOKEN?: string;
+  NEXELLO_READ_MODE?: string;
   REALTIME_MODE: string;
   ACCESS_MODE?: string;
   REALTIME_HUB: DurableObjectNamespace;
   LOGIN_RATE_LIMITER: RateLimit;
   ASSETS: Fetcher;
-  RETENTION_BUCKET?: R2Bucket;
   RETENTION_ROW_LIMIT_WARNING?: string;
 }
 
@@ -19,6 +20,7 @@ export interface AppEnv {
     authUser?: AuthUser;
     sessionExpiresAt?: number;
     sessionVersion?: number;
+    sessionKey?: string;
     effectiveAccess?: EffectiveAccess;
   };
 }

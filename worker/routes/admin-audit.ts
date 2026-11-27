@@ -4,12 +4,12 @@ import { z } from "zod";
 import { listAudit, parseAuditJson } from "../repositories/audit.ts";
 const adminAuditRoutes = new Hono<AppEnv>();
 const AuditFilters = z.object({
-  entity: z.enum(["agenda", "agendamento", "loja", "usuario"]).optional(),
+  entity: z.enum(["agenda", "agendamento", "loja", "usuario", "sincronizacao", "sistema"]).optional(),
   entityId: z.string().trim().min(1).optional(),
   agendaId: z.string().trim().min(1).optional(),
   userId: z.string().trim().min(1).max(80).optional(),
   storeId: z.string().trim().min(1).max(80).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const d=new Date(value+"T00:00:00.000Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional()
 });
 adminAuditRoutes.get("/", async (c) => {

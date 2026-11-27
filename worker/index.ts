@@ -1,28 +1,32 @@
 export { RealtimeHub } from "./realtime/RealtimeHub.ts";
+import type { Env } from "./env.ts";
 import { app } from "./app.ts";
 import { closePastOpenAgendas } from "./services/agenda-maintenance.ts";
 import { pruneDiagnostics } from "./repositories/diagnostics.ts";
+import { pruneExpiredNexelloReviews } from "./repositories/nexello-persistence.ts";
 import { runRetention } from "./services/retention.ts";
 import { pruneRevokedSessions } from "./repositories/users.ts";
 
 export default {
   fetch: app.fetch,
   async scheduled(
-    controller,
-    env,
-    _ctx,
+    controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
   ) {
     await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }
     catch { console.warn("Scheduled diagnostics retention unavailable"); }
+    try { await pruneExpiredNexelloReviews(env.DB, new Date(controller.scheduledTime)); }
+    catch { console.warn("Scheduled Nexello review cleanup unavailable"); }
     try { await pruneRevokedSessions(env.DB, Math.floor(controller.scheduledTime / 1000)); }
     catch { console.warn("Scheduled session cleanup unavailable"); }
     try {
       const limiteConfigurado = Number(env.RETENTION_ROW_LIMIT_WARNING);
-      const rowWarningThreshold = Number.isFinite(limiteConfigurado) && limiteConfigurado > 0
+      const rowWarningThreshold = Number.isSafeInteger(limiteConfigurado) && limiteConfigurado > 0
         ? limiteConfigurado
         : undefined;
-      const resumo = await runRetention(env.DB, env.RETENTION_BUCKET ?? null, {
+      const resumo = await runRetention(env.DB, {
         now: new Date(controller.scheduledTime),
         ...(rowWarningThreshold ? { rowWarningThreshold } : {})
       });
@@ -32,10 +36,8 @@ export default {
         exportacaoPulada: resumo.exportacaoPulada,
         totalLinhas: resumo.totalLinhas
       }));
-    } catch (error) {
-      console.error("Scheduled retention failed", {
-        message: error instanceof Error ? error.message : "Erro desconhecido."
-      });
+    } catch {
+      console.error("Scheduled retention monitoring failed");
     }
   },
 };

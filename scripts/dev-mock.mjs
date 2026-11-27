@@ -23,9 +23,9 @@ const openBrowser = args[0] === "--open-browser" && process.platform === "win32"
 const local = JSON.parse(readFileSync(config,"utf8").replace(/^\s*\/\/.*$/gm,""));
 const db = local.d1_databases;
 if (db?.length !== 1 || db[0].binding !== "DB" ||
-    db[0].database_id !== "00000000-0000-4000-8000-000000000001" ||
-    db[0].database_name !== "agendas-pradosm-migracao-local" ||
-    db[0].remote === true || local.env || local.r2_buckets || local.kv_namespaces ||
+    db[0].database_id !== "00000000-0000-4000-8000-000000000003" ||
+    db[0].database_name !== "agendas-pradosm-v2-local" ||
+    db[0].migrations_dir !== "migrations-v2" || db[0].remote === true || local.env || local.r2_buckets || local.kv_namespaces ||
     local.services || local.durable_objects?.bindings?.some(b => b.remote || b.script_name)) {
   throw Error("Configuração local inesperada. Inicialização bloqueada.");
 }
@@ -53,7 +53,7 @@ const localFlags=["--local","--config",config,"--persist-to",state];
 console.log("Aplicando migrations no D1 LOCAL...");
 run(["d1","migrations","apply","DB",...localFlags]);
 const sqlFile=join(state,"seed-"+randomBytes(8).toString("hex")+".sql");
-writeFileSync(sqlFile,await buildMockSql(password),{flag:"wx",mode:0o600});
+writeFileSync(sqlFile,await buildMockSql(password,new Date(),{access:true,v2:true}),{flag:"wx",mode:0o600});
 try {
   run(["d1","execute","DB",...localFlags,"--file",sqlFile]);
 } finally {
@@ -62,7 +62,7 @@ try {
 const csv=join(state,"importacao-mock.csv");
 writeFileSync(csv,mockImportCsv(),"utf8");
 console.log("\nAmbiente LOCAL fictício — não use estas contas fora do localhost.");
-for(const user of MOCK_ACCOUNTS.filter(u=>!u.profile)) console.log("  "+user.login+" — "+user.name);
+for(const user of MOCK_ACCOUNTS) console.log("  "+user.login+" — "+user.name);
 console.log("Senha inicial comum: "+password);
 console.log("CSV de importação: "+csv);
 console.log("Dados persistidos em: "+state);

@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils";
 
 // Componente de propriedade do projeto, seguindo o padrao shadcn/ui.
 const variants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[5px] text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#90c8df] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "border border-blue-400 bg-blue-500 text-white hover:bg-blue-400",
-        secondary: "border border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700",
-        ghost: "text-slate-300 hover:bg-slate-800",
+        default: "border border-[#90c8df] bg-[#90c8df] text-[#101a23] hover:bg-[#b2d9e8]",
+        secondary: "border border-[#526777] bg-[#223443] text-slate-100 hover:bg-[#2c4254]",
+        ghost: "text-slate-300 hover:bg-[#223443]",
         danger: "border border-rose-500/50 bg-rose-600/15 text-rose-200 hover:bg-rose-600/25",
       },
       size: {
