@@ -31,3 +31,8 @@ Portar contrato, repositório e rotas da main, com escopo estável por ID, autor
 ## Lote de interface Avisos
 
 Canal da main incorporado à navegação V2, mantendo menu reordenável, identidade visual e escopo do perfil efetivo. Badge no menu, toasts, busca, paginação, leitura e reações; ações separadas por permissão. Conta com lojas atribuídas não pode publicar para todas nem escolher destinos fora do escopo. Leitores só com escopo global. Sessão que só tem Avisos direcionada ao canal. Realtime permanece desativado no V2; atualização por HTTP. Antigo sino retirado. Não executado build/Playwright neste lote. Migration 0011 ainda não aplicada nem integrada ao diretório executável.
+
+### Verificação local do lote de Avisos
+
+- `node --experimental-strip-types --test tests/unit/v2-avisos-sqlite.test.ts`: 2/2 aprovados em Node 22.16, com SQLite real, migrations 0001–0010 e proposta 0011; verificados os blobs exatos de notice-scope, proposta SQL e adaptador local. Isolamento global, vazio, uma/múltiplas lojas, destino legado não resolvido, alteração/reutilização de código de loja, preservação de leitura e integridade referencial; conta personalizada não herda privilégios do papel físico.
+- Validação específica de filtros e permissões, não valida o backend HTTP completo nem a interface. Sem CI, deploy ou alteração remota.
