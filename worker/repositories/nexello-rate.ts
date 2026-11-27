@@ -8,8 +8,9 @@ export async function reserveNexelloRequest(db: D1Database): Promise<boolean> {
     ON CONFLICT(fonte) DO UPDATE SET proxima_consulta_em=excluded.proxima_consulta_em
     WHERE nexello_limite_consulta.proxima_consulta_em <= unixepoch('now')
   `).run();
-  if (!result.success || (result.meta.changes !== 0 && result.meta.changes !== 1)) {
+  const changes = result.meta?.changes;
+  if (!result.success || (changes !== 0 && changes !== 1)) {
     throw new Error("NEXELLO_RESERVA_FALHOU");
   }
-  return result.meta.changes === 1;
+  return changes === 1;
 }

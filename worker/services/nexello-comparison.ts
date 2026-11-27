@@ -76,6 +76,6 @@ export async function compareNexelloPage(db: D1Database, page: NexelloPreviewPag
     WHERE p.protocolo IN (${protocols.map(() => "?").join(",")})
     LIMIT 501
   `).bind(...protocols).all<ComparisonLocalRow>();
-  if (!result.success || result.results.length > 500) throw new Error("NEXELLO_COMPARACAO_LIMITE");
+  if (!result.success || !Array.isArray(result.results) || result.results.length > 500) throw new Error("NEXELLO_COMPARACAO_LIMITE");
   return { ...page, rows: compareObservedRows(page.rows,result.results) };
 }
