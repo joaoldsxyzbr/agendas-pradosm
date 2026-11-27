@@ -94,9 +94,9 @@ export function sortAppointments<T extends SortableAppointment>(items: T[], sort
 export function endpointForDate(selected: string, today: string) {
   return selected === today ? "/api/store/today" : `/api/store/history/${encodeURIComponent(selected)}`;
 }
-export async function loadStoreAgenda(date: string, today: string) {
+export async function loadStoreAgenda(date: string, today: string, signal?: AbortSignal) {
   try {
-    return storeAgenda.parse(await apiFetch<unknown>(endpointForDate(date,today)));
+    return storeAgenda.parse(await apiFetch<unknown>(endpointForDate(date,today), { signal }));
   } catch (error) {
     // A API historica responde 404 para dias sem agenda; /today responde agenda:null.
     if (error instanceof ApiError && error.status === 404) return { agenda:null, appointments:[] } as StoreAgenda;
@@ -136,8 +136,8 @@ export async function patchManualSupplier(id: string, supplier: string) {
 export async function deleteManualSupplier(id: string) {
   await apiFetch<unknown>(`/api/store/appointments/${encodeURIComponent(id)}/manual`, { method:"DELETE" });
 }
-export async function getStoreAppointmentDetail(id: string) {
-  return storeAppointmentDetail.parse(await apiFetch<unknown>(`/api/store/appointments/${encodeURIComponent(id)}`));
+export async function getStoreAppointmentDetail(id: string, signal?: AbortSignal) {
+  return storeAppointmentDetail.parse(await apiFetch<unknown>(`/api/store/appointments/${encodeURIComponent(id)}`, { signal }));
 }
 export async function completeStoreDay(date: string) {
   return apiFetch<unknown>(`/api/store/agenda/${encodeURIComponent(date)}/complete`, {method:"POST"});
