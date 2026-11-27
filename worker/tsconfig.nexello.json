@@ -15,6 +15,10 @@
     "repositories/stores.ts",
     "repositories/presence.ts",
     "lib/presence.ts",
-    "services/retention.ts"
+    "services/retention.ts",
+    "repositories/diagnostics.ts",
+    "routes/diagnostics.ts",
+    "routes/admin-audit.ts",
+    "routes/admin-retention.ts"
   ]
 }
