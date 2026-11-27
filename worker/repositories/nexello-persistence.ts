@@ -26,7 +26,8 @@ const Batch=z.object({
   entries:z.array(Entry).min(1).max(50),
 }).strict().refine(value=>new Set(value.entries.map(row=>row.protocol)).size===value.entries.length);
 export type VerifiedNewBatch=z.input<typeof Batch>;
-export interface NexelloActor {id:string;sessionVersion:number;}
+export interface NexelloActor {id:string;sessionVersion:number;sessionKey:string;}
+const SessionKey=/^sid:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function sha256(value:unknown):Promise<string>{
   const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(value)));
   return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,"0")).join("");
@@ -38,7 +39,8 @@ const REVIEW_TTL_MS=10*60*1000;
 const MAX_PENDING_PER_ACTOR=10;
 const MAX_REVIEW_BYTES=262144;
 async function requireActor(db:D1Database,actor:NexelloActor):Promise<void>{
-  if(!Number.isSafeInteger(actor.sessionVersion)||actor.sessionVersion<1)denied();
+  if(!Number.isSafeInteger(actor.sessionVersion)||actor.sessionVersion<1||!SessionKey.test(actor.sessionKey)||!actor.sessionKey.startsWith("sid:"))denied();
+  if(await db.prepare("SELECT 1 FROM sessoes_revogadas WHERE session_key=?").bind(actor.sessionKey).first())denied();
   const access=await findEffectiveAccess(db,actor.id);
   if(!access||!access.active||access.sessionVersion!==actor.sessionVersion||access.scope.mode!=="all"||
      !access.permissions.has("importacao.ver")||!access.permissions.has("importacao.executar")||
@@ -51,9 +53,9 @@ async function canonicalBatch(batch:z.output<typeof Batch>){
   return {entries,hash};
 }
 
-type PendingReview={usuario_id:string;versao_sessao:number;hash_conteudo:string;conteudo:string;expira_em:string};
+type PendingReview={usuario_id:string;versao_sessao:number;chave_sessao:string|null;hash_conteudo:string;conteudo:string;expira_em:string};
 async function readPending(db:D1Database,id:string):Promise<PendingReview|null>{
-  return db.prepare("SELECT usuario_id,versao_sessao,hash_conteudo,conteudo,expira_em FROM nexello_revisoes_pendentes WHERE id=?")
+  return db.prepare("SELECT usuario_id,versao_sessao,chave_sessao,hash_conteudo,conteudo,expira_em FROM nexello_revisoes_pendentes WHERE id=?")
     .bind(id).first<PendingReview>();
 }
 
@@ -79,8 +81,8 @@ export async function prepareVerifiedReview(db:D1Database,actor:NexelloActor,
   if(new TextEncoder().encode(payload).byteLength>MAX_REVIEW_BYTES)throw new Error("NEXELLO_REVISAO_GRANDE");
   await pruneExpiredNexelloReviews(db,now);
   const expiresAt=new Date(now.getTime()+REVIEW_TTL_MS).toISOString();
-  const result=await db.prepare("INSERT INTO nexello_revisoes_pendentes(id,usuario_id,versao_sessao,hash_conteudo,conteudo,criado_em,expira_em) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM nexello_revisoes_pendentes WHERE usuario_id=? AND expira_em>?) < ?")
-    .bind(batch.reviewId,actor.id,actor.sessionVersion,hash,payload,now.toISOString(),expiresAt,actor.id,now.toISOString(),MAX_PENDING_PER_ACTOR).run();
+  const result=await db.prepare("INSERT INTO nexello_revisoes_pendentes(id,usuario_id,versao_sessao,hash_conteudo,conteudo,criado_em,expira_em,chave_sessao) SELECT ?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM nexello_revisoes_pendentes WHERE usuario_id=? AND expira_em>?) < ?")
+    .bind(batch.reviewId,actor.id,actor.sessionVersion,hash,payload,now.toISOString(),expiresAt,actor.sessionKey,actor.id,now.toISOString(),MAX_PENDING_PER_ACTOR).run();
   if(!result.success)throw new Error("NEXELLO_REVISAO_FALHOU");
   if(result.meta?.changes!==1)throw new Error("NEXELLO_REVISAO_LIMITE");
   return {reviewId:batch.reviewId,expiresAt,hash,entryCount:entries.length,storeId:batch.storeId,date:batch.date,entries};
@@ -98,7 +100,7 @@ export async function confirmPreparedReview(db:D1Database,actor:NexelloActor,rev
       return {reviewId,replayed:true};
     throw new Error("NEXELLO_REVISAO_INDISPONIVEL");
   }
-  if(draft.usuario_id!==actor.id||draft.versao_sessao!==actor.sessionVersion||
+  if(draft.usuario_id!==actor.id||draft.versao_sessao!==actor.sessionVersion||draft.chave_sessao!==actor.sessionKey||
     draft.expira_em<=now.toISOString()||draft.hash_conteudo!==expectedHash)
     throw new Error("NEXELLO_REVISAO_INDISPONIVEL");
   const batch=Batch.parse(JSON.parse(draft.conteudo) as unknown);
@@ -108,8 +110,8 @@ export async function confirmPreparedReview(db:D1Database,actor:NexelloActor,rev
 }
 export async function cancelPreparedReview(db:D1Database,actor:NexelloActor,reviewId:string):Promise<boolean>{
   Id.parse(reviewId);await requireActor(db,actor);
-  const result=await db.prepare("DELETE FROM nexello_revisoes_pendentes WHERE id=? AND usuario_id=? AND versao_sessao=?")
-    .bind(reviewId,actor.id,actor.sessionVersion).run();
+  const result=await db.prepare("DELETE FROM nexello_revisoes_pendentes WHERE id=? AND usuario_id=? AND versao_sessao=? AND chave_sessao=? AND NOT EXISTS(SELECT 1 FROM sessoes_revogadas WHERE session_key=?)")
+    .bind(reviewId,actor.id,actor.sessionVersion,actor.sessionKey,actor.sessionKey).run();
   if(!result.success)throw new Error("NEXELLO_REVISAO_FALHOU");
   return result.meta?.changes===1;
 }
@@ -158,9 +160,10 @@ async function persistVerifiedNewAppointments(
       ) AND EXISTS(
         SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id
         WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.codigo=d.filial_externa AND l.ativo=1 AND l.excluido_em IS NULL
-      ) AND EXISTS(SELECT 1 FROM nexello_revisoes_pendentes r WHERE r.id=? AND r.usuario_id=? AND r.versao_sessao=? AND r.hash_conteudo=? AND r.expira_em>?)
+      ) AND EXISTS(SELECT 1 FROM nexello_revisoes_pendentes r WHERE r.id=? AND r.usuario_id=? AND r.versao_sessao=? AND r.chave_sessao=? AND r.hash_conteudo=? AND r.expira_em>?)
+      AND NOT EXISTS(SELECT 1 FROM sessoes_revogadas WHERE session_key=?)
       THEN ? ELSE NULL END,?,?,?,?,'confirmada',?,?,0,?,?)
-    `).bind(actor.id,actor.sessionVersion,batch.externalCode,batch.storeId,batch.reviewId,actor.id,actor.sessionVersion,hash,at,batch.reviewId,
+    `).bind(actor.id,actor.sessionVersion,batch.externalCode,batch.storeId,batch.reviewId,actor.id,actor.sessionVersion,actor.sessionKey,hash,at,actor.sessionKey,batch.reviewId,
       actor.id,batch.date,batch.date,batch.storeId,hash,entries.length,at,at),
   ];
   if(batch.expectedAgenda){

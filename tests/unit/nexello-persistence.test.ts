@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { openLocalDatabase } from "../../scripts/local-sqlite.mjs";
 import { prepareVerifiedReview,confirmPreparedReview,cancelPreparedReview,pruneExpiredNexelloReviews,type VerifiedNewBatch } from "../../worker/repositories/nexello-persistence.ts";
 const now=new Date("2026-11-27T15:00:00Z");
-const actor={id:"u",sessionVersion:1};
+const actor={id:"u",sessionVersion:1,sessionKey:"sid:10000000-0000-4000-8000-000000000001"};
+const otherSession={...actor,sessionKey:"sid:10000000-0000-4000-8000-000000000002"};
 const base:Omit<VerifiedNewBatch,"reviewId"|"expectedAgenda">={storeId:"l",externalCode:"F01",date:"2026-11-27",
   entries:[{protocol:"123456",startTime:"08:00",endTime:"09:00",supplier:"Fictício",type:"Pedido",nfe:[],orders:["001"],externalState:"confirmed",evidence:"revisao_admin",evidenceHash:"a".repeat(64)}]};
 function fixture(){
@@ -48,11 +49,13 @@ test("draft is bound to author, session, hash, expiry and cancellation",async()=
   const f=fixture();
   try{
     const d=await prepareVerifiedReview(f.DB,actor,base,now);
-    await assert.rejects(confirmPreparedReview(f.DB,{id:"v",sessionVersion:1},d.reviewId,d.hash,now));
+    await assert.rejects(confirmPreparedReview(f.DB,{...otherSession,id:"v"},d.reviewId,d.hash,now));
     await assert.rejects(confirmPreparedReview(f.DB,actor,d.reviewId,"b".repeat(64),now));
+    await assert.rejects(confirmPreparedReview(f.DB,otherSession,d.reviewId,d.hash,now));
+    assert.equal(await cancelPreparedReview(f.DB,otherSession,d.reviewId),false);
     await assert.rejects(confirmPreparedReview(f.DB,actor,d.reviewId,d.hash,new Date(now.getTime()+600000)));
     await assert.rejects(f.DB.prepare("UPDATE nexello_revisoes_pendentes SET conteudo='{}'").run(),/NEXELLO_REVISAO_IMUTAVEL/);
-    assert.equal(await cancelPreparedReview(f.DB,{id:"v",sessionVersion:1},d.reviewId),false);
+    assert.equal(await cancelPreparedReview(f.DB,{...otherSession,id:"v"},d.reviewId),false);
     assert.equal(await cancelPreparedReview(f.DB,actor,d.reviewId),true);
     await assert.rejects(confirmPreparedReview(f.DB,actor,d.reviewId,d.hash,now));
     const expired=await prepareVerifiedReview(f.DB,actor,base,now);
@@ -95,5 +98,26 @@ test("bounded drafts, expiration and session revocation",async()=>{
     await assert.rejects(confirmPreparedReview(f.DB,actor,draft.reviewId,draft.hash,later));
     await assert.rejects(confirmPreparedReview(f.DB,{...actor,sessionVersion:2},draft.reviewId,draft.hash,later));
     assert.equal(await total(f.DB,"agendamentos"),0);
+  }finally{f.close();}
+});
+
+test("individual logout blocks confirmation even between validation and atomic batch",async()=>{
+  const f=fixture();
+  try{
+    const d=await prepareVerifiedReview(f.DB,actor,base,now);
+    const db={...f.DB,async batch(statements:D1PreparedStatement[]){
+      await f.DB.prepare("INSERT INTO sessoes_revogadas(session_key,expira_em) VALUES(?,?)")
+        .bind(actor.sessionKey,Math.floor(now.getTime()/1000)+3600).run();
+      return f.DB.batch(statements);
+    }};
+    await assert.rejects(confirmPreparedReview(db,actor,d.reviewId,d.hash,now));
+    assert.equal(await total(f.DB,"agendamentos"),0);
+    assert.equal(await total(f.DB,"sincronizacoes_nexello"),0);
+    assert.equal(await total(f.DB,"nexello_revisoes_pendentes"),1);
+    await assert.rejects(prepareVerifiedReview(f.DB,actor,base,now));
+    await assert.rejects(confirmPreparedReview(f.DB,otherSession,d.reviewId,d.hash,now));
+    const replacement=await prepareVerifiedReview(f.DB,otherSession,base,now);
+    await confirmPreparedReview(f.DB,otherSession,replacement.reviewId,replacement.hash,now);
+    assert.equal(await total(f.DB,"agendamentos"),1);
   }finally{f.close();}
 });

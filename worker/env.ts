@@ -20,6 +20,7 @@ export interface AppEnv {
     authUser?: AuthUser;
     sessionExpiresAt?: number;
     sessionVersion?: number;
+    sessionKey?: string;
     effectiveAccess?: EffectiveAccess;
   };
 }

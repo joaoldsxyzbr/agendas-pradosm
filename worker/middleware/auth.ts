@@ -38,6 +38,7 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const authUser=identity.user;
   if(identity.access)c.set("effectiveAccess",identity.access);
   c.set("sessionVersion",user.session_version);
+  c.set("sessionKey",key);
   // Cookies legados não têm identidade estável para revogar a renovação.
   // Permanecem válidos até expirar, mas exigem novo login para renovação.
   if (payload.sessionId && shouldRenewSession(payload)) {
