@@ -31,7 +31,7 @@ test("prepared confirmation commits exactly once and preserves existing local fi
     assert.equal(await total(f.DB,"nexello_revisoes_pendentes"),0);
     assert.equal(await total(f.DB,"agendamentos"),1);assert.equal(await total(f.DB,"auditoria"),1);
     const row=await f.DB.prepare("SELECT status,itens,volumes,paletes,carga_batida FROM agendamentos").first();
-    assert.deepEqual(row,{status:"aguardando",itens:null,volumes:null,paletes:null,carga_batida:null});
+    assert.deepEqual({...row},{status:"aguardando",itens:null,volumes:null,paletes:null,carga_batida:null});
     const evidence=await f.DB.prepare("SELECT fonte,hash_evidencia,hash_registro FROM nexello_evidencias").first();
     assert.equal(evidence.fonte,"revisao_admin");assert.equal(evidence.hash_evidencia,"a".repeat(64));
     assert.match(evidence.hash_registro,/^[0-9a-f]{64}$/);
