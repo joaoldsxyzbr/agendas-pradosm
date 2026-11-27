@@ -10,7 +10,7 @@ type Rule=[string,RegExp,RoutePolicy];
 const route=(method:string,path:string,policy:RoutePolicy):Rule=>[method,new RegExp("^"+path+"$"),policy];
 const A="/api/admin",S="/api/store";
 const RULES:Rule[]=[
-  route("GET",A+"/stores",rule(["lojas.ver","recebimento.ver","agendas.ver","importacao.ver","relatorios.ver"],"filtered-list")),
+  route("GET",A+"/stores",rule(["lojas.ver","recebimento.ver","agendas.ver","importacao.ver","relatorios.ver","avisos.publicar"],"filtered-list")),
   route("GET",A+"/stores/nexello-destinos",rule("lojas.ver","all-stores")),
   route("POST",A+"/stores/nexello-destinos",rule("lojas.editar","all-stores")),
   route("POST",A+"/stores",rule("lojas.criar","all-stores")),
@@ -44,6 +44,7 @@ const RULES:Rule[]=[
   route("GET",A+"/retention/status",rule("retencao.ver","all-stores")),
   route("POST",A+"/retention/run",rule("retencao.executar","all-stores")),
   route("POST",A+"/avisos",rule("avisos.publicar","notice-filter")),
+  route("GET",A+"/avisos/"+id+"/leitores",rule("avisos.leitores","all-stores")),
   route("GET",S+"/today",rule("conferencia.ver","selected-store")),
   route("GET",S+"/history(?:/"+id+")?",rule("conferencia.historico","selected-store")),
   route("POST",S+"/(?:today|agenda/"+id+")/manual",rule("conferencia.manual.criar","selected-store")),
@@ -55,6 +56,8 @@ const RULES:Rule[]=[
   route("POST",S+"/presence",rule("conferencia.ver","selected-store")),
   route("DELETE",S+"/presence",rule("conferencia.ver","selected-store")),
   route("GET","/api/avisos",rule("avisos.ver","notice-filter")),
+  route("POST","/api/avisos",rule("avisos.conversar","notice-filter")),
+  route("PUT","/api/avisos/"+id+"/reacao",rule("avisos.reagir","notice-filter")),
   route("POST","/api/avisos/(?:marcar-todos|"+id+"/lido)",rule("avisos.marcar_lido","notice-filter")),
   route("GET","/api/realtime(?:/config)?",rule(["recebimento.ver","conferencia.ver","agendas.ver","relatorios.ver"],"realtime")),
 ];

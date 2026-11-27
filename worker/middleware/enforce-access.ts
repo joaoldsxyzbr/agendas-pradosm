@@ -65,7 +65,7 @@ export const enforceAccess=createMiddleware<AppEnv>(async(c,next)=>{
     // As rotas de conferência ainda validam a loja selecionada e o papel operacional.
     c.set("authUser",{...user,papel:"conferente"});
   }
-  if(path==="/api/admin/avisos"&&access.scope.mode!=="all"){
+  if(method==="POST"&&path==="/api/admin/avisos"&&access.scope.mode!=="all"){
     const parsed=publicarAvisoSchema.safeParse(await c.req.raw.clone().json().catch(()=>null));
     const allowed=new Set(user.lojasDisponiveis?.map(s=>s.codigo)??[]);
     if(!parsed.success||!parsed.data.lojas?.length||parsed.data.lojas.some(code=>!allowed.has(code)))return deny();

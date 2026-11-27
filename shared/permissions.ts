@@ -16,7 +16,7 @@ export const PERMISSIONS = [
   "usuarios.ver", "usuarios.criar", "usuarios.editar", "usuarios.excluir",
   "usuarios.permissoes", "auditoria.ver", "diagnosticos.ver",
   "retencao.ver", "retencao.executar", "avisos.ver", "avisos.marcar_lido",
-  "avisos.publicar",
+  "avisos.publicar", "avisos.conversar", "avisos.reagir", "avisos.leitores",
 ] as const;
 export type Permission = typeof PERMISSIONS[number];
 export type PermissionOverride = { permission: Permission; effect: "allow" | "deny" };
@@ -46,14 +46,14 @@ const defaults: Record<AccessProfile, readonly Permission[]> = {
     "conferencia.concluir", "conferencia.historico", "conferencia.exportar",
     "agendas.ver", "agendas.editar", "agendas.historico",
     "importacao.ver", "importacao.executar", "importacao.substituir",
-    "relatorios.ver", "avisos.ver", "avisos.marcar_lido", "avisos.publicar",
+    "relatorios.ver", "avisos.ver", "avisos.marcar_lido", "avisos.publicar", "avisos.conversar", "avisos.reagir", "avisos.leitores",
   ],
-  visualizador: ["recebimento.ver", "relatorios.ver", "avisos.ver", "avisos.marcar_lido"],
+  visualizador: ["recebimento.ver", "relatorios.ver"],
   conferente: [
     "conferencia.ver", "conferencia.editar", "conferencia.manual.criar",
     "conferencia.manual.editar", "conferencia.manual.excluir",
     "conferencia.concluir", "conferencia.historico", "conferencia.exportar",
-    "avisos.ver", "avisos.marcar_lido",
+    "avisos.ver", "avisos.marcar_lido", "avisos.conversar", "avisos.reagir",
   ],
 };
 
