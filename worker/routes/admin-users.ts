@@ -7,6 +7,7 @@ import { CreateUserInput, UpdateUserInput } from "../../shared/api.ts";
 import { revokeRealtimeUser } from "../services/realtime.ts";
 import { findStoreById } from "../repositories/stores.ts";
 import {
+  type UserSummary,
   createUser,
   findUserById,
   listUsers,
@@ -44,7 +45,7 @@ adminUserRoutes.put("/:id/access",async c=>{
     return c.json(accessJson(result));
   }catch(error){return accessError(c,error);}
 });
-function userJson(user) {
+function userJson(user:UserSummary) {
   return {
     id: user.id,
     nome: user.nome,

@@ -16,6 +16,7 @@ export interface ComparisonLocalRow {
   ativo: number;
   status: string;
   status_dia: string;
+  digitacao_protegida: number;
 }
 function documentKey(values: readonly string[]): string {
   return JSON.stringify([...new Set(values)].sort());
@@ -59,7 +60,7 @@ export function compareObservedRows(rows: readonly NexelloPreviewRow[], local: r
     else if (candidates.length > 1) comparison = "multiple_local";
     else if (!candidate) comparison = "not_found";
     else if (candidate.origem !== "importado" || candidate.ativo !== 1 ||
-      candidate.status !== "aguardando" || candidate.status_dia !== "aberto") comparison = "protected_local";
+      candidate.status !== "aguardando" || candidate.status_dia !== "aberto" || candidate.digitacao_protegida !== 0) comparison = "protected_local";
     else comparison = matches(row,candidate) ? "same_fields" : "different_fields";
     return { ...row, comparison };
   });
@@ -82,7 +83,10 @@ export async function compareNexelloPage(db: D1Database, page: NexelloPreviewPag
   if (protocols.length > 100) throw new Error("NEXELLO_COMPARACAO_LIMITE");
   const result = await db.prepare(`
     SELECT p.protocolo,a.data_agenda,l.codigo,p.horario_inicio,p.horario_fim,
-      p.fornecedor,p.tipo,p.nfe,p.pedidos,p.origem,p.ativo,p.status,a.status_dia
+      p.fornecedor,p.tipo,p.nfe,p.pedidos,p.origem,p.ativo,p.status,a.status_dia,
+      CASE WHEN a.digitado_em IS NOT NULL OR EXISTS (
+        SELECT 1 FROM agenda_digitacao_fornecedor d WHERE d.agenda_id=a.id AND d.digitado_em IS NOT NULL
+      ) THEN 1 ELSE 0 END AS digitacao_protegida
     FROM agendamentos p JOIN agendas a ON a.id=p.agenda_id JOIN lojas l ON l.id=a.loja_id
     WHERE p.protocolo IN (${protocols.map(() => "?").join(",")})
     LIMIT 501

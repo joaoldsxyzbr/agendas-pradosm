@@ -25,6 +25,10 @@
     "lib/session.ts",
     "lib/password.ts",
     "lib/http.ts",
-    "lib/login-rate-limit.ts"
+    "lib/login-rate-limit.ts",
+    "repositories/users.ts",
+    "middleware/auth.ts",
+    "middleware/access-policy.ts",
+    "../shared/auth.ts"
   ]
 }

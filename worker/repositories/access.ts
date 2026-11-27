@@ -1,5 +1,6 @@
 // Resolução única de acesso, compartilhada pelas rotas e pela sessão.
 import { isAccessProfile, resolvePermissions, type AccessProfile, type Permission, type PermissionOverride, type StoreScope } from "../../shared/permissions.ts";
+import type { UserSummary } from "./users.ts";
 import { auditStatement } from "./audit.ts";
 
 export interface EffectiveAccess {
@@ -48,7 +49,7 @@ export function decodeAccess(row: {
 // Uma leitura consistente: configurações, vínculos e exceções no mesmo snapshot SQL.
 // Não concede privilégios caso a conta esteja inativa ou removida.
 const ACCESS_SELECT=`
-    SELECT u.id,u.nome,u.login,u.ativo,u.papel,u.loja_id,u.session_version,a.perfil,a.escopo,CASE WHEN a.usuario_id IS NULL THEN u.ativo ELSE a.ativo END AS ativo_efetivo,
+    SELECT u.id,u.nome,u.login,u.ativo,u.papel,u.loja_id,u.session_version,u.excluido_em,a.perfil,a.escopo,CASE WHEN a.usuario_id IS NULL THEN u.ativo ELSE a.ativo END AS ativo_efetivo,
       COALESCE((SELECT json_group_array(x.loja_id) FROM
         (SELECT loja_id FROM usuario_acesso_lojas WHERE usuario_id=u.id ORDER BY loja_id) x),'[]') AS lojas,
       COALESCE((SELECT json_group_array(json_object('permission',x.permissao,'effect',x.efeito)) FROM
@@ -63,7 +64,7 @@ export async function findEffectiveAccess(db: D1Database,userId:string,includeIn
 
 // Evita uma consulta D1 adicional por usuário e mantém a listagem sem hashes de senha.
 export async function listUsersWithAccess(db:D1Database){
-  const rows=await db.prepare(ACCESS_SELECT+" WHERE u.excluido_em IS NULL ORDER BY u.nome COLLATE NOCASE,u.id").all<Parameters<typeof decodeAccess>[0]&{id:string;nome:string;login:string;ativo:number}>();
+  const rows=await db.prepare(ACCESS_SELECT+" WHERE u.excluido_em IS NULL ORDER BY u.nome COLLATE NOCASE,u.id").all<Parameters<typeof decodeAccess>[0]&UserSummary>();
   if(!rows.success||!rows.results)throw new Error("ACESSO_LISTAGEM_FALHOU");
   return rows.results.map(row=>({user:row,access:decodeAccess(row)}));
 }
@@ -122,7 +123,8 @@ export async function saveAccessConfiguration(db:D1Database, actor:{id:string;se
     userId:actor.id,action:"usuario_acesso_atualizado",entity:"usuario",entityId:targetId,
     before:accessAudit(before),after:accessAudit(input),details:"Configuração de acesso atualizada.",createdAt:now,
   }));
-  await db.batch(statements);
+  const results=await db.batch(statements);
+  if(results.length!==statements.length||results.some(result=>!result.success))throw new Error("ACESSO_GRAVACAO_FALHOU");
   const after=await findEffectiveAccess(db,targetId,true);
   if(!after||after.sessionVersion!==expectedVersion+1)throw new Error("ACESSO_CONFLITO");
   return after;
