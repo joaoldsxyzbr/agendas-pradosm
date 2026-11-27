@@ -28,9 +28,11 @@ export interface NexelloAppointment {
 export const NEXELLO_UNAVAILABLE_FIELDS = ["items", "volumes", "pallets", "cargaBatida", "csvFields"] as const;
 
 export class NexelloNormalizationError extends Error {
-  constructor(readonly field: string) {
+  readonly field: string;
+  constructor(field: string) {
     super("Campo Nexello inválido: " + field);
     this.name = "NexelloNormalizationError";
+    this.field = field;
   }
 }
 
