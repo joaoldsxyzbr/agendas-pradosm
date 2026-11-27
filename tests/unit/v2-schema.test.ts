@@ -66,8 +66,15 @@ test("V2 protects external state, manual entries, CD and referential integrity",
     assert.equal(db.prepare("SELECT status FROM agendamentos WHERE id='p'").get()?.status,"recebido");
     assert.throws(() => db.exec("UPDATE agendamentos SET origem='manual' WHERE id='p'"), /NEXELLO_VINCULO_MANUAL/);
     assert.throws(() => db.exec("UPDATE agendamento_nexello SET agendamento_id='q' WHERE agendamento_id='p'"), /NEXELLO_VINCULO_IMUTAVEL/);
-    assert.throws(() => db.exec("INSERT INTO nexello_destinos(filial_externa,loja_id,criado_por,criado_em) VALUES('CD','l','u','t')"), /CHECK constraint/);
-    db.exec("INSERT INTO nexello_destinos(filial_externa,doca_externa,loja_id,criado_por,criado_em) VALUES('CD','01','l','u','t')");
+    assert.throws(() => db.exec("INSERT INTO nexello_destinos(filial_externa,loja_id,criado_por,criado_em) VALUES('CD','l','u','t')"), /NEXELLO_DESTINO_INVALIDO/);
+    assert.throws(() => db.exec("INSERT INTO nexello_destinos(filial_externa,doca_externa,loja_id,criado_por,criado_em) VALUES('CD','01','l','u','t')"), /NEXELLO_DESTINO_INVALIDO/);
+    db.exec("INSERT INTO lojas(id,codigo,nome,criado_em,atualizado_em) VALUES('cd','CD DOCA 01','CD','t','t')");
+    db.exec("INSERT INTO nexello_destinos(filial_externa,doca_externa,loja_id,criado_por,criado_em) VALUES('CD','01','cd','u','t')");
+    assert.throws(() => db.exec("UPDATE nexello_destinos SET loja_id='l' WHERE filial_externa='CD'"), /NEXELLO_DESTINO_IMUTAVEL/);
+    assert.throws(() => db.exec("DELETE FROM agendamento_nexello WHERE agendamento_id='p'"), /NEXELLO_VINCULO_IMUTAVEL/);
+    assert.throws(() => db.prepare(link.sourceSQL.replace("INSERT INTO","INSERT OR REPLACE INTO")).run("p","desconhecido","relatorio_60",h), /NEXELLO_VINCULO_IMUTAVEL/);
+    assert.throws(() => db.exec("DELETE FROM sincronizacoes_nexello WHERE id='s'"), /NEXELLO_REVISAO_FINALIZADA/);
+    assert.throws(() => db.exec("INSERT OR REPLACE INTO sincronizacoes_nexello SELECT * FROM sincronizacoes_nexello WHERE id='s'"), /NEXELLO_REVISAO_FINALIZADA/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM agendamentos WHERE protocolo='123456'").get()?.n,2);
     assert.throws(() => db.exec("UPDATE usuarios SET ativo=0 WHERE id='u'"), /ULTIMO_ADMIN_ATIVO/);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);

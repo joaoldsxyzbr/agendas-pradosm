@@ -12,7 +12,7 @@ export async function listNexelloDestinations(db:D1Database,actor:Actor):Promise
   const result=await db.prepare("SELECT d.filial_externa,d.doca_externa,d.loja_id,l.codigo,l.nome,l.ativo,l.excluido_em,d.criado_em FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id ORDER BY d.filial_externa,d.doca_externa LIMIT 501").all<DestinationRow>();
   if(!result.success||!result.results||result.results.length>500)throw new Error("NEXELLO_DESTINOS_LIMITE");
   return result.results.map(row=>({externalCode:row.filial_externa,dock:row.doca_externa,storeId:row.loja_id,
-    storeCode:row.codigo,storeName:row.nome,active:row.ativo===1&&row.excluido_em===null&&(row.doca_externa!==''||row.codigo===row.filial_externa),createdAt:row.criado_em}));
+    storeCode:row.codigo,storeName:row.nome,active:row.ativo===1&&row.excluido_em===null&&(row.doca_externa===''?row.codigo===row.filial_externa:row.filial_externa==='CD'&&row.codigo==='CD DOCA '+row.doca_externa),createdAt:row.criado_em}));
 }
 /** Explicit administrator decision, identical code only. No silent remapping. */
 export async function linkSameCodeDestination(db:D1Database,actor:Actor,storeId:string,now=new Date()):Promise<{created:boolean}>{
