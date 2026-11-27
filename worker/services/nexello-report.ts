@@ -31,7 +31,7 @@ export class NexelloReportError extends Error {
 async function readJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new NexelloReportError("RESPOSTA_INVALIDA");
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const decoder = new TextDecoder();
   let bytes = 0;
   let text = "";
   try {
@@ -45,6 +45,7 @@ async function readJson(response: Response): Promise<unknown> {
       text += decoder.decode(chunk.value, { stream: true });
     }
     text += decoder.decode();
+    if (text.includes("\uFFFD")) throw new NexelloReportError("RESPOSTA_INVALIDA");
     return JSON.parse(text) as unknown;
   } catch (error: unknown) {
     if (error instanceof NexelloReportError) throw error;
