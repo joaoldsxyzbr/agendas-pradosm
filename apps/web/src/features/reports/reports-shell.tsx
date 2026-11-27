@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const panel = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4";
+const panel = "min-w-0 rounded-md border border-[#344956] bg-[#192734] p-4 md:p-5";
 
 const REPORT_HELP: Record<string, string> = {
   "Registros no período": "Total de registros ativos, incluindo os importados e os manuais. Com agendamento exclui os registros manuais; aguardando é um status já incluído no total.",
@@ -44,7 +44,7 @@ export function HelpTip({ title }: { title: string }) {
       <Info size={13} aria-hidden="true" />
     </button>
     {open && <span role="tooltip" onClick={event => event.stopPropagation()}
-      className="absolute left-1/2 top-full z-30 mt-1.5 w-60 -translate-x-1/2 rounded-md border border-[#48617b] bg-[#0f1a2b] p-2.5 text-[11px] font-normal leading-snug text-slate-300 shadow-xl">
+      className="absolute left-1/2 top-full z-30 mt-1.5 w-60 -translate-x-1/2 rounded-md border border-[#526777] bg-[#101a23] p-2.5 text-xs font-normal leading-snug text-slate-300 shadow-xl">
       {text}
     </span>}
   </span>;
@@ -52,8 +52,8 @@ export function HelpTip({ title }: { title: string }) {
 
 export function Card({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return <section className={panel + " " + className}>
-    <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
-      <h3 className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-white">{title}<HelpTip title={title} /></h3>
+    <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
+      <h3 className="flex min-w-0 items-center gap-1.5 text-base font-semibold text-white">{title}<HelpTip title={title} /></h3>
       {action}
     </div>
     {children}
@@ -63,7 +63,7 @@ export function Card({ title, action, children, className = "" }: { title: strin
 export function Panel({ title, hint, actions, children }: { title: string; hint: string; actions?: ReactNode; children: ReactNode }) {
   return <section className={panel}>
     <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="flex items-center gap-1.5 text-base font-bold text-white">{title}<HelpTip title={title} /></h2><p className="mt-1 text-xs text-slate-400">{hint}</p></div>
+      <div><h2 className="flex items-center gap-1.5 text-base font-semibold text-white">{title}<HelpTip title={title} /></h2><p className="mt-1 text-xs text-slate-400">{hint}</p></div>
       {actions}
     </header>
     {children}
@@ -78,10 +78,10 @@ export function ReportDialog({ title, description, onClose, children }: { title:
     return () => { if (dialog?.open) dialog.close(); };
   }, []);
   return <dialog ref={ref} aria-label={title} onCancel={onClose}
-    className="fixed inset-0 m-auto max-h-[88vh] w-[min(1080px,calc(100vw-20px))] overflow-y-auto rounded-xl border border-[#48617b] bg-[#142338] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
-    <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[#344d69] bg-[#142338] px-5 py-4">
+    className="fixed inset-0 m-auto max-h-[88vh] w-[min(1080px,calc(100vw-20px))] overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
+    <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-[#344956] bg-[#192734] px-5 py-4">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400">Relatório Gerencial</p>
+        <p className="text-xs font-medium text-slate-400">Relatório Gerencial</p>
         <h2 className="mt-1 text-lg font-bold">{title}</h2>
         <p className="mt-0.5 text-xs text-slate-400">{description}</p>
       </div>

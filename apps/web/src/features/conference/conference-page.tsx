@@ -88,8 +88,8 @@ export function ManualSupplierDialog({ target, api, onClose, onSaved, onDeleted 
   return <dialog ref={ref} aria-labelledby="manual-supplier-heading"
     onCancel={event => { if (busy) { event.preventDefault(); return; } onClose(); }}
     onClick={event => { if (event.target === ref.current && !busy) onClose(); }}
-    className="m-auto w-[min(94vw,460px)] rounded-xl border border-[#45617c] bg-[#162538] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
-    <div className="flex items-center justify-between gap-3 border-b border-[#34516d] px-4 py-3">
+    className="m-auto w-[min(94vw,460px)] rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    <div className="flex items-center justify-between gap-3 border-b border-[#344956] px-4 py-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Recebimento</p>
         <h2 id="manual-supplier-heading" className="text-base font-bold">
@@ -115,7 +115,7 @@ export function ManualSupplierDialog({ target, api, onClose, onSaved, onDeleted 
       <label htmlFor="manual-supplier-name" className="block text-xs font-semibold text-slate-200">Nome do fornecedor</label>
       <input id="manual-supplier-name" autoFocus type="text" required maxLength={160} value={supplier}
         disabled={busy} onChange={event => { setSupplier(event.target.value); mutation.reset(); }}
-        className="h-9 w-full rounded-md border border-slate-600 bg-[#101e30] px-3 text-xs text-white focus-visible:outline-2 focus-visible:outline-sky-300" />
+        className="h-9 w-full rounded-md border border-slate-600 bg-[#131c25] px-3 text-xs text-white focus-visible:outline-2 focus-visible:outline-[#90c8df]" />
       {message && <p role="alert" className="text-xs text-rose-300">{message}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {editing && target.mode === "edit" && <Button type="button" size="sm" variant="danger" disabled={busy}
@@ -149,8 +149,8 @@ export function AppointmentDetailsDialog({ appointmentId, getDetail, onClose }: 
   return <dialog ref={ref} aria-labelledby="appointment-details-heading"
     onCancel={event => { if (query.isPending) { event.preventDefault(); return; } onClose(); }}
     onClick={event => { if (event.target === ref.current && !query.isPending) onClose(); }}
-    className="m-auto max-h-[min(92dvh,860px)] w-[min(94vw,640px)] overflow-y-auto rounded-xl border border-[#45617c] bg-[#162538] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#34516d] bg-[#1a2b40] px-4 py-3">
+    className="m-auto max-h-[min(92dvh,860px)] w-[min(94vw,640px)] overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#344956] bg-[#223443] px-4 py-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Recebimento</p>
         <h2 id="appointment-details-heading" className="text-base font-bold">Detalhes do agendamento</h2>
@@ -176,31 +176,31 @@ export function AppointmentDetailsDialog({ appointmentId, getDetail, onClose }: 
             ["Volumes", show(item.volumes)],
             ["Paletes", show(item.pallets)],
             ["Carga batida", show(item.cargaBatida)],
-          ] as const).map(([label, value]) => <div key={label} className="rounded-md border border-[#37516b] bg-[#20334c] p-2">
+          ] as const).map(([label, value]) => <div key={label} className="rounded-md border border-[#344956] bg-[#223443] p-2">
             <dt className="text-[10px] uppercase tracking-wide text-slate-400">{label}</dt>
             <dd className="break-words text-xs text-white">{value}</dd>
           </div>)}
         </dl>
         <div className="grid gap-3 sm:grid-cols-2">
           {([["NF-e", item.nfe], ["Pedidos", item.orders]] as const).map(([title, values]) => <section key={title}
-            aria-label={title} className="rounded-md border border-[#37516b] bg-[#20334c] p-3">
+            aria-label={title} className="rounded-md border border-[#344956] bg-[#223443] p-3">
             <h3 className="text-xs font-semibold text-slate-100">{title}</h3>
             {values.length ? <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-300">
               {values.map(value => <li key={value}>{value}</li>)}
-            </ul> : <p className="mt-1 text-[11px] text-slate-400">{title === "NF-e" ? "Nenhuma NF-e informada." : "Nenhum pedido informado."}</p>}
+            </ul> : <p className="mt-1 text-xs text-slate-400">{title === "NF-e" ? "Nenhuma NF-e informada." : "Nenhum pedido informado."}</p>}
           </section>)}
         </div>
-        <section aria-label="Histórico de alterações" className="rounded-md border border-[#37516b] bg-[#20334c] p-3">
+        <section aria-label="Histórico de alterações" className="rounded-md border border-[#344956] bg-[#223443] p-3">
           <h3 className="text-xs font-semibold text-slate-100">Histórico de alterações</h3>
           {item.history.length ? <ul className="mt-1 space-y-1.5">
             {item.history.map(entry => <li key={entry.id} className="text-xs text-slate-300">
               <strong className="block text-white">
                 {displayStatus(entry.statusAnterior)} → {displayStatus(entry.statusNovo, entry.observation)}
               </strong>
-              <span className="text-[11px] text-slate-400">{entry.usuario.nome}</span>
-              {entry.observation && <span className="block text-[11px] text-amber-200">Obs.: {entry.observation}</span>}
+              <span className="text-xs text-slate-400">{entry.usuario.nome}</span>
+              {entry.observation && <span className="block text-xs text-amber-200">Obs.: {entry.observation}</span>}
             </li>)}
-          </ul> : <p className="mt-1 text-[11px] text-slate-400">Nenhuma alteração de status registrada.</p>}
+          </ul> : <p className="mt-1 text-xs text-slate-400">Nenhuma alteração de status registrada.</p>}
         </section>
       </>}
     </div>
@@ -289,24 +289,24 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
     if(inactive)return;
     patch.mutate({kind:"observation",observation:null});
   };
-  return <tbody data-testid={`conference-row-${item.id}`} className="border-b border-[#2c4258] last:border-0">
+  return <tbody data-testid={`conference-row-${item.id}`} className="border-b border-[#344956] last:border-0">
     <tr className="align-middle">
-      <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] tabular-nums text-slate-300">
+      <td className="whitespace-nowrap px-2.5 py-2 text-xs tabular-nums text-slate-300">
         {item.startTime||item.endTime ? <>{item.startTime}{item.endTime ? "–"+item.endTime : ""}</> : "—"}
         {day && <span className="sr-only">Agenda de {day}</span>}
       </td>
-      <td className="px-2.5 py-1.5">
+      <td className="px-2.5 py-2">
         <div className="flex items-center gap-1.5">
-          <strong className="min-w-0 truncate text-xs text-slate-50" title={item.supplier}>{item.supplier}</strong>
+          <strong className="min-w-0 truncate text-sm text-slate-50" title={item.supplier}>{item.supplier}</strong>
           {item.origin==="manual" && <span className="shrink-0 text-[10px] text-sky-300">Fornecedor sem agenda</span>}
         </div>
       </td>
-      <td className="whitespace-nowrap px-2.5 py-1.5">
+      <td className="whitespace-nowrap px-2.5 py-2">
         <StatusBadge tone={item.status==="recebido"?"success":item.status==="nao_chegou"||item.status==="recusado"?"danger":"warning"}>
           {displayStatus(item.status,item.observation)}
         </StatusBadge>
       </td>
-      <td className="w-[196px] min-w-[196px] px-2.5 py-1.5">
+      <td className="w-[196px] min-w-[196px] px-2.5 py-2">
         <div className="flex w-max flex-nowrap items-center gap-1">
           {!readOnly && <>
             {canEditStatus&&<><Button size="icon" className="h-7 w-7" variant={item.status==="recebido"?"default":"secondary"} disabled={inactive}
@@ -328,40 +328,40 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
               <Trash2 size={13} aria-hidden="true" />
             </Button>}
           </>}
-          {(readOnly||!canEditStatus) && <Button size="sm" variant="secondary" className="h-7 px-2 text-[11px]" aria-label={`Detalhes de ${item.supplier}`}
+          {(readOnly||!canEditStatus) && <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" aria-label={`Detalhes de ${item.supplier}`}
             onClick={() => onOpenDetails(item.id)}>Ver detalhes</Button>}
         </div>
       </td>
-      <td className="px-2.5 py-1.5">
-        <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-200">
+      <td className="px-2.5 py-2">
+        <label className="inline-flex items-center gap-1.5 text-xs text-slate-200">
           <input aria-label={`Trocas de ${item.supplier}`} type="checkbox" className="size-4 accent-sky-500"
             checked={item.hasExchanges} disabled={inactive}
             onChange={event=>patch.mutate({kind:"exchanges",hasExchanges:event.target.checked})}/>Trocas
         </label>
       </td>
-      <td className="w-[220px] min-w-[220px] max-w-[220px] px-2.5 py-1.5">
+      <td className="w-[220px] min-w-[220px] max-w-[220px] px-2.5 py-2">
         {item.observation
           ? (!readOnly && canEditStatus
               ? <button type="button" disabled={inactive} onClick={openNote}
                   title={item.observation} aria-label={`Observação de ${item.supplier}`}
-                  className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-[11px] text-amber-300 hover:text-amber-200">
+                  className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-xs text-amber-300 hover:text-amber-200">
                   Obs.: {item.observation}
                 </button>
-              : <span className="block w-[200px] max-w-full truncate whitespace-nowrap text-[11px] text-amber-300"
+              : <span className="block w-[200px] max-w-full truncate whitespace-nowrap text-xs text-amber-300"
                   title={item.observation}>Obs.: {item.observation}</span>)
           : (!readOnly && canEditStatus
               ? <button type="button" disabled={inactive} onClick={openNote}
                   title={`Adicionar observação a ${item.supplier}`} aria-label={`Observação de ${item.supplier}`}
-                  className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-[11px] text-slate-500 hover:text-slate-300">
+                  className="block w-[200px] max-w-full truncate whitespace-nowrap text-left text-xs text-slate-500 hover:text-slate-300">
                   —
                 </button>
-              : <span className="text-[11px] text-slate-500">—</span>)}
+              : <span className="text-xs text-slate-500">—</span>)}
       </td>
     </tr>
     {(patch.isError || ((reasonOpen || noteOpen) && !readOnly)) && <tr>
       <td colSpan={6} className="px-2.5 pb-2.5">
         {patch.isError && <p role="alert" className="text-xs text-rose-300">{errorText(patch.error)}</p>}
-        {reasonOpen && !readOnly && <section aria-label={`Motivo de ${item.supplier}`} className="space-y-2 rounded-lg border border-amber-500/40 bg-[#20334a] p-3">
+        {reasonOpen && !readOnly && <section aria-label={`Motivo de ${item.supplier}`} className="space-y-2 rounded-lg border border-amber-500/40 bg-[#223443] p-3">
           <p className="text-xs font-semibold text-slate-200">Motivo obrigatório</p>
           <div role="group" aria-label={`Motivo de ${item.supplier}`} className="flex flex-wrap gap-1.5">
             {reasonOptions.map(value=><Button key={value} type="button" size="sm" className="h-8"
@@ -372,14 +372,14 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
           </div>
           {reason==="Outros" && <label className="block text-xs text-slate-200">Descreva o motivo
             <textarea maxLength={242} rows={2} value={other} onChange={event=>setOther(event.target.value)}
-              className="mt-1 block w-full rounded-md border border-[#46647c] bg-[#101e30] p-2 text-xs"/>
+              className="mt-1 block w-full rounded-md border border-[#526777] bg-[#131c25] p-2 text-xs"/>
           </label>}
           <div className="flex gap-2">
             <Button size="sm" disabled={patch.isPending||!reason||(reason==="Outros"&&!other.trim())} onClick={sendReason}>Confirmar motivo</Button>
             <Button size="sm" variant="secondary" disabled={patch.isPending} onClick={()=>{setReasonOpen(false);setReason("");setOther("");}}>Cancelar</Button>
           </div>
         </section>}
-        {noteOpen && !readOnly && <section aria-label={`Observação de ${item.supplier}`} className="space-y-2 rounded-lg border border-sky-500/40 bg-[#203650] p-3">
+        {noteOpen && !readOnly && <section aria-label={`Observação de ${item.supplier}`} className="space-y-2 rounded-lg border border-sky-500/40 bg-[#223443] p-3">
           <p className="text-xs font-semibold text-slate-100">
             Observação — {item.supplier} <span className="font-normal text-slate-400">({item.status==="nao_chegou"?"obrigatória":"opcional"})</span>
           </p>
@@ -395,7 +395,7 @@ export function AppointmentRow({ item, readOnly, day, agendaQueryKey, api, onEdi
           {note==="Outros" && <label className="block text-xs text-slate-200">Descreva o motivo
             <textarea maxLength={242} rows={2} value={noteCustom} disabled={inactive}
               onChange={event=>{setNoteCustom(event.target.value);setNoteError("");}}
-              className="mt-1 block w-full rounded-md border border-[#46647c] bg-[#101e30] p-2 text-xs"/>
+              className="mt-1 block w-full rounded-md border border-[#526777] bg-[#131c25] p-2 text-xs"/>
           </label>}
           {noteError && <p role="alert" className="text-xs text-rose-300">{noteError}</p>}
           <div className="flex flex-wrap gap-2">
@@ -423,7 +423,7 @@ function CompleteDayDialog({ date, busy, error, onConfirm, onClose }: {
   return <dialog ref={ref} aria-label="Confirmar conclusão do dia"
     onCancel={event => { if (busy) { event.preventDefault(); return; } onClose(); }}
     onClick={event => { if (event.target === ref.current && !busy) onClose(); }}
-    className="m-auto w-[min(94vw,460px)] rounded-xl border border-[#45617c] bg-[#162538] p-4 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    className="m-auto w-[min(94vw,460px)] rounded-md border border-[#526777] bg-[#192734] p-4 text-slate-100 shadow-2xl backdrop:bg-black/75">
     <p className="text-sm font-bold text-amber-100">Concluir a agenda de {formatDay(date)}?</p>
     <p className="mt-2 text-xs text-slate-300">Após a conclusão, os registros não poderão mais ser editados pelo conferente.</p>
     {error && <p role="alert" className="mt-3 text-xs text-rose-200">{error}</p>}
@@ -507,13 +507,13 @@ export function ConferencePage(){
     }
   };
 
-  return <section aria-label="Conferência" className="mx-auto max-w-[1430px] space-y-4">
+  return <section aria-label="Conferência" className="mx-auto max-w-[1530px] min-w-0 space-y-5">
     <PageHeader eyebrow="Operação da loja" title="Conferência de recebimentos"
       description="Consulte os fornecedores, atualize o recebimento e acompanhe a operação por data."
       actions={<div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex h-9 items-center rounded-md border border-[#45617c] bg-[#1b3047]">
+        <div className="inline-flex h-9 items-center rounded-md border border-[#526777] bg-[#223443]">
           <button className="grid size-9 place-items-center" aria-label="Dia anterior" disabled={!canHistory} onClick={()=>changeDate(shiftDay(date,-1))}><ChevronLeft size={17}/></button>
-          <label className="flex items-center gap-1 border-x border-[#45617c] px-2 text-xs text-slate-200">
+          <label className="flex items-center gap-1 border-x border-[#526777] px-2 text-xs text-slate-200">
             <CalendarDays size={14} aria-hidden="true"/>
             <input aria-label="Data da conferência" type="date" className="w-[121px] bg-transparent text-xs [color-scheme:dark]" value={date} disabled={!canHistory}
               onChange={event=>{if(event.target.value)changeDate(event.target.value);}}/>
@@ -530,7 +530,7 @@ export function ConferencePage(){
     {pdfError && <p role="alert" className="rounded-lg border border-rose-500/40 p-3 text-xs text-rose-200">{pdfError}</p>}
     {query.isPending && <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-        {Array.from({ length: 5 }, (_, index) => <div key={index} className="flex items-center gap-2 rounded-md border border-[#36516d] bg-[#1a2c41] px-2.5 py-1.5">
+        {Array.from({ length: 5 }, (_, index) => <div key={index} className="flex min-h-[72px] items-center gap-3 rounded-md border border-[#344956] bg-[#192734] px-3 py-3">
           <Skeleton className="size-5 rounded-md" />
           <div className="space-y-1"><Skeleton className="h-2 w-14" /><Skeleton className="h-3.5 w-8" /></div>
         </div>)}
@@ -540,13 +540,13 @@ export function ConferencePage(){
     {query.isError && <div role="alert" className="rounded-lg border border-rose-500/40 p-4 text-xs text-rose-200">
       Não foi possível carregar a agenda. <Button size="sm" variant="secondary" onClick={()=>void query.refetch()}>Tentar novamente</Button>
     </div>}
-    {!query.isPending && !query.isError && !agenda && <div className="rounded-xl border border-[#36516d] bg-[#192c41] p-6 text-sm">
+    {!query.isPending && !query.isError && !agenda && <div className="rounded-md border border-[#344956] bg-[#192734] p-6 text-sm">
       <strong>Nenhuma agenda em {formatDay(date)}.</strong>
       <p className="mt-2 text-xs text-slate-400">A agenda aparecerá depois que o administrador importar o arquivo.</p>
     </div>}
     {agenda && <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-slate-400">{agenda.storeCode} — {agenda.storeName} · {formatDay(date)}</span>
+        <span className="text-sm text-slate-300"><strong className="font-semibold text-white">{agenda.storeCode} — {agenda.storeName}</strong> · {formatDay(date)}</span>
         <StatusBadge tone={readOnly?"success":"warning"}>{readOnly?"Dia concluído":"Em aberto"}</StatusBadge>
       </div>
       <div aria-label="Resumo da agenda" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
@@ -556,40 +556,40 @@ export function ConferencePage(){
           ["Recebidos",metrics.recebido,CheckCircle2],
           ["Não recebidos",metrics.naoChegou,Ban],
           ["Trocas",metrics.trocas,ArrowLeftRight],
-        ] as const).map(([label,value,Icon])=><div key={label} className="flex items-center gap-2 rounded-md border border-[#36516d] bg-[#1a2c41] px-2.5 py-1.5">
+        ] as const).map(([label,value,Icon])=><div key={label} className="flex min-h-[72px] items-center gap-3 rounded-md border border-[#344956] bg-[#192734] px-3 py-3">
           <Icon size={14} className="shrink-0 text-sky-300"/>
-          <div className="min-w-0"><span className="block text-[10px] leading-tight text-slate-300">{label}</span>
-            <strong className="block text-base font-bold leading-tight text-white tabular-nums">{value}</strong>
+          <div className="min-w-0"><span className="block text-xs leading-tight text-slate-300">{label}</span>
+            <strong className="block text-2xl font-semibold leading-tight text-white tabular-nums">{value}</strong>
           </div>
           <small className="ml-auto text-[10px] text-slate-400 tabular-nums">{label==="Total"?"100% do dia":pct(value)+"%"}</small>
         </div>)}
       </div>
-      <section className="space-y-2 rounded-xl border border-[#36516d] bg-[#142438] p-2.5 sm:p-3">
+      <section className="space-y-2 rounded-md border border-[#344956] bg-[#192734] p-2.5 sm:p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-sm font-bold text-white">Agenda do dia</h2>
+          <div><h2 className="text-base font-semibold text-white">Agenda do dia</h2>
             <p className="text-xs text-slate-400">Fornecedores agendados para recebimento.</p></div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <label className="relative min-w-0">
               <Search aria-hidden="true" size={14} className="absolute top-2.5 left-2 text-slate-400"/>
               <input aria-label="Pesquisar fornecedor ou protocolo" type="search" placeholder="Pesquisar fornecedor ou protocolo"
-                className="h-9 w-full rounded-md border border-[#3e5874] bg-[#101e30] pr-2 pl-7 text-xs text-white sm:w-56"
+                className="h-9 w-full rounded-md border border-[#526777] bg-[#131c25] pr-2 pl-7 text-xs text-white sm:w-56"
                 value={search} onChange={event=>setSearch(event.target.value)}/>
             </label>
-            {!readOnly && canCreate && <Button size="sm" variant="secondary" className="border-amber-400 ring-2 ring-amber-400/60"
+            {!readOnly && canCreate && <Button size="sm" variant="secondary" className="border-amber-400/70 text-amber-200"
               onClick={()=>setManualTarget({mode:"create"})}><Plus size={13}/>Fornecedor sem agenda</Button>}
           </div>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-[#36516d]" aria-label="Fornecedores">
+        <div className="overflow-x-auto rounded-lg border border-[#344956]" aria-label="Fornecedores">
           <table className="w-full min-w-[760px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-[#36516d] bg-[#16283c] text-[11px] uppercase tracking-wide text-slate-400">
+              <tr className="border-b border-[#344956] bg-[#223443] text-xs text-slate-300">
                 {sortableColumns.map(column=>{
                   const ariaSort=!sort||sort.key!==column.key ? "none"
                     : sort.direction==="ascending" ? "ascending" : "descending";
                   return <th key={column.key} scope="col" aria-sort={ariaSort}
                     className={`whitespace-nowrap px-2.5 py-2 font-semibold ${column.width}`}>
                     <button type="button" title={`Ordenar por ${column.label}`}
-                      className={`flex w-full items-center gap-1 uppercase ${ariaSort==="none" ? "hover:text-slate-100" : "text-slate-100"}`}
+                      className={`flex w-full items-center gap-1 ${ariaSort==="none" ? "hover:text-slate-100" : "text-slate-100"}`}
                       onClick={()=>setSort(current=>nextAgendaSort(current,column.key))}>
                       {column.label}
                       {ariaSort==="ascending" && <ArrowUp size={12} aria-hidden="true"/>}

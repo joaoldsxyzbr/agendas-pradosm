@@ -13,9 +13,9 @@ import {
   type Delta, type Grouped, type Occurrences, type OccurrenceType, type Supplier, type ReportFilters, type SemAgendaSupplier, type Totals,
 } from "./model";
 
-const panel = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-4 shadow-lg md:p-5";
-const input = "h-9 w-full min-w-0 rounded-md border border-[#48617b] bg-[#192d46] px-3 text-xs text-white outline-none focus-visible:border-sky-400 [color-scheme:dark]";
-const heads = "px-3 py-2.5 text-left text-[11px] font-semibold text-slate-300";
+const panel = "min-w-0 rounded-md border border-[#344956] bg-[#192734] p-4 md:p-5";
+const input = "h-9 w-full min-w-0 rounded-md border border-[#526777] bg-[#223443] px-3 text-xs text-white outline-none focus-visible:border-sky-400 [color-scheme:dark]";
+const heads = "px-3 py-2.5 text-left text-xs font-semibold text-slate-300";
 const cells = "px-3 py-3 text-xs text-slate-200";
 
 const STATUS = [
@@ -39,7 +39,7 @@ function DeltaTag({ delta: value }: { delta: Delta }) {
   const tone = value.kind === "neutral" || (!value.up && !value.down)
     ? "text-slate-400"
     : value.up === (value.kind === "good") ? "text-emerald-300" : "text-rose-300";
-  return <p className={"mt-1.5 flex items-center gap-1 text-[11px] " + tone}>
+  return <p className={"mt-1.5 flex items-center gap-1 text-xs " + tone}>
     {value.up ? <ArrowUpRight size={12} aria-hidden="true" /> : value.down ? <ArrowDownRight size={12} aria-hidden="true" /> : null}
     {(value.value > 0 ? "+" : "") + value.value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} vs. período anterior
   </p>;
@@ -48,16 +48,16 @@ function DeltaTag({ delta: value }: { delta: Delta }) {
 function Kpis({ sum, prior, onOccurrences }: { sum: Totals; prior: Totals | null; onOccurrences: (type: OccurrenceType) => void }) {
   const problems = sum.naoChegou + sum.naoCompareceu + sum.recusado;
   const priorProblems = prior ? prior.naoChegou + prior.naoCompareceu + prior.recusado : null;
-  const card = "min-w-0 rounded-xl border border-[#314b66] bg-[#142338] p-3.5";
+  const card = "min-w-0 border-b border-r border-[#344956] p-4 md:p-5 xl:border-b-0 last:border-r-0";
   const title = "flex items-center gap-1.5 text-xs font-medium text-slate-300";
-  const value = "mt-2 block text-3xl font-bold leading-none tabular-nums text-white";
-  const line = "flex items-center justify-between gap-2 text-[11px] text-slate-300";
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores gerenciais">
+  const value = "mt-3 block text-[34px] font-semibold leading-none tracking-tight tabular-nums text-white";
+  const line = "flex items-center justify-between gap-2 text-xs text-slate-300";
+  return <div className="grid grid-cols-1 rounded-md border border-[#344956] bg-[#192734] sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores gerenciais">
     <section className={card}>
       <h3 className={title}><CalendarDays size={15} className="text-sky-300" aria-hidden="true" />Registros no período<HelpTip title="Registros no período" /></h3>
       <strong className={value}>{numberBR(sum.total)}</strong>
-      <p className="mt-1.5 text-[11px] text-slate-400">{numberBR(sum.agendas)} agendas · {numberBR(sum.abertas)} abertas</p>
-      <div className="mt-3 space-y-1.5 border-t border-[#314b66] pt-2">
+      <p className="mt-1.5 text-xs text-slate-400">{numberBR(sum.agendas)} agendas · {numberBR(sum.abertas)} abertas</p>
+      <div className="mt-3 space-y-1.5 border-t border-[#344956] pt-2">
         <p className={line}>Com agendamento <strong className="tabular-nums">{numberBR(sum.total - sum.semAgenda)}</strong></p>
         <p className={line}>Aguardando <strong className="tabular-nums text-violet-300">{numberBR(sum.aguardando)}</strong></p>
       </div>
@@ -66,11 +66,11 @@ function Kpis({ sum, prior, onOccurrences }: { sum: Totals; prior: Totals | null
     <section className={card}>
       <h3 className={title}><CheckCircle2 size={15} className="text-emerald-300" aria-hidden="true" />Recebidos<HelpTip title="Recebidos" /></h3>
       <strong className={value}>{numberBR(sum.recebido)}</strong>
-      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-300">
+      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-300">
         <span>Taxa de recebimento<HelpTip title="Taxa de recebimento" /></span><strong className="text-sm tabular-nums text-emerald-300">{sum.total ? percentBR(rate(sum)) : "—"}</strong>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#2d4764]"><div className="h-full rounded-full bg-emerald-400" style={{width: clampPercent(rate(sum)) + "%"}} /></div>
-      {prior && sum.total > 0 && prior.total > 0 ? <p className="mt-2 text-[11px] text-slate-400">{(rate(sum)-rate(prior)>0?"+":"")+(rate(sum)-rate(prior)).toLocaleString("pt-BR",{maximumFractionDigits:1})} p.p. vs. período anterior</p> : <p className="mt-2 text-[11px] text-slate-500">Sem comparação disponível</p>}
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#344956]"><div className="h-full rounded-full bg-emerald-400" style={{width: clampPercent(rate(sum)) + "%"}} /></div>
+      {prior && sum.total > 0 && prior.total > 0 ? <p className="mt-2 text-xs text-slate-400">{(rate(sum)-rate(prior)>0?"+":"")+(rate(sum)-rate(prior)).toLocaleString("pt-BR",{maximumFractionDigits:1})} p.p. vs. período anterior</p> : <p className="mt-2 text-xs text-slate-500">Sem comparação disponível</p>}
     </section>
     <section className={card}>
       <h3 className={title}><XCircle size={15} className="text-rose-300" aria-hidden="true" />Ocorrências<HelpTip title="Ocorrências" /></h3>
@@ -86,8 +86,8 @@ function Kpis({ sum, prior, onOccurrences }: { sum: Totals; prior: Totals | null
     <section className={card}>
       <h3 className={title}><CalendarDays size={15} className="text-amber-300" aria-hidden="true" />Sem agenda<HelpTip title="Sem agenda" /></h3>
       <strong className={value}>{numberBR(sum.semAgenda)}</strong>
-      <p className="mt-1.5 text-[11px] text-slate-400">{sum.total ? percentBR(sum.semAgenda / sum.total * 100) : "—"} dos registros</p>
-      <div className="mt-3 space-y-1.5 border-t border-[#314b66] pt-2">
+      <p className="mt-1.5 text-xs text-slate-400">{sum.total ? percentBR(sum.semAgenda / sum.total * 100) : "—"} dos registros</p>
+      <div className="mt-3 space-y-1.5 border-t border-[#344956] pt-2">
         <p className={line}>Recebidos <strong className="tabular-nums text-emerald-300">{numberBR(sum.semAgendaRecebidos)}</strong></p>
         <p className={line}>Demais situações <strong className="tabular-nums">{numberBR(sum.semAgenda - sum.semAgendaRecebidos)}</strong></p>
       </div>
@@ -118,10 +118,10 @@ function DailyTrend({ days, start, end }: { days: Grouped[]; start: string; end:
             const description=formatDay(date)+(day&&day.total>0?": "+numberBR(day.total)+" registros, "+STATUS.map(status=>status.label+" "+numberBR(day[status.key])).join(", "):": sem registros");
             return <div key={date} className="relative flex min-w-0 flex-1 flex-col items-center gap-1" title={description}>
               <div className="flex h-36 w-full items-end justify-center">
-                {day&&day.total>0&&<div tabIndex={0} role="img" aria-label={description} className="flex w-full max-w-7 flex-col-reverse overflow-hidden rounded-t-sm focus-visible:outline-2 focus-visible:outline-sky-300" style={{height:(day.total/max*100)+"%"}}>
+                {day&&day.total>0&&<div tabIndex={0} role="img" aria-label={description} className="flex w-full max-w-7 flex-col-reverse overflow-hidden rounded-t-sm focus-visible:outline-2 focus-visible:outline-[#90c8df]" style={{height:(day.total/max*100)+"%"}}>
                   {STATUS.filter(status=>day[status.key]>0).map(status=><div key={status.key} style={{height:(day[status.key]/day.total*100)+"%",background:status.color}}/>)}
                 </div>}
-              </div><span className="whitespace-nowrap text-[9px] tabular-nums text-slate-400">{shortDate(date)}</span>
+              </div><span className="whitespace-nowrap text-[10px] tabular-nums text-slate-400">{shortDate(date)}</span>
             </div>;
           })}
         </div>
@@ -144,7 +144,7 @@ function Donut({ sum }: { sum: Totals }) {
   return <div className="flex flex-wrap items-center gap-5">
     <div className="relative size-32 shrink-0 rounded-full" style={{ background: "conic-gradient(" + stops + ")" }}
       role="img" aria-label={"Distribuição dos " + numberBR(sum.total) + " registros por situação."}>
-      <div data-testid="donut-center" className="absolute inset-[20%] flex flex-col items-center justify-center rounded-full bg-[#142338]">
+      <div data-testid="donut-center" className="absolute inset-[20%] flex flex-col items-center justify-center rounded-full bg-[#192734]">
         <strong className="text-xl font-bold leading-none tabular-nums text-white">{numberBR(sum.total)}</strong>
         <small data-testid="donut-center-label" className="mt-0.5 whitespace-nowrap text-[9px] leading-none text-slate-400">registros</small>
       </div>
@@ -162,7 +162,7 @@ function Meter({ title, strong, width, footnote, tone = "#3f9cff" }: { title: st
       <span className="min-w-0 truncate text-slate-200" title={title}>{title}</span>
       <strong className="shrink-0 text-slate-100">{strong}</strong>
     </div>
-    <div className="h-2 overflow-hidden rounded-full bg-[#2d4764]"><div className="h-full rounded-full" style={{ width: clampPercent(width) + "%", background: tone }} /></div>
+    <div className="h-2 overflow-hidden rounded-full bg-[#344956]"><div className="h-full rounded-full" style={{ width: clampPercent(width) + "%", background: tone }} /></div>
     {footnote && <p className="text-[10px] text-slate-400">{footnote}</p>}
   </div>;
 }
@@ -173,7 +173,7 @@ function StoreTop({ stores, onOpenAll }: { stores: Grouped[]; onOpenAll: () => v
     .slice(0, 5);
   if (!ranking.length) return <Empty text="Sem resultados por loja no período." />;
   return <div className="space-y-3">
-    <p className="text-[11px] text-slate-400">Menores taxas primeiro · até 5 lojas</p>
+    <p className="text-xs text-slate-400">Menores taxas primeiro · até 5 lojas</p>
     {ranking.map(store => <Meter key={store.key} title={store.label} strong={percentBR(rate(store))} width={rate(store)}
       footnote={numberBR(store.recebido) + " / " + numberBR(store.total)} />)}
     <Button variant="ghost" size="sm" className="text-sky-300" onClick={onOpenAll}>Ver todas as lojas <ArrowRight size={13} aria-hidden="true" /></Button>
@@ -193,7 +193,7 @@ function OccurrenceItems({ rows }: { rows: Occurrences["rows"] }) {
     {rows.map((row, index) => {
       const automatic = row.occurrenceType === "nao_compareceu";
       const reason = automatic ? "Classificação no fechamento" : row.observation || "Motivo não informado";
-      return <div key={row.protocol + index} role="listitem" className="space-y-1 border-b border-[#263a52] pb-2.5 last:border-0 last:pb-0">
+      return <div key={row.protocol + index} role="listitem" className="space-y-1 border-b border-[#344956] pb-2.5 last:border-0 last:pb-0">
         <div className="flex min-w-0 items-center gap-2 text-xs">
           <span className="shrink-0 text-slate-400">{shortDate(row.date)}</span>
           <span className="shrink-0 font-semibold text-slate-200">{row.storeCode}</span>
@@ -242,7 +242,7 @@ function SupplierWithoutAgenda({ suppliers, total, received, supplierCount, onOp
 }
 
 function Pager({ offset, total, onChange }: { offset: number; total: number; onChange: (value: number) => void }) {
-  return <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#314b66] pt-3 text-xs text-slate-400">
+  return <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#344956] pt-3 text-xs text-slate-400">
     <span>{numberBR(total)} registro(s) · {total ? numberBR(offset + 1) : 0}–{numberBR(Math.min(offset + 50, total))}</span>
     <div className="flex gap-2">
       <Button variant="secondary" size="sm" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - 50))}>Anterior</Button>
@@ -252,10 +252,10 @@ function Pager({ offset, total, onChange }: { offset: number; total: number; onC
 }
 
 function ReportTable({ headings, children, label }: { headings: string[]; children: ReactNode; label: string }) {
-  return <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-[#314b66]">
+  return <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-lg border border-[#344956]">
     <table aria-label={label} className="w-full min-w-[820px] border-collapse">
-      <thead className="bg-[#203750]"><tr>{headings.map(heading => <th key={heading} scope="col" className={heads}>{heading}</th>)}</tr></thead>
-      <tbody className="divide-y divide-[#314b66]">{children}</tbody>
+      <thead className="bg-[#223443]"><tr>{headings.map(heading => <th key={heading} scope="col" className={heads}>{heading}</th>)}</tr></thead>
+      <tbody className="divide-y divide-[#344956]">{children}</tbody>
     </table>
   </div>;
 }
@@ -383,7 +383,7 @@ export function ReportsPage() {
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("click", dismiss); document.removeEventListener("keydown", escape); };
   }, []);
-  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-3" aria-label="Relatório Gerencial">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-5" aria-label="Relatório Gerencial">
     <PageHeader eyebrow="Inteligência operacional" title="Relatório Gerencial"
       description="Panorama dos recebimentos, desempenho das lojas e ocorrências registradas."
       actions={<div className="flex items-center gap-2">
@@ -391,17 +391,18 @@ export function ReportsPage() {
           <RefreshCw size={14} aria-hidden="true" />{working ? "Atualizando…" : "Atualizar"}
         </Button>
       </div>} />
-    <div className="flex justify-end">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0"><h2 className="text-base font-semibold text-slate-100">Visão do período</h2><p className="text-xs text-slate-400">Indicadores consolidados das unidades selecionadas.</p></div>
       <details ref={filterRef} className="group relative">
         <summary aria-label="Editar período e lojas"
-          className="flex min-h-[35px] w-max max-w-full cursor-pointer list-none items-center justify-between gap-2.5 rounded-lg border border-[#314b66] bg-[#142338] px-2.5 text-[11px] font-semibold text-white shadow-lg transition-colors hover:border-sky-400 group-open:border-sky-400 group-open:bg-[#192d46] [&::-webkit-details-marker]:hidden">
+          className="flex min-h-10 w-max max-w-full cursor-pointer list-none items-center justify-between gap-2.5 rounded-lg border border-[#344956] bg-[#192734] px-2.5 text-xs font-medium text-white transition-colors hover:border-sky-400 group-open:border-sky-400 group-open:bg-[#223443] [&::-webkit-details-marker]:hidden">
           <span className="min-w-0 max-w-[min(420px,60vw)] truncate text-slate-200">
             {formatDay(applied.start)} a {formatDay(applied.end)} · {storeLabel(applied.stores)}
           </span>
           <ChevronDown size={15} aria-hidden="true" className="shrink-0 text-sky-400 transition-transform duration-150 group-open:rotate-180" />
         </summary>
         <form onSubmit={apply} aria-label="Filtros do relatório"
-          className="absolute right-0 top-full z-40 mt-1.5 grid w-[min(525px,calc(100vw-36px))] grid-cols-2 gap-3 rounded-xl border border-[#48617b] bg-[#142338] p-4 shadow-2xl">
+          className="absolute right-0 top-full z-40 mt-1.5 grid w-[min(525px,calc(100vw-36px))] grid-cols-2 gap-3 rounded-md border border-[#526777] bg-[#192734] p-4 shadow-2xl">
           <div role="group" aria-label="Períodos rápidos" className="col-span-2 flex flex-wrap gap-1.5">
             {([["7", "Últimos 7 dias"], ["30", "Últimos 30 dias"], ["90", "Últimos 90 dias"], ["month", "Mês atual"]] as const).map(([key, text]) =>
               <Button key={key} size="sm" variant="secondary" aria-pressed={applied.start === presetRange(key).start && applied.end === presetRange(key).end}
@@ -414,11 +415,11 @@ export function ReportsPage() {
             <input className={input} type="date" value={draft.end} onChange={event => setDraft(value => ({ ...value, end: event.target.value }))} />
           </label>
           <div className="col-span-2 grid min-w-0 gap-1.5 text-xs font-semibold text-slate-300"><span>Lojas</span>
-          <details className="relative min-w-0 rounded-md border border-[#48617b] bg-[#192d46] text-xs text-white">
+          <details className="relative min-w-0 rounded-md border border-[#526777] bg-[#223443] text-xs text-white">
           <summary className="flex min-h-9 cursor-pointer items-center px-3" aria-label="Selecionar lojas">
             {draft.stores.length ? draft.stores.length + " loja(s) selecionada(s)" : "Todas as lojas"}
           </summary>
-          <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-full min-w-[190px] overflow-auto rounded-md border border-[#48617b] bg-[#192d46] p-2 shadow-xl">
+          <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-full min-w-[190px] overflow-auto rounded-md border border-[#526777] bg-[#223443] p-2 shadow-xl">
             <label className="flex cursor-pointer items-center gap-2 p-2"><input type="checkbox" checked={!draft.stores.length}
               onChange={() => setDraft(value => ({ ...value, stores: [] }))} />Todas as lojas</label>
             {stores.isPending && <Loading label="Carregando lojas…" className="p-2 text-slate-400" />}
@@ -449,13 +450,15 @@ export function ReportsPage() {
       <Kpis sum={summary} prior={comparable} onOccurrences={openOccurrences} />
       {applied.compare && previousReport.isError && <Failure retry={() => void previousReport.refetch()} text="Comparação indisponível. Os indicadores atuais continuam disponíveis." />}
       {summary.abertas > 0 && <p role="status" className="text-xs text-amber-300">{numberBR(summary.abertas)} agenda(s) em aberto: os indicadores podem mudar até o fechamento.</p>}
-      <div className="space-y-4" aria-label="Visão gerencial de recebimentos">
+      <div className="space-y-5" aria-label="Visão gerencial de recebimentos">
+        <h2 className="text-base font-semibold text-slate-100">Evolução e composição</h2>
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card title="Evolução diária"><DailyTrend days={days} start={applied.start} end={applied.end}/></Card>
-          <Card title="Distribuição das situações"><Donut sum={summary}/><p className="mt-3 text-[11px] text-slate-400">Taxa de recebimento: {summary.total ? percentBR(rate(summary)) : "—"}</p></Card>
+          <Card title="Distribuição das situações"><Donut sum={summary}/><p className="mt-3 text-xs text-slate-400">Taxa de recebimento: {summary.total ? percentBR(rate(summary)) : "—"}</p></Card>
         </div>
         {/* Fileira dos rankings: lojas e os dois de fornecedores, com medidores
             e alturas equivalentes. */}
+        <h2 className="text-base font-semibold text-slate-100">Desempenho e pontos de atenção</h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card title="Desempenho por loja"><StoreTop stores={units} onOpenAll={() => setDialog("stores")} /></Card>
           <Card title="Fornecedores com ocorrências">
@@ -475,7 +478,7 @@ export function ReportsPage() {
           </Card>
         </div>
       </div>
-      <p className="text-[11px] text-slate-500"><Activity size={12} className="mr-1 inline-block" aria-hidden="true" />Dados consultados na API oficial; nenhuma alteração de dados é feita neste relatório.</p>
+      <p className="text-xs text-slate-500"><Activity size={12} className="mr-1 inline-block" aria-hidden="true" />Indicadores calculados sobre os registros do Agenda Prado. A consulta não altera dados.</p>
     </>}
     {dialog === "stores" && <ReportDialog title="Todas as lojas" description="Indicadores consolidados das unidades no período selecionado." onClose={() => setDialog(null)}>
       <Panel title="Por loja" hint="Indicadores consolidados">
