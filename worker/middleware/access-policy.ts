@@ -20,6 +20,8 @@ const RULES:Rule[]=[
   route("POST",A+"/users",rule("usuarios.criar","all-stores",["usuarios.permissoes"])),
   route("PATCH",A+"/users",rule("usuarios.editar","all-stores",["usuarios.permissoes"])),
   route("DELETE",A+"/users/"+id,rule("usuarios.excluir","all-stores",["usuarios.permissoes"])),
+  route("GET",A+"/nexello/config",rule("importacao.ver","all-stores",["importacao.executar"])),
+  route("POST",A+"/nexello/pages/[1-9][0-9]?",rule("importacao.executar","all-stores",["importacao.ver"])),
   route("POST",A+"/agendas/import(?:/bulk)?",rule("importacao.executar","import-batch")),
   route("GET",A+"/agendas(?:/today)?",rule(["recebimento.ver","agendas.ver","importacao.ver"],"filtered-list")),
   route("GET",A+"/agendas/"+id+"/digitacao",rule("agendas.ver","agenda-id")),

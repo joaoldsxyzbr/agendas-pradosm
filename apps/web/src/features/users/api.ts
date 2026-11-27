@@ -43,6 +43,7 @@ export async function setAccess(id:string,version:number,access:AccessForm){retu
 export const ROLE_LABELS: Record<AccessProfile, string> = {
   admin: "Administrador",
   agendador: "Agendador",
+  digitador: "Digitador",
   conferente: "Conferente",
   visualizador: "Visualizador",
 };

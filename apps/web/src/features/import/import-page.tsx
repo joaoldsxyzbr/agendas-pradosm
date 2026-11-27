@@ -13,7 +13,7 @@ export function ImportPage() {
   return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-4" aria-label="Importação de Agendas">
     <PageHeader eyebrow="Administração" title="Importação de Agendas"
       description="Consulte a origem dos agendamentos e utilize a importação por arquivo como contingência." />
-    {user?.papel === "admin" && user.acessoConfiguravel !== true && <NexelloPreview />}
+    {((user?.papel === "admin" && !user.perfil) || (user?.perfil === "digitador" && user.escopo?.mode === "all" && canUse(user,"importacao.ver",false) && canUse(user,"importacao.executar",false))) && <NexelloPreview />}
     <div className="flex flex-col items-start gap-3 rounded-md border border-[#344956] bg-[#192734] p-6">
       <FileSpreadsheet className="text-sky-300" size={28} aria-hidden="true" />
       <h2 className="text-base font-bold">Importação por arquivo</h2>

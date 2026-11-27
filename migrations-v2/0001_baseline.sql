@@ -206,7 +206,7 @@ CREATE INDEX idx_sessoes_revogadas_expira_em ON sessoes_revogadas(expira_em);
 
 CREATE TABLE usuario_acesso (
   usuario_id TEXT NOT NULL PRIMARY KEY REFERENCES usuarios(id),
-  perfil TEXT NOT NULL CHECK (perfil IN ('admin', 'agendador', 'visualizador', 'conferente')),
+  perfil TEXT NOT NULL CHECK (perfil IN ('admin', 'agendador', 'digitador', 'visualizador', 'conferente')),
   escopo TEXT NOT NULL CHECK (escopo IN ('todas', 'vinculadas')),
   ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0,1)),
   UNIQUE (usuario_id, escopo)

@@ -1,7 +1,7 @@
 // Catálogo puro de autorização (etapa preparatória da issue #248).
 // Ainda não substitui a autorização vigente; não importar em rotas antes de
 // integrar persistência, escopo por loja e revogação de sessões.
-export const ACCESS_PROFILES = ["admin", "agendador", "visualizador", "conferente"] as const;
+export const ACCESS_PROFILES = ["admin", "agendador", "digitador", "visualizador", "conferente"] as const;
 export type AccessProfile = typeof ACCESS_PROFILES[number];
 
 export const PERMISSIONS = [
@@ -31,8 +31,24 @@ export function isPermission(value: unknown): value is Permission {
   return typeof value === "string" && permissions.has(value);
 }
 
+// Bloqueio de áreas administrativas também nas exceções individuais.
+// Novas permissões não são concedidas automaticamente ao Digitador.
+export function isDigitadorRestricted(permission: Permission): boolean {
+  return /^(lojas|usuarios|auditoria|diagnosticos|retencao)\./.test(permission);
+}
 const defaults: Record<AccessProfile, readonly Permission[]> = {
   admin: PERMISSIONS,
+  digitador: [
+    "recebimento.ver", "recebimento.editar", "recebimento.manual.criar",
+    "recebimento.manual.editar", "recebimento.manual.excluir",
+    "recebimento.concluir", "recebimento.reabrir", "recebimento.exportar",
+    "conferencia.ver", "conferencia.editar", "conferencia.manual.criar",
+    "conferencia.manual.editar", "conferencia.manual.excluir",
+    "conferencia.concluir", "conferencia.historico", "conferencia.exportar",
+    "agendas.ver", "agendas.editar", "agendas.historico",
+    "importacao.ver", "importacao.executar", "importacao.substituir",
+    "relatorios.ver", "avisos.ver", "avisos.marcar_lido", "avisos.publicar",
+  ],
   agendador: [
     "recebimento.ver", "recebimento.editar", "recebimento.manual.criar",
     "recebimento.manual.editar", "agendas.ver", "agendas.editar",
@@ -68,6 +84,7 @@ export function resolvePermissions(profile: unknown, overrides: unknown = []): R
     if (!isRecord(item) || !isPermission(item.permission) ||
         (item.effect !== "allow" && item.effect !== "deny") ||
         seen.has(item.permission)) return null;
+    if (profile === "digitador" && item.effect === "allow" && isDigitadorRestricted(item.permission)) return null;
     seen.add(item.permission);
     if (item.effect === "deny") effective.delete(item.permission);
     else {

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ACCESS_PROFILES, PERMISSIONS, resolvePermissions, hasPermission, canAccessStore } from "../../shared/permissions.ts";
 
-test("catálogo único, quatro perfis e administrador completo", () => {
+test("catálogo único, cinco perfis e administrador completo", () => {
   assert.equal(new Set(PERMISSIONS).size, PERMISSIONS.length);
-  assert.equal(ACCESS_PROFILES.length, 4);
+  assert.equal(ACCESS_PROFILES.length, 5);
   assert.deepEqual([...resolvePermissions("admin")], [...PERMISSIONS]);
 });
 
@@ -82,4 +82,14 @@ test("escopo por loja é explícito e separado da permissão", () => {
     assert.equal(canAccessStore(scope, "s1"), false);
   }
   assert.equal(canAccessStore({ mode: "all" }, ""), false);
+});
+
+test("Digitador tem todas as permissões operacionais e nenhuma administrativa restrita", () => {
+  const expected = PERMISSIONS.filter(p => !/^(lojas|usuarios|auditoria|diagnosticos|retencao)\./.test(p));
+  assert.deepEqual([...resolvePermissions("digitador")!], expected);
+  for (const p of PERMISSIONS.filter(p => !expected.includes(p))) {
+    assert.equal(hasPermission(resolvePermissions("digitador"),p),false,p);
+    assert.equal(resolvePermissions("digitador",[{permission:p,effect:"allow"}]),null,p);
+  }
+  assert.equal(hasPermission(resolvePermissions("digitador",[{permission:"importacao.substituir",effect:"deny"}]),"importacao.substituir"),false);
 });

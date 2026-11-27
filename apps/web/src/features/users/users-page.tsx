@@ -218,7 +218,7 @@ export function UsersPage() {
           <select aria-label="Filtrar por papel" value={role}
             onChange={event => setRole(event.target.value as typeof role)} className={input + " max-w-[170px]"}>
             <option value="todos">Todos os papéis</option>
-            {session?.acessoConfiguravel&&<option value="agendador">Agendador</option>}
+            {session?.acessoConfiguravel&&<><option value="agendador">Agendador</option><option value="digitador">Digitador</option></>}
             <option value="admin">Administrador</option>
             <option value="conferente">Conferente</option>
             <option value="visualizador">Visualizador</option>

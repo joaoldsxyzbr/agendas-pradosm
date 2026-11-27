@@ -29,12 +29,16 @@ function available(env: Env): boolean {
 }
 
 export const adminNexelloRoutes = new Hono<AppEnv>();
-// A consulta 60 não tem filtro por loja no servidor. Não expor dados globais
-// a contas delegadas, ainda que tenham permissão de importar arquivos.
+// A consulta 60 não filtra por loja. Apenas administrador integral e Digitador
+// com escopo global e permissões de importação podem consultar.
 adminNexelloRoutes.use("*", async (c, next) => {
   const user = c.get("authUser");
-  if (!user || user.papel !== "admin" || c.get("effectiveAccess")?.customized) {
-    return c.json({ error: "ACESSO_NEGADO", message: "Consulta exclusiva do administrador integral." }, 403);
+  const access = c.get("effectiveAccess");
+  const integral = user?.papel === "admin" && !access?.customized;
+  const digitador = access?.customized === true && access.profile === "digitador" &&
+    access.scope.mode === "all" && access.permissions.has("importacao.ver") && access.permissions.has("importacao.executar");
+  if (!user || (!integral && !digitador)) {
+    return c.json({ error: "ACESSO_NEGADO", message: "Consulta exclusiva do administrador integral ou Digitador com acesso a todas as lojas." }, 403);
   }
   c.header("Cache-Control", "no-store");
   await next();

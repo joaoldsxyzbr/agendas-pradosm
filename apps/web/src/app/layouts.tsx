@@ -21,9 +21,10 @@ const menu = [
 ] as const;
 const defaultMenuOrder = menu.map(item => item.path);
 
-const labels: Record<Role | "agendador", string> = {
+const labels: Record<Role | "agendador" | "digitador", string> = {
   admin: "Administrador",
   agendador: "Agendador",
+  digitador: "Digitador",
   visualizador: "Visualizador",
   conferente: "Conferente",
 };
