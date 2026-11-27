@@ -16,8 +16,8 @@ import {
   type ReceivingRow,
 } from "./model";
 
-const tableHead = "px-3 py-2.5 text-left text-[11px] font-semibold text-slate-300";
-const tableCell = "px-3 py-2 align-middle text-xs text-slate-200";
+const tableHead = "px-4 py-3 text-left text-xs font-medium text-slate-300";
+const tableCell = "px-4 py-3 align-middle text-sm text-slate-200";
 
 function PresenceStatus({ status, unavailable }: {
   status: ReceivingRow["presence"]; unavailable: boolean;
@@ -33,7 +33,7 @@ function PresenceStatus({ status, unavailable }: {
 function ReceivingTable({ rows, onDetails, presenceUnavailable }: {
   rows: ReceivingRow[]; onDetails: (id: string) => void; presenceUnavailable: boolean;
 }) {
-  return <div className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#38516d] bg-[#142235] shadow-lg">
+  return <div className="w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#344956] bg-[#192734]">
     <div className="w-full min-w-0 max-w-full overflow-x-auto" data-testid="receiving-table-scroll">
       <table className="w-full min-w-[930px] table-fixed border-collapse" aria-label="Recebimento por loja">
         <colgroup>
@@ -41,7 +41,7 @@ function ReceivingTable({ rows, onDetails, presenceUnavailable }: {
           <col className="w-[16%]" /><col className="w-[19%]" />
           <col className="w-[15%]" /><col className="w-[11%]" />
         </colgroup>
-        <thead className="border-b border-[#38516d] bg-[#21374f]">
+        <thead className="border-b border-[#344956] bg-[#223443]">
           <tr><th scope="col" className={tableHead}>Loja</th>
             <th scope="col" className={tableHead}>Conferente</th>
             <th scope="col" className={tableHead}>Recebimentos</th>
@@ -49,25 +49,25 @@ function ReceivingTable({ rows, onDetails, presenceUnavailable }: {
             <th scope="col" className={tableHead}>Situação</th>
             <th scope="col" className={tableHead}><span className="sr-only">Ações</span></th></tr>
         </thead>
-        <tbody className="divide-y divide-[#304865]">
+        <tbody className="divide-y divide-[#344956]">
           {rows.map(({ store, agenda, presence }, index) => {
             const pending = agenda ? pendingLabels(agenda) : [];
             const total = Math.max(0, agenda?.total ?? 0);
             const received = Math.max(0, agenda?.recebido ?? 0);
             return <tr key={store.id} data-testid={`receiving-store-${store.codigo}`}
-              className={`h-[60px] hover:bg-[#29405a] ${index % 2 ? "bg-[#1a2a40]" : "bg-[#142235]"}`}>
+              className={`h-[64px] hover:bg-[#263948] ${index % 2 ? "bg-[#1c2b38]" : "bg-[#192734]"}`}>
               <td className={tableCell}>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <strong className="text-[12px] font-bold text-white">{store.codigo}</strong>
-                  <span className="rounded-full border border-[#3c5977] bg-[#203854] px-2 py-0.5 text-[10px] text-blue-100">{agenda ? "Agenda importada" : "Sem agenda"}</span>
+                  <strong className="text-sm font-semibold text-white">{store.codigo}</strong>
+                  <span className="rounded-[3px] border border-[#526777] px-1.5 py-0.5 text-[11px] text-slate-300">{agenda ? "Agenda importada" : "Sem agenda"}</span>
                 </div>
-                <span className="mt-0.5 block truncate text-[11px] text-slate-400" title={store.nome}>{store.nome}</span>
+                <span className="mt-1 block truncate text-xs text-slate-400" title={store.nome}>{store.nome}</span>
               </td>
               <td className={tableCell}><PresenceStatus status={presence} unavailable={presenceUnavailable} /></td>
               <td className={tableCell}>{agenda
                 ? <div className="max-w-[155px]">
                   <strong className="font-bold tabular-nums text-white">{received} <span className="text-slate-500">/</span> {total}</strong>
-                  <progress className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-[#354a65] accent-blue-400"
+                  <progress className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-[#344956] accent-[#90c8df]"
                     value={Math.min(received, Math.max(1, total))} max={Math.max(1, total)}
                     aria-label={`Recebimentos concluídos da loja ${store.codigo}`} />
                 </div>
@@ -130,7 +130,7 @@ export function ReceivingPage() {
   const readonly = !canUse(session.data,"recebimento.editar",session.data?.papel==="admin");
   const reload = () => void queryClient.invalidateQueries({ queryKey: ["receiving"] });
 
-  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-3" aria-label="Recebimento">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] space-y-5" aria-label="Recebimento">
     <PageHeader eyebrow={readonly ? "Acompanhamento" : "Administração"} title="Recebimento"
       description={readonly ? "Acompanhe o andamento das agendas por loja." : "Acompanhe as agendas e gerencie a operação do dia."}
       actions={<div className="flex flex-wrap items-center gap-2">
@@ -153,11 +153,11 @@ export function ReceivingPage() {
       </div>}
     />
     <div className="flex items-center justify-between gap-3">
-      <h2 className="text-sm font-bold text-slate-100">Recebimento por loja</h2>
+      <h2 className="text-base font-semibold text-slate-100">Recebimento por loja</h2>
       <span className="text-[11px] text-slate-400 tabular-nums">Referência: {formatDay(selectedDate)}{realtimeStatus === "connected" ? " · Tempo real conectado" : ""}</span>
     </div>
     {loading && <div className="space-y-3">
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[#304b6b] bg-[#162740] shadow-lg sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 overflow-hidden rounded-md border border-[#344956] bg-[#192734] sm:grid-cols-3 lg:grid-cols-5">
         {Array.from({ length: 5 }, (_, index) => <div key={index} className="flex items-center gap-3 p-3">
           <Skeleton className="size-9 rounded-lg" />
           <div className="space-y-1.5"><Skeleton className="h-2 w-10" /><Skeleton className="h-3.5 w-14" /></div>
@@ -170,7 +170,7 @@ export function ReceivingPage() {
       <Button size="sm" variant="secondary" onClick={reload}>Tentar novamente</Button>
     </div>}
     {!loading && !failure && <>
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[#304b6b] bg-[#162740] shadow-lg sm:grid-cols-3 lg:grid-cols-5" aria-label="Situação do dia">
+      <div className="grid grid-cols-2 overflow-hidden rounded-md border border-[#344956] bg-[#192734] sm:grid-cols-3 lg:grid-cols-5" aria-label="Situação do dia">
         <MetricCard label="lojas" value={model.totalStores} icon={<StoreIcon size={18} />} />
         <MetricCard label="com agenda" value={model.storesWithAgenda} icon={<CalendarDays size={18} />} />
         <MetricCard label="em andamento" value={model.openStores} tone="amber" icon={<Clock3 size={18} />} />
