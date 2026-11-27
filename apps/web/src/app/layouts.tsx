@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { logout, ACCESS_PAGES, canUse, canUseNotice, noticePath, type SessionUser, type Role } from "@/features/auth/session";
 import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
 import { AvisosToasts } from "@/features/avisos/avisos-toasts";
+import { useReceivingRealtime } from "@/features/receiving/use-realtime";
 import { PradoMark } from "@/components/operations/prado-mark";
 
 const menu = [
@@ -62,6 +63,9 @@ export function AppLayout({ user }: { user: SessionUser }) {
   const {pathname}=useLocation();
   const canal=pathname.endsWith("/avisos");
   const temCanal=canUseNotice(user,"avisos.ver");
+  // Recebimento e Conferência possuem sua própria conexão. Nas demais
+  // telas, receber invalidações do canal apenas para contas legadas.
+  useReceivingRealtime(temCanal&&!user.perfil&&pathname!=="/admin"&&pathname!=="/app"?user.id:undefined,"");
   const client = useQueryClient();
   const [collapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
   const [order, setOrder] = useState(() => readMenuOrder(user.id, defaultMenuOrder));
