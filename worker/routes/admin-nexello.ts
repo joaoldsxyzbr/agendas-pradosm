@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { reserveNexelloRequest } from "../repositories/nexello-rate.ts";
 import { compareNexelloPage } from "../services/nexello-comparison.ts";
 import type { AppEnv, Env } from "../env.ts";
 import { readNexelloReportPage, NexelloReportError } from "../services/nexello-report.ts";
@@ -26,7 +27,7 @@ export async function getNexelloPreviewPage(token: string, page: number, fetcher
 }
 
 function available(env: Env): boolean {
-  return env.NEXELLO_READ_MODE === "on" && Boolean(env.NEXELLO_API_TOKEN?.trim()) && Boolean(env.NEXELLO_RATE_LIMITER);
+  return env.NEXELLO_READ_MODE === "on" && Boolean(env.NEXELLO_API_TOKEN?.trim());
 }
 
 export const adminNexelloRoutes = new Hono<AppEnv>();
@@ -51,13 +52,14 @@ adminNexelloRoutes.post("/pages/:page", async c => {
     return c.json({ error: "PAGINA_INVALIDA", message: "Página fora do limite de consulta." }, 400);
   }
   const token = c.env.NEXELLO_API_TOKEN;
-  const limiter = c.env.NEXELLO_RATE_LIMITER;
-  if (!available(c.env) || !token || !limiter) {
+  if (!available(c.env) || !token) {
     return c.json({ error: "NEXELLO_INDISPONIVEL", message: "Integração de leitura ainda não habilitada." }, 503);
   }
   try {
-    const limit = await limiter.limit({ key: "nexello-report-60" });
-    if (!limit.success) return c.json({ error: "NEXELLO_LIMITE", message: "Limite de consultas atingido. Tente novamente mais tarde." }, 429);
+    if (!await reserveNexelloRequest(c.env.DB)) {
+      c.header("Retry-After", "4");
+      return c.json({ error: "NEXELLO_LIMITE", message: "Outra consulta está em andamento ou foi iniciada recentemente. Aguarde alguns segundos." }, 429);
+    }
     const page = await getNexelloPreviewPage(token, Number(raw));
     return c.json(await compareNexelloPage(c.env.DB, page));
   } catch (error: unknown) {

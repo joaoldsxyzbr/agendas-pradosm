@@ -6,7 +6,6 @@ export interface Env {
   SESSION_SECRET: string;
   NEXELLO_API_TOKEN?: string;
   NEXELLO_READ_MODE?: string;
-  NEXELLO_RATE_LIMITER?: RateLimit;
   REALTIME_MODE: string;
   ACCESS_MODE?: string;
   REALTIME_HUB: DurableObjectNamespace;
