@@ -1,4 +1,4 @@
-// V2: somente dry-run/local até provisionamento e autorização explícita.
+// V2: somente dry-run até provisionamento e autorização explícita.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "agendas-pradosm-v2-migrations",
@@ -8,8 +8,7 @@
       "binding": "PREVIEW_DB",
       "database_name": "agendas-pradosm-v2-unconfigured",
       "database_id": "00000000-0000-4000-8000-000000000002",
-      "migrations_dir": "migrations",
-      "migrations_pattern": "migrations/00[2-9][0-9]_*.sql"
+      "migrations_dir": "migrations-v2"
     }
   ]
 }

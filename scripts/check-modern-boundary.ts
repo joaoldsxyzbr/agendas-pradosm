@@ -22,9 +22,10 @@ for (const file of configs) {
   assert.equal(config.previews, undefined, file + ": binding legado de preview");
   assert.equal(config.d1_databases?.length, 1, file);
   assert.equal(config.d1_databases[0].database_name, "agendas-pradosm-v2-unconfigured", file);
+  assert.equal(config.d1_databases[0].migrations_dir, "migrations-v2", file);
   assert.equal(config.d1_databases[0].database_id, "00000000-0000-4000-8000-000000000002", file);
 }
-for (const name of ["deploy", "deploy:cloudflare", "deploy:preview", "db:migrate:preview", "db:migrate:preview:agendas"]) {
+for (const name of ["deploy", "deploy:cloudflare", "deploy:preview", "db:migrate:preview", "db:migrate:preview:agendas", "bootstrap-admin"]) {
   assert.equal(pkg.scripts[name], "node scripts/block-v2-remote.mjs", name + ": operação remota bloqueada");
 }
 console.log("Isolamento React/Worker e configuração de preview preservados.");

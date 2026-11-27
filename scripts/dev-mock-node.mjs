@@ -23,7 +23,7 @@ try{
 const {password,sessionSecret}=JSON.parse(readFileSync(credentials,"utf8"));
 if(typeof password!=="string"||!/^[A-Za-z0-9_-]{24}$/.test(password)||typeof sessionSecret!=="string"||!/^[a-f0-9]{96}$/.test(sessionSecret))throw Error("Credenciais locais inválidas.");
 console.log("Modo Node "+process.version+" | SQLite local (sem Wrangler/Workerd)");
-const local=openLocalDatabase(join(state,"mock.sqlite"),join(root,"migrations"));
+const local=openLocalDatabase(join(state,"mock.sqlite"),join(root,"migrations-v2"));
 local.seed(await buildMockSql(password,new Date(),{access:true}));
 writeFileSync(join(state,"importacao-mock.csv"),mockImportCsv(),"utf8");
 console.log("Estado local: "+state);

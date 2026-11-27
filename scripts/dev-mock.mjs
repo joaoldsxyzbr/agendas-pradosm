@@ -23,9 +23,9 @@ const openBrowser = args[0] === "--open-browser" && process.platform === "win32"
 const local = JSON.parse(readFileSync(config,"utf8").replace(/^\s*\/\/.*$/gm,""));
 const db = local.d1_databases;
 if (db?.length !== 1 || db[0].binding !== "DB" ||
-    db[0].database_id !== "00000000-0000-4000-8000-000000000001" ||
-    db[0].database_name !== "agendas-pradosm-migracao-local" ||
-    db[0].remote === true || local.env || local.r2_buckets || local.kv_namespaces ||
+    db[0].database_id !== "00000000-0000-4000-8000-000000000003" ||
+    db[0].database_name !== "agendas-pradosm-v2-local" ||
+    db[0].migrations_dir !== "migrations-v2" || db[0].remote === true || local.env || local.r2_buckets || local.kv_namespaces ||
     local.services || local.durable_objects?.bindings?.some(b => b.remote || b.script_name)) {
   throw Error("Configuração local inesperada. Inicialização bloqueada.");
 }

@@ -4,13 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build && wrangler dev --config wrangler.local.jsonc",
+    "dev": "npm run build && wrangler dev --local --config wrangler.local.jsonc",
     "build": "node scripts/build-native.mjs",
     "test": "node scripts/check-worker.mjs && node --experimental-strip-types --test tests/unit/*.test.ts",
     "preview": "npm run dev",
     "check:migrations": "node scripts/check-migration-safety.mjs",
     "test:bootstrap-admin": "node scripts/check-bootstrap-admin.mjs",
-    "bootstrap-admin": "node scripts/bootstrap-admin.mjs",
+    "bootstrap-admin": "node scripts/block-v2-remote.mjs",
     "verify:production": "npm run check:migrations && npm test && npm run test:bootstrap-admin && npm run build && node scripts/check-build.mjs && node scripts/build-modern-preview.mjs",
     "deploy:cloudflare": "node scripts/block-v2-remote.mjs",
     "db:migrate:preview:agendas": "node scripts/block-v2-remote.mjs",
@@ -22,7 +22,8 @@
     "dev:mock": "npm run build && node scripts/dev-mock-node.mjs",
     "mock:seed": "node scripts/dev-mock-node.mjs --seed-only",
     "dev:mock:wrangler": "npm run build && node scripts/dev-mock.mjs",
-    "mock:seed:wrangler": "node scripts/dev-mock.mjs --seed-only"
+    "mock:seed:wrangler": "node scripts/dev-mock.mjs --seed-only",
+    "test:v2-schema": "node --experimental-strip-types --test tests/unit/v2-schema.test.ts"
   },
   "dependencies": {
     "@llamaindex/liteparse-wasm": "^2.18.0",

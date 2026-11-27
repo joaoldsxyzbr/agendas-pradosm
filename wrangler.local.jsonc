@@ -1,35 +1,52 @@
+// Somente ambiente LOCAL V2, sem D1 remoto.
 {
-  // Ambiente LOCAL. Nunca usar este arquivo em deploy remoto.
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "agendas-pradosm-migracao-local",
+  "name": "agendas-pradosm-v2-local",
   "compatibility_date": "2026-09-24",
   "main": "./worker/index.ts",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "agendas-pradosm-migracao-local",
-      "database_id": "00000000-0000-4000-8000-000000000001",
-      "migrations_dir": "migrations"
+      "database_name": "agendas-pradosm-v2-local",
+      "database_id": "00000000-0000-4000-8000-000000000003",
+      "migrations_dir": "migrations-v2"
     }
   ],
   "ratelimits": [
     {
       "name": "LOGIN_RATE_LIMITER",
       "namespace_id": "2026101801",
-      "simple": { "limit": 10, "period": 60 }
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "REALTIME_HUB", "class_name": "RealtimeHub" }]
+    "bindings": [
+      {
+        "name": "REALTIME_HUB",
+        "class_name": "RealtimeHub"
+      }
+    ]
   },
   "migrations": [
-    { "tag": "migracao-local-v1", "new_sqlite_classes": ["RealtimeHub"] }
+    {
+      "tag": "v2-local-v1",
+      "new_sqlite_classes": [
+        "RealtimeHub"
+      ]
+    }
   ],
-  "vars": { "REALTIME_MODE": "off" }
+  "vars": {
+    "REALTIME_MODE": "off"
+  }
 }
