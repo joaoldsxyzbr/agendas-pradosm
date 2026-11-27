@@ -107,3 +107,16 @@ O usuário autorizou adaptar ao relatório disponível. A exigência anterior de
 - Alternativa ao filtro externo não confirmado: ler somente relatório 60 com teto de 15 páginas de 100 (1500 registros), filtrar localmente por dia e filial; se crescer, rejeitar sem gravar. O teto é uma escolha inicial, não garantia do fornecedor. Validar total, número de página, tamanho, duplicidade e consistência; sem promessa de snapshot estável quando a origem não a oferece. Antes de ligar a UI, validar duração, limites gratuitos do Worker, concorrência e orçamento global de 30 requisições/minuto; não repetir automaticamente nem permitir múltiplas leituras simultâneas. Se não couber no ambiente existente, manter fallback manual e rever escopo.
 - Cliente de leitura corrigido para tipos oficiais do Worker (TextDecoder); normalizador puro e testes sintéticos adicionados no commit b54e4442f06318d2935e3de39e4102853b7c96a7. Ainda sem gravação ou rota ativa. CI anterior falhou por TS2345; correção precisa passar CI. Diagnóstico adicional limitado ao relatório 60, sem valores individuais nos logs, valida volume e distribuição agregada.
 - Antes da ativação: validar correspondência de protocolos com CSV sanitizado, resolução de filiais reais, UX de dados incompletos, comportamento de sincronização incremental e concorrência. Manter CSV/PDF intactos; PR draft e sem merge.
+
+
+## 8. Estratégia de integração após diagnóstico de volume
+
+Execução 45994038780 (sucesso): 1031 linhas, 11 páginas, 26 datas distintas, 182 linhas do dia e 849 de dias futuros, 947 com filial codificada, 84 sem código inequívoco e 9 ocorrências repetidas de protocolo. Observações pontuais, sem garantia de horizonte ou cobertura contratual.
+
+Decisão: relatório 60 como fonte primária. Relatórios 1 e 30 só podem enriquecer dados se houver chave compartilhada estável e semântica demonstrada; fornecedor + horário + filial não prova identidade mesmo em correspondência única na amostra. Não percorrer os históricos. Diagnóstico complementar 45994758979 investiga primeira/última página de cada relatório e duplicatas do 60, com teto de 19 GETs e sem valores individuais nos logs.
+
+Deduplicar apenas equivalência integral dos campos normalizados; consolidar documentos somente após comprovar granularidade; nunca escolher arbitrariamente uma linha. CD sem doca permanece no CSV/PDF até identificação explícita e segura. Preservar quantidades anteriores; novos sem informação permanecem nulos. Não converter ausência em cancelamento.
+
+Limites oficiais do Cloudflare Workers Free (https://developers.cloudflare.com/workers/platform/limits/): 50 subrequests externos por invocação e CPU de 10 ms. 11 páginas cabem no orçamento externo, mas CPU, duração, concorrência e D1 exigem teste. Não ativar se os limites gratuitos não forem respeitados.
+
+CI 45994045287 falhou porque Node 22 strip-only não suporta parameter properties; corrigido no commit 48d81ff1fdef8b73d19319581055443efdabbacc. Testes do cliente de leitura passaram naquela execução, CodeQL verde, CI completo ainda não verde. Sem alteração da main nem produção.
