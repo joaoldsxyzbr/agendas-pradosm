@@ -14,8 +14,8 @@ import {
   type DiagnosticsTab,
 } from "./api";
 
-const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#344d69] bg-[#142338] shadow-lg";
-const input = "h-9 min-w-0 w-full rounded-md border border-[#48617b] bg-[#192d46] px-3 text-xs text-white outline-none focus-visible:border-sky-400 disabled:opacity-50";
+const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#344956] bg-[#192734]";
+const input = "h-9 min-w-0 w-full rounded-md border border-[#526777] bg-[#223443] px-3 text-sm text-white outline-none focus-visible:border-[#90c8df] disabled:opacity-50";
 const tabs: Array<{ id: DiagnosticsTab; label: string }> = [
   { id: "errors", label: "Erros" },
   { id: "operations", label: "Operações" },
@@ -48,27 +48,27 @@ function diagnosticDetails(item: DiagnosticRecord) {
 }
 
 function DiagnosticRow({ item }: { item: DiagnosticRecord }) {
-  return <tr data-testid={"diagnostic-" + item.id} className="hover:bg-[#1c3047]">
+  return <tr data-testid={"diagnostic-" + item.id} className="hover:bg-[#263948]">
     <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-300">{dateBR(item.createdAt)}</td>
     <td className="px-4 py-3">
       <strong className="block text-xs text-white">{EVENT_LABELS[item.event] ?? item.event}</strong>
-      <small className="block text-[11px] text-slate-400">{item.operation} · {item.source}</small>
+      <small className="block text-xs text-slate-400">{item.operation} · {item.source}</small>
     </td>
-    <td className="px-4 py-3"><span className={"inline-block rounded border px-2 py-0.5 text-[11px] " + (levelTone[item.level] ?? "")}>{item.level}</span></td>
+    <td className="px-4 py-3"><span className={"inline-block rounded border px-2 py-0.5 text-xs " + (levelTone[item.level] ?? "")}>{item.level}</span></td>
     <td className="px-4 py-3 text-xs text-slate-300">
       {diagnosticDetails(item) || "—"}
-      {item.correlationId && <small className="block text-[11px] text-slate-500" title={item.correlationId}>ID: {item.correlationId.slice(0, 8)}</small>}
+      {item.correlationId && <small className="block text-xs text-slate-500" title={item.correlationId}>ID: {item.correlationId.slice(0, 8)}</small>}
     </td>
     <td className="px-4 py-3 text-xs text-slate-300">{item.user?.name ?? "Sistema"}</td>
   </tr>;
 }
 
 function AuditRow({ item }: { item: AuditRecord }) {
-  return <tr data-testid={"audit-" + item.id} className="hover:bg-[#1c3047]">
+  return <tr data-testid={"audit-" + item.id} className="hover:bg-[#263948]">
     <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-300">{dateBR(item.createdAt)}</td>
     <td className="px-4 py-3">
       <strong className="block text-xs text-white">{item.action.replaceAll("_", " ")}</strong>
-      <small className="block text-[11px] text-slate-400">{item.entity ?? "—"}</small>
+      <small className="block text-xs text-slate-400">{item.entity ?? "—"}</small>
     </td>
     <td className="px-4 py-3 text-xs text-slate-300">{item.user?.name ?? "Sistema"}</td>
     <td className="px-4 py-3 text-xs text-slate-300">{item.details ?? "—"}</td>
@@ -100,7 +100,7 @@ export function DiagnosticsPage() {
     event.preventDefault();
     setApplied({ ...draft });
   };
-  return <section className="mx-auto w-full min-w-0 max-w-[1450px] overflow-x-clip space-y-5" aria-label="Logs e auditoria">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] overflow-x-clip space-y-5" aria-label="Logs e auditoria">
     <PageHeader eyebrow="Administração" title="Logs e Auditoria"
       description="Diagnostique falhas técnicas e consulte alterações realizadas no sistema."
       actions={<Button variant="secondary" onClick={reload}><RefreshCw size={14} />Atualizar</Button>} />
@@ -159,19 +159,19 @@ export function DiagnosticsPage() {
         <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
           {tab === "audit"
             ? <table aria-label="Registros de auditoria" className="w-full min-w-[640px] border-collapse">
-              <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+              <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
                 <th className="px-4 py-3">Data</th><th className="px-4 py-3">Alteração</th>
                 <th className="px-4 py-3">Responsável</th><th className="px-4 py-3">Detalhes</th></tr></thead>
-              <tbody className="divide-y divide-[#344d69]">
+              <tbody className="divide-y divide-[#344956]">
                 {auditItems.map(item => <AuditRow key={item.id} item={item} />)}
                 {!auditItems.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-xs text-slate-400">Nenhum registro encontrado para esta consulta.</td></tr>}
               </tbody>
             </table>
             : <table aria-label="Registros de diagnóstico" className="w-full min-w-[760px] border-collapse">
-              <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+              <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
                 <th className="px-4 py-3">Data</th><th className="px-4 py-3">Evento</th><th className="px-4 py-3">Nível</th>
                 <th className="px-4 py-3">Informações</th><th className="px-4 py-3">Responsável</th></tr></thead>
-              <tbody className="divide-y divide-[#344d69]">
+              <tbody className="divide-y divide-[#344956]">
                 {diagnosticItems.map(item => <DiagnosticRow key={item.id} item={item} />)}
                 {!diagnosticItems.length && <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">Nenhum registro encontrado para esta consulta.</td></tr>}
               </tbody>

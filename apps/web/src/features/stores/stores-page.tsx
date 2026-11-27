@@ -11,8 +11,8 @@ import { ApiError } from "@/lib/api";
 import type { Store } from "@/features/receiving/model";
 import { deleteStore, filterStores, listStoreAudit, listStores, saveStore, storesKey, validStore, type StoreForm } from "./api";
 
-const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[#344d69] bg-[#142338] shadow-lg";
-const input = "h-9 min-w-0 w-full rounded-md border border-[#48617b] bg-[#192d46] px-3 text-xs text-white outline-none focus-visible:border-sky-400";
+const surface = "w-full min-w-0 max-w-full overflow-hidden rounded-md border border-[#344956] bg-[#192734]";
+const input = "h-9 min-w-0 w-full rounded-md border border-[#526777] bg-[#223443] px-3 text-sm text-white outline-none focus-visible:border-[#90c8df]";
 const errorText = (e: unknown) => e instanceof ApiError ? e.message : "A operação não pôde ser concluída. Tente novamente.";
 const auditActions: Record<string, string> = {
   loja_criada: "Loja criada", loja_atualizada: "Loja atualizada", loja_removida: "Loja removida",
@@ -68,10 +68,10 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
   };
   return <dialog ref={modalRef} aria-label={store ? "Editar loja" : "Cadastrar loja"}
     onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}
-    className="fixed inset-0 m-auto max-h-[90vh] w-[min(540px,calc(100vw-24px))] overflow-y-auto rounded-xl border border-[#48617b] bg-[#142338] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
-    <div className="flex items-start justify-between gap-3 border-b border-[#344d69] px-5 py-4">
-      <div><p className="text-[10px] font-bold uppercase tracking-widest text-sky-400">{store ? "Gerenciar unidade" : "Nova unidade"}</p>
-        <h2 className="mt-1 text-lg font-bold">{store ? "Editar loja" : "Cadastrar loja"}</h2></div>
+    className="fixed inset-0 m-auto max-h-[90vh] w-[min(540px,calc(100vw-24px))] overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-slate-950/75">
+    <div className="flex items-start justify-between gap-3 border-b border-[#344956] px-5 py-4">
+      <div><p className="text-xs font-medium text-slate-400">{store ? "Gerenciar unidade" : "Nova unidade"}</p>
+        <h2 className="mt-1 text-lg font-semibold">{store ? "Editar loja" : "Cadastrar loja"}</h2></div>
       <Button size="icon" variant="ghost" aria-label="Fechar" disabled={busy} onClick={onClose}><X size={18} /></Button>
     </div>
     <form onSubmit={submit} className="space-y-4 p-5" aria-label="Formulário da loja">
@@ -98,17 +98,17 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
         <Button type="submit" disabled={busy || !validStore(form)||!canSave}>{save.isPending ? "Salvando…" : store ? "Salvar alterações" : "Cadastrar loja"}</Button>
       </div>
     </form>
-    {store && <div className="space-y-4 border-t border-[#344d69] p-5">
+    {store && <div className="space-y-4 border-t border-[#344956] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div><h3 className="text-sm font-semibold">Histórico de alterações</h3><p className="text-xs text-slate-400">Auditoria deste cadastro</p></div>
         <Button variant="secondary" size="sm" disabled={busy||!canAudit} onClick={() => setAuditVisible(value => !value)}>{auditVisible ? "Ocultar histórico" : "Ver histórico"}</Button>
       </div>
-      {auditVisible && <div className="max-h-56 overflow-auto rounded-lg border border-[#344d69] bg-[#101e30] p-3">
+      {auditVisible && <div className="max-h-56 overflow-auto rounded-lg border border-[#344956] bg-[#131c25] p-3">
         {audit.isPending && <Loading label="Carregando histórico…" className="text-xs text-slate-400" />}
         {audit.isError && <p role="alert" className="text-xs text-rose-300">Não foi possível carregar o histórico.
           <Button variant="secondary" size="sm" onClick={() => void audit.refetch()}>Tentar novamente</Button></p>}
         {audit.data && (!audit.data.length ? <p className="text-xs text-slate-400">Nenhuma alteração registrada.</p>
-          : <ol className="space-y-3">{audit.data.map(event => <li key={event.id} className="space-y-1 border-b border-[#344d69] pb-3 text-xs">
+          : <ol className="space-y-3">{audit.data.map(event => <li key={event.id} className="space-y-1 border-b border-[#344956] pb-3 text-xs">
             <strong className="block text-white">{auditActions[event.action] ?? event.action}</strong>
             <span className="block text-slate-400">{event.user?.name ?? "Sistema"} · {new Date(event.createdAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
             {event.details && <span className="block text-slate-300">{event.details}</span>}
@@ -119,7 +119,7 @@ function StoreDialog({ store, onClose }: { store: Store | null; onClose: () => v
       <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><strong className="text-xs text-slate-100">{confirmDelete ? "Confirmar exclusão da loja?" : "Excluir loja"}</strong>
-            <p className="mt-1 text-[11px] text-slate-400">{confirmDelete ? "Usuários vinculados impedem a exclusão." : "Preserva agendas e histórico existentes."}</p></div>
+            <p className="mt-1 text-xs text-slate-400">{confirmDelete ? "Usuários vinculados impedem a exclusão." : "Preserva agendas e histórico existentes."}</p></div>
           {!confirmDelete ? <Button size="sm" variant="danger" disabled={busy||!canDelete} onClick={() => { setFeedback(""); setConfirmDelete(true); }}><Trash2 size={13} />Excluir loja</Button>
             : <div className="flex gap-2"><Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancelar</Button>
               <Button size="sm" variant="danger" disabled={busy||!canDelete} onClick={() => remove.mutate()}>{remove.isPending ? "Excluindo…" : "Confirmar exclusão"}</Button></div>}
@@ -138,15 +138,15 @@ export function StoresPage() {
   const query = useQuery({ queryKey: storesKey, queryFn: listStores });
   const stores = query.data ?? [];
   const visible = filterStores(stores, search, status);
-  return <section className="mx-auto w-full min-w-0 max-w-[1450px] overflow-x-clip space-y-5" aria-label="Cadastro de lojas">
+  return <section className="mx-auto w-full min-w-0 max-w-[1530px] overflow-x-clip space-y-5" aria-label="Cadastro de lojas">
     <PageHeader eyebrow="Cadastros" title="Lojas" description="Gerencie as unidades habilitadas para recebimento."
       actions={<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
         <span className="text-xs tabular-nums text-slate-400">{stores.length} lojas · {stores.filter(s => s.ativo).length} ativas</span>
         <Button disabled={!canUse(user,"lojas.criar",true)||user?.escopo?.mode==="assigned"} onClick={() => setEditing("new")}><Plus size={14} />Nova loja</Button>
       </div>} />
     <div className={surface}>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344d69] p-4">
-        <label className="flex w-full min-w-0 items-center gap-2 rounded-md border border-[#48617b] bg-[#192d46] px-3 sm:max-w-sm">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#344956] p-4">
+        <label className="flex w-full min-w-0 items-center gap-2 rounded-md border border-[#526777] bg-[#223443] px-3 sm:max-w-sm">
           <Search size={15} className="shrink-0 text-slate-400" aria-hidden="true" /><span className="sr-only">Buscar loja</span>
           <input type="search" aria-label="Buscar loja" value={search} onChange={event => setSearch(event.target.value)}
             className="h-9 w-full min-w-0 bg-transparent text-xs text-white outline-none" placeholder="Buscar por código ou nome..." />
@@ -164,7 +164,7 @@ export function StoresPage() {
       {query.isError && <div role="alert" className="flex flex-wrap items-center gap-3 p-5 text-xs text-rose-300">Não foi possível carregar as lojas.
         <Button size="sm" variant="secondary" onClick={() => void query.refetch()}>Tentar novamente</Button></div>}
       {query.data && <>
-        <div className="min-w-0 max-w-full divide-y divide-[#344d69] sm:hidden" aria-label="Lojas no celular">
+        <div className="min-w-0 max-w-full divide-y divide-[#344956] sm:hidden" aria-label="Lojas no celular">
           {visible.map(store => <article key={store.id} data-testid={"mobile-store-" + store.codigo}
             className="flex min-w-0 items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0 flex-1">
@@ -182,11 +182,11 @@ export function StoresPage() {
         </div>
         <div className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain sm:block">
         <table aria-label="Lojas cadastradas" className="w-full min-w-[580px] border-collapse">
-          <thead className="bg-[#203750] text-left text-[11px] font-semibold text-slate-300"><tr>
+          <thead className="bg-[#223443] text-left text-xs font-semibold text-slate-300"><tr>
             <th className="px-4 py-3">Código</th><th className="px-4 py-3">Nome</th><th className="px-4 py-3">Situação</th>
             <th className="px-4 py-3"><span className="sr-only">Ações</span></th></tr></thead>
-          <tbody className="divide-y divide-[#344d69]">
-            {visible.map(store => <tr key={store.id} data-testid={"store-" + store.codigo} className="hover:bg-[#1c3047]">
+          <tbody className="divide-y divide-[#344956]">
+            {visible.map(store => <tr key={store.id} data-testid={"store-" + store.codigo} className="hover:bg-[#263948]">
               <td className="px-4 py-3 text-xs font-bold text-white">{store.codigo}</td><td className="px-4 py-3 text-xs text-slate-200">{store.nome}</td>
               <td className="px-4 py-3"><StatusBadge tone={store.ativo ? "success" : "neutral"}>{store.ativo ? "Ativa" : "Inativa"}</StatusBadge></td>
               <td className="px-4 py-3 text-right"><Button size="sm" variant="secondary" aria-label={"Editar loja " + store.codigo} onClick={() => setEditing(store)}>

@@ -152,10 +152,10 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={ref} aria-labelledby="import-agenda-heading"
     onCancel={event => { if (submitting) { event.preventDefault(); return; } onClose(); }}
     onClick={event => { if (event.target === ref.current && !submitting) onClose(); }}
-    className="m-auto max-h-[min(92dvh,900px)] w-[min(94vw,1100px)] max-w-none overflow-y-auto rounded-xl border border-[#45617c] bg-[#162538] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#34516d] bg-[#1a2b40] px-4 py-3">
+    className="m-auto max-h-[min(92dvh,900px)] w-[min(94vw,1100px)] max-w-none overflow-y-auto rounded-md border border-[#526777] bg-[#192734] p-0 text-slate-100 shadow-2xl backdrop:bg-black/75">
+    <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#344956] bg-[#223443] px-4 py-3">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400">Agenda diária</p>
+        <p className="text-xs font-medium text-slate-400">Agenda diária</p>
         <h2 id="import-agenda-heading" className="text-base font-bold">Importar agenda</h2>
       </div>
       <Button aria-label="Fechar importação" size="icon" variant="secondary" disabled={submitting}
@@ -166,13 +166,13 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
         onDragEnter={event => { if (Array.from(event.dataTransfer.types).includes("Files")) setDragging(true); }}
         onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false); }}
         onDragOver={onDragOver} onDrop={onDrop}
-        className={`rounded-xl border border-dashed p-5 shadow-lg transition-colors ${dragging ? "border-sky-300 bg-[#264566]" : "border-[#3b5876] bg-[#17283d]"}`}>
+        className={`rounded-md border border-dashed p-5 transition-colors ${dragging ? "border-sky-300 bg-[#264566]" : "border-[#3b5876] bg-[#17283d]"}`}>
         <div className="flex flex-wrap items-center gap-4">
           <div aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-lg bg-sky-500/10 text-sky-300"><Upload size={20}/></div>
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold text-slate-100">Arquivo CSV ou PDF</h3>
             <p className="mt-1 text-xs text-slate-400">Arraste um arquivo aqui ou selecione no computador. Limite de 10 MB.</p>
-            <p aria-live="polite" className="mt-2 break-all text-[11px] text-slate-300">{file?.name ?? "Nenhum arquivo selecionado"}</p>
+            <p aria-live="polite" className="mt-2 break-all text-xs text-slate-300">{file?.name ?? "Nenhum arquivo selecionado"}</p>
           </div>
           <input ref={fileInput} type="file" accept=".csv,text/csv,.pdf,application/pdf"
             aria-label="Arquivo CSV ou PDF" className="sr-only" onChange={onFileChange} disabled={submitting}/>
@@ -180,7 +180,7 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
             <FileSpreadsheet size={14}/>Selecionar arquivo
           </Button>
         </div>
-        <p className="mt-3 text-[11px] text-slate-400">Nenhuma agenda é gravada até você conferir a prévia e confirmar.</p>
+        <p className="mt-3 text-xs text-slate-400">Nenhuma agenda é gravada até você conferir a prévia e confirmar.</p>
       </div>
       {loading && <p role="status" className="rounded-lg border border-[#3b5876] bg-[#17283d] p-3 text-xs text-slate-300">Lendo arquivo…</p>}
       {message && <p role={preview?.blockingErrors.length ? "alert" : "status"}
@@ -211,19 +211,19 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
             {preview.warnings.map((warning, i) => <li key={i}>{warning}</li>)}
           </ul>
         </section>}
-        <div className="overflow-hidden rounded-xl border border-[#38516d] bg-[#142235]">
-          <div className="flex items-center gap-2 border-b border-[#38516d] bg-[#21374f] px-3 py-2.5">
+        <div className="overflow-hidden rounded-md border border-[#344956] bg-[#192734]">
+          <div className="flex items-center gap-2 border-b border-[#344956] bg-[#223443] px-3 py-2.5">
             <FileText size={15} className="text-sky-300"/><h3 className="text-xs font-bold text-slate-100">Prévia dos agendamentos</h3>
-            <span className="ml-auto text-[11px] text-slate-400">{file ? fileType(file) : ""}</span>
+            <span className="ml-auto text-xs text-slate-400">{file ? fileType(file) : ""}</span>
           </div>
           <div className="w-full overflow-x-auto" data-testid="import-table-scroll">
             <table className="w-full min-w-[830px] border-collapse text-left text-xs" aria-label="Prévia de agendamentos">
-              <thead className="bg-[#1c3047] text-[11px] text-slate-300">
+              <thead className="bg-[#263948] text-xs text-slate-300">
                 <tr>{["Loja","Horário","Protocolo","Fornecedor","Itens","Volumes","Tipo"].map(name =>
                   <th key={name} className="px-3 py-2 font-semibold">{name}</th>)}</tr>
               </thead>
-              <tbody className="divide-y divide-[#304865]">
-                {rows.length ? rows.map(({storeCode,item},i) => <tr key={i} className="hover:bg-[#29405a]">
+              <tbody className="divide-y divide-[#344956]">
+                {rows.length ? rows.map(({storeCode,item},i) => <tr key={i} className="hover:bg-[#263948]">
                   <td className="px-3 py-2">{storeCode ?? "—"}</td>
                   <td className="px-3 py-2">{item.startTime} - {item.endTime}</td>
                   <td className="px-3 py-2">{item.protocol}</td>
@@ -253,8 +253,8 @@ export function ImportAgendaDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ImportMetric({label,value}:{label:string;value:string}) {
-  return <div className="flex min-h-[68px] flex-col justify-center rounded-lg border border-[#38516d] bg-[#1a2c42] px-3 py-2">
-    <span className="text-[11px] text-slate-400">{label}</span>
+  return <div className="flex min-h-[68px] flex-col justify-center rounded-lg border border-[#344956] bg-[#1a2c42] px-3 py-2">
+    <span className="text-xs text-slate-400">{label}</span>
     <strong className="mt-0.5 text-sm font-bold text-white">{value}</strong>
   </div>;
 }

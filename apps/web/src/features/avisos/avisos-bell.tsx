@@ -144,8 +144,8 @@ export function AvisosBell({ papel, canPublish, canMarkRead = true }: { papel: R
       </span>}
     </Button>
     {open && <div data-testid="avisos-panel" role="dialog" aria-label="Avisos"
-      className="absolute right-0 top-11 z-40 w-[min(92vw,420px)] overflow-hidden rounded-xl border border-[#45617c] bg-[#162538] text-slate-100 shadow-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#34516d] bg-[#1a2b40] px-4 py-2.5">
+      className="absolute right-0 top-11 z-40 w-[min(92vw,420px)] overflow-hidden rounded-md border border-[#526777] bg-[#192734] text-slate-100 shadow-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#344956] bg-[#223443] px-4 py-2.5">
         <strong className="text-sm">Avisos</strong>
         <div className="flex flex-wrap items-center gap-1.5">
           {naoLidos > 0 && <Button size="sm" variant="secondary"
@@ -158,7 +158,7 @@ export function AvisosBell({ papel, canPublish, canMarkRead = true }: { papel: R
           </Button>}
         </div>
       </div>
-      <div className="max-h-[min(60dvh,420px)] divide-y divide-[#304865] overflow-y-auto">
+      <div className="max-h-[min(60dvh,420px)] divide-y divide-[#344956] overflow-y-auto">
         {avisos.isError && <p role="alert" className="p-4 text-xs text-rose-300">Não foi possível carregar os avisos.</p>}
         {!avisos.isError && lista.length === 0 && (
           <p className="p-4 text-xs text-slate-400">Nenhum aviso no momento.</p>
@@ -168,7 +168,7 @@ export function AvisosBell({ papel, canPublish, canMarkRead = true }: { papel: R
           className={`p-3.5 ${aviso.lido ? "" : aviso.urgente ? "border-l-2 border-rose-500/70 bg-rose-500/10" : "bg-sky-500/5"}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
                 <span className={aviso.tipo === "evento"
                   ? "rounded bg-sky-500/15 px-1.5 py-0.5 font-semibold text-sky-300"
                   : "rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300"}>
