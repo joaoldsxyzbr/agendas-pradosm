@@ -6,12 +6,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "../../worker/app.ts";
 import { createSessionToken } from "../../worker/lib/session.ts";
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 
 const SECRET = "somente-testes-sinteticos-de-migrations-sem-credencial-real";
 const migrationsDir = fileURLToPath(new URL("../../migrations/", import.meta.url));
 
 /** Executa o schema real (migrações completas), não uma cópia reduzida de tabelas. */
-function fixture() {
+function fixture(): { sqlite: DatabaseSync; db: D1Database; get: (userId: string, path: string) => Promise<Response> } {
   const sqlite = new DatabaseSync(":memory:");
   try {
     sqlite.exec("PRAGMA foreign_keys = ON");
@@ -48,36 +49,9 @@ function fixture() {
       }
     }
     assert.equal(sqlite.prepare("PRAGMA foreign_key_check").all().length, 0);
-    const db = {
-      prepare(sql) {
-        const stmt = sqlite.prepare(sql);
-        let params = [];
-        const request = {
-          bind(...values) { params = values; return request; },
-          async first() { return stmt.get(...params) ?? null; },
-          async all() { return { results: stmt.all(...params) }; },
-          async run() {
-            const result = stmt.run(...params);
-            return { success: true, meta: { changes: Number(result.changes) } };
-          }
-        };
-        return request;
-      },
-      async batch(statements) {
-        sqlite.exec("BEGIN");
-        try {
-          const result = [];
-          for (const stmt of statements) result.push(await stmt.run());
-          sqlite.exec("COMMIT");
-          return result;
-        } catch (error) {
-          sqlite.exec("ROLLBACK");
-          throw error;
-        }
-      }
-    };
-    const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-    async function get(userId, path) {
+    const db = sqliteD1(sqlite);
+    const env = testEnv(db, SECRET);
+    async function get(userId: string, path: string): Promise<Response> {
       const token = await createSessionToken(userId, 1, SECRET);
       return app.request("http://localhost" + path, {
         method: "GET", headers: { Cookie: "agenda_session=" + token }

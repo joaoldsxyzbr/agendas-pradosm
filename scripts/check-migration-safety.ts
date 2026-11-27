@@ -12,46 +12,49 @@ const DESTRUCTIVE_PATTERNS = [
   { label: "ALTER TABLE DROP", pattern: /\bALTER\s+TABLE\b[\s\S]*?\bDROP\b/i },
   { label: "ALTER TABLE RENAME", pattern: /\bALTER\s+TABLE\b[\s\S]*?\bRENAME\b/i },
 ];
+type Migration = { fileName: string; number: number | null; sql: string };
+type UnsafeMigration = Migration & { operation: string };
 
-function stripSqlComments(sql) {
+function stripSqlComments(sql: string): string {
   return sql
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/--.*$/gm, " ");
 }
 
-export function destructiveOperation(sql) {
+export function destructiveOperation(sql: string): string | null {
   const normalized = stripSqlComments(sql);
   return DESTRUCTIVE_PATTERNS.find(({ pattern }) => pattern.test(normalized))?.label ?? null;
 }
 
-export function migrationNumber(fileName) {
+export function migrationNumber(fileName: string): number | null {
   const match = /^(\d+)_.*\.sql$/i.exec(fileName);
   return match ? Number(match[1]) : null;
 }
 
-export function migrationDigest(sql) {
+export function migrationDigest(sql: string): string {
   return createHash("sha256").update(sql, "utf8").digest("hex");
 }
 
-export function isValidContractApproval(approval, migration) {
+export function isValidContractApproval(approval: unknown, migration: UnsafeMigration): boolean {
   if (!approval || typeof approval !== "object") return false;
 
-  const approvedAt = Date.parse(approval.approvedAt ?? "");
+  const record = approval as Record<string, unknown>;
+  const approvedAt = Date.parse(typeof record.approvedAt === "string" ? record.approvedAt : "");
   return (
-    approval.fileName === migration.fileName &&
-    approval.sha256 === migrationDigest(migration.sql) &&
-    approval.operation === migration.operation &&
-    typeof approval.issue === "string" &&
-    /^#\d+$/.test(approval.issue) &&
-    typeof approval.approvedBy === "string" &&
-    approval.approvedBy.trim().length >= 2 &&
+    record.fileName === migration.fileName &&
+    record.sha256 === migrationDigest(migration.sql) &&
+    record.operation === migration.operation &&
+    typeof record.issue === "string" &&
+    /^#\d+$/.test(record.issue) &&
+    typeof record.approvedBy === "string" &&
+    record.approvedBy.trim().length >= 2 &&
     Number.isFinite(approvedAt) &&
-    typeof approval.reason === "string" &&
-    approval.reason.trim().length >= 20
+    typeof record.reason === "string" &&
+    record.reason.trim().length >= 20
   );
 }
 
-export function findUnsafeMigrations(migrationsDir) {
+export function findUnsafeMigrations(migrationsDir: string): UnsafeMigration[] {
   return readdirSync(migrationsDir)
     .filter((fileName) => fileName.endsWith(".sql"))
     .map((fileName) => ({
@@ -64,18 +67,19 @@ export function findUnsafeMigrations(migrationsDir) {
       ...migration,
       operation: destructiveOperation(migration.sql),
     }))
-    .filter(({ operation }) => operation !== null);
+    .filter((migration): migration is UnsafeMigration => migration.operation !== null);
 }
 
-export function loadContractApprovals(migrationsDir) {
+export function loadContractApprovals(migrationsDir: string): unknown[] {
   const approvalPath = join(migrationsDir, CONTRACT_APPROVALS_FILE);
   if (!existsSync(approvalPath)) return [];
 
-  const parsed = JSON.parse(readFileSync(approvalPath, "utf8"));
-  return Array.isArray(parsed?.approvals) ? parsed.approvals : [];
+  const parsed: unknown = JSON.parse(readFileSync(approvalPath, "utf8"));
+  if (!parsed || typeof parsed !== "object" || !("approvals" in parsed)) return [];
+  return Array.isArray(parsed.approvals) ? parsed.approvals : [];
 }
 
-export function findUnapprovedUnsafeMigrations(migrationsDir) {
+export function findUnapprovedUnsafeMigrations(migrationsDir: string): UnsafeMigration[] {
   const approvals = loadContractApprovals(migrationsDir);
 
   return findUnsafeMigrations(migrationsDir).filter(
@@ -96,9 +100,9 @@ function isMainModule() {
 if (isMainModule()) {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const migrationsDir = join(root, "migrations");
-  const unsafe = findUnapprovedUnsafeMigrations(migrationsDir);
+  const unsafe: UnsafeMigration[] = findUnapprovedUnsafeMigrations(migrationsDir);
   const v2Dir=join(root,"migrations-v2");
-  if(existsSync(v2Dir))for(const fileName of readdirSync(v2Dir).filter(name=>/^\d{4}_.*\.sql$/.test(name))){
+  if(existsSync(v2Dir))for(const fileName of readdirSync(v2Dir).filter((name: string)=>/^\d{4}_.*\.sql$/.test(name))){
     const sql=readFileSync(join(v2Dir,fileName),"utf8");
     const operation=destructiveOperation(sql);
     if(operation)unsafe.push({fileName:"migrations-v2/"+fileName,number:migrationNumber(fileName),sql,operation});

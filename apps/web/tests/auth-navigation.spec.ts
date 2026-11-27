@@ -1,10 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import type { SessionUser } from "../src/features/auth/session.ts";
 
-const admin = { id: "adm", nome: "ADM Teste", papel: "admin" };
-const viewer = { id: "view", nome: "Visualizador", papel: "visualizador" };
-const conference = { id: "conf", nome: "Doca 01", papel: "conferente", lojaId: "1" };
+const admin: SessionUser = { id: "adm", nome: "ADM Teste", papel: "admin" };
+const viewer: SessionUser = { id: "view", nome: "Visualizador", papel: "visualizador" };
+const conference: SessionUser = { id: "conf", nome: "Doca 01", papel: "conferente", lojaId: "1" };
 
-async function sessionMocks(page, initialUser = null) {
+async function sessionMocks(page: Page, initialUser: SessionUser | null = null) {
   let current = initialUser;
   await page.route("**/api/realtime/config", route => route.fulfill({ json: { mode: "off", protocolVersion: 1 } }));
   await page.route("**/api/avisos", route => route.fulfill({ json: { avisos: [], naoLidos: 0 } }));
@@ -32,7 +33,7 @@ async function sessionMocks(page, initialUser = null) {
       return route.fulfill({ json: current });
     }
     if (path === "/api/auth/login" && method === "POST") {
-      const body = route.request().postDataJSON();
+      const body: { login?: string; senha?: string } = route.request().postDataJSON();
       if (body.login !== "adm" || body.senha !== "senha-de-teste") {
         return route.fulfill({ status: 401, json: { error: "CREDENCIAIS_INVALIDAS", message: "Login ou senha inválidos." } });
       }
@@ -94,7 +95,7 @@ test("React: administrador pode navegar nas rotas sem dados operacionais falsos"
     ["/admin/reports", "Relatório Gerencial"],
     ["/admin/agendas", "Agendas"],
     ["/admin/diagnostics", "Logs e Auditoria"],
-  ]) {
+  ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
     if (path === "/admin") {

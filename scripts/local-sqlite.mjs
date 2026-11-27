@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** @param {string} filename @param {string} migrationsDir @returns {{DB:D1Database,seed:(sql:string)=>void,close:()=>void}} */
 export function openLocalDatabase(filename, migrationsDir) {
   const sqlite=new DatabaseSync(filename);
   try {
@@ -18,7 +19,16 @@ export function openLocalDatabase(filename, migrationsDir) {
       }catch(error){sqlite.exec("ROLLBACK");throw error;}
     }
     if(sqlite.prepare("PRAGMA foreign_key_check").all().length)throw Error("Integridade referencial local inválida.");
+    /** @type {WeakMap<D1PreparedStatement, () => D1Result>} */
     const executions=new WeakMap();
+    /** @param {unknown} value @returns {import("node:sqlite").SQLInputValue} */
+    function sqliteValue(value) {
+      if(value===null||typeof value==="string"||typeof value==="number"||typeof value==="bigint")return value;
+      if(value instanceof ArrayBuffer)return value;
+      if(ArrayBuffer.isView(value))return new Uint8Array(new Uint8Array(value.buffer,value.byteOffset,value.byteLength));
+      throw new TypeError("Parâmetro SQLite incompatível.");
+    }
+    /** @param {string} sql @param {import("node:sqlite").SQLInputValue[]} [values=[]] */
     function prepare(sql,values=[]){
       // Prepare na execução, como D1; bind retorna um statement independente.
       function execute(){
@@ -29,16 +39,25 @@ export function openLocalDatabase(filename, migrationsDir) {
         const result=stmt.run(...values);
         return {success:true,results:[],meta:{changes:Number(result.changes),last_row_id:Number(result.lastInsertRowid)}};
       }
+      /** @type {D1PreparedStatement} */
       const statement={
-        bind(...args){return prepare(sql,args);},
-        async first(column){const row=sqlite.prepare(sql).get(...values);return row?(column===undefined?row:row[column]??null):null;},
+        bind(...args){return prepare(sql,args.map(sqliteValue));},
+        /** @template [T=Record<string, unknown>] @param {string} [columnName] @returns {Promise<T|null>} */
+        async first(columnName){
+          const row=sqlite.prepare(sql).get(...values);
+          if(!row)return null;
+          if(columnName===undefined)return row;
+          if(!Object.hasOwn(row,columnName))throw new Error(`Coluna inexistente: ${columnName}`);
+          return /** @type {T} */ (row[columnName]??null);
+        },
         async all(){return execute();},
         async run(){return execute();},
-        async raw(options={}){const stmt=sqlite.prepare(sql);const cols=stmt.columns().map(c=>c.name);stmt.setReturnArrays(true);const rows=stmt.all(...values);return options.columnNames?[cols,...rows]:rows;}
+        async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...values);}
       };
       executions.set(statement,execute);
       return statement;
     }
+    /** @type {D1Database} */
     const DB={
       prepare,
       async batch(statements){

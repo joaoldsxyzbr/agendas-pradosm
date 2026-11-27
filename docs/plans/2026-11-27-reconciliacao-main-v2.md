@@ -1,6 +1,22 @@
 # Reconciliação main / V2
 
-Base V2 7365c54c89e1e88e06172a2ea61fd540f31c33d9; referência main 481b92f65d93fbbd1813c9153ee4c79d1b3220a3; branch `feat/v2-consolidacao-main`. Base comum b8252f2; 90 caminhos exclusivos da main, 94 da V2, 49 modificados dos dois lados, 183 idênticos (comparação de blobs, incluindo adições/remoções). Nenhum merge em main/preview.
+## Inventário de blobs recalculado — 27/11/2026
+
+Comparação refeita pelo GitHub API a partir dos trees completos de `main` (`481b92f65d93fbbd1813c9153ee4c79d1b3220a3`), ancestral comum (`b8252f2a394ce3376a5643d8fb50071fb7dce552`) e branch ativa (`feat/v2-consolidacao-main`, `e274099ad79711b31e3646dcd756f94c88e8fc77`). Classificação por caminho e SHA do blob, comparando cada branch com o ancestral:
+
+| Classe | Caminhos | Decisão inicial |
+| --- | ---: | --- |
+| Mudados apenas na main | 27 | Revisar e portar/adaptar somente o que cabe no schema e operação V2. |
+| Mudados apenas na consolidação | 103 | Preservar como trabalho V2; revisar regressões e limites. |
+| Mudados nas duas branches, blob idêntico | 64 | Conteúdo convergente. |
+| Mudados nas duas branches, blob diferente | 52 | Revisão manual obrigatória por contrato/segurança/UX. |
+| Caminhos sem mudança relativa ao ancestral | 179 | Sem divergência de blob nessa comparação. |
+
+O HEAD da consolidação ainda difere de `main` em 182 caminhos e de sua base V2 original (`7365c54c89e1e88e06172a2ea61fd540f31c33d9`) em 102. Esses totais incluem funcionalidades próprias da V2 e não são, isoladamente, medida de paridade funcional.
+
+Mudanças exclusivas da main que dependem diretamente do schema/recursos de produção (migrations 0029–0031, contratos de migration, smoke/benchmarks e retenção/R2) não devem ser copiadas literalmente. Os testes, documentação de segurança/operação e workflow restante precisam receber decisão explícita de adaptação ou exclusão justificada. As 52 divergências simultâneas incluem autenticação/sessões, autorização, agendas, Avisos, relatórios, auditoria, presença/realtime, testes de navegação/relatório, build e política de retenção; cada uma deve ser revisada mantendo os comportamentos intencionais da V2.
+
+Inventário inicial registrado antes dos lotes finais (histórico, não usar como estado atual): base V2 `7365c54c89e1e88e06172a2ea61fd540f31c33d9`, main `481b92f65d93fbbd1813c9153ee4c79d1b3220a3`, ancestral comum `b8252f2a394ce3376a5643d8fb50071fb7dce552`; 90 caminhos exclusivos da main, 94 exclusivos da V2, 49 modificados dos dois lados e 183 idênticos. Nenhum merge em main/preview.
 
 - [x] Inventário e preservação do snapshot original.
 - [x] Núcleo de agendas: separar consultas/importação/mutações com código da main, restaurar filtros de escopo, paginar após autorização, proteger CSV vinculado Nexello. Serviços de digitação, manutenção e realtime tipados. Eventos operacionais passam à auditoria; realtime continua desligado.
@@ -16,9 +32,9 @@ Build/CI/migration remota/deploy não executados. Restante dos conflitos não re
 
 ## Proposta de evolução do canal de Avisos
 
-Arquivo de estudo: `docs/plans/sql/0011_avisos_canal.sql` (fora de migrations-v2 para não ser aplicado por engano). SHA-256 local: `bd383380c94480897e69ffdccc8a137ad06f73401b1d82434c8ff898e4b7eb90`. Não editar migrations 0001–0010 já aplicadas.
+Arquivo de estudo: `docs/plans/sql/0011_avisos_canal.sql` (fora de migrations-v2 para não ser aplicado por engano). SHA-256 local após impor o título obrigatório para aviso/evento e nulo exclusivamente no chat: `2409b6abfb6034f8d50b712f2d8207ab0d2d4102a32099587e3c25319e0f97ad`. Não editar migrations 0001–0010 já aplicadas.
 
-O CHECK de tipo e o NOT NULL do título exigem reconstrução da tabela pai. Recriar também os dois filhos em tabelas intermediárias, copiar os registros, remover os filhos antigos antes do pai e renomear; as referências apontam para o novo pai. Não usar foreign_keys OFF, BEGIN/COMMIT explícitos no D1 ou DROP direto do pai. Reações e destino por ID estável seguem os contratos 0030/0031. Código legado sem correspondência mantém loja_id NULL e não deve ser tratado como destino global.
+O CHECK de tipo e a nulabilidade condicional do título (obrigatório para `aviso`/`evento`, nulo para `chat`) exigem reconstrução da tabela pai. Recriar também os dois filhos em tabelas intermediárias, copiar os registros, remover os filhos antigos antes do pai e renomear; as referências apontam para o novo pai. Não usar foreign_keys OFF, BEGIN/COMMIT explícitos no D1 ou DROP direto do pai. Reações e destino por ID estável seguem os contratos 0030/0031. Código legado sem correspondência mantém loja_id NULL e não deve ser tratado como destino global.
 
 Teste real local (Python sqlite3, dez migrations do snapshot V2, transação com foreign_keys ON): preservou dois avisos incluindo evento histórico, uma leitura, dois destinos (um resolvido e outro não resolvido) e usuário; rollback integral quando uma inserção inválida falhou depois da reconstrução; inserção de chat sem título, reação, resolução de escrita legada, estabilidade do destino após renomear loja, foreign_key_check vazio e integrity_check ok. Asserções verificaram que só os dois filhos referenciam avisos antes da alteração. Não equivale a executar em D1 remoto.
 
@@ -59,7 +75,7 @@ Reaproveitados da main adaptadores SQLite/D1 e recording-D1 tipados, contratos h
 
 Incorporados o tsconfig Worker strict, declarações PDF com unknown e mocks Node sem any, tsconfig Node strict/checkJs e descoberta automática de módulos da main. O verificador gera os tipos oficiais do Wrangler via configuração temporária sem bindings/credenciais e valida Worker completo, gate V2 adicional noUncheckedIndexedAccess e scripts/testes Node. Mantidos scripts de bloqueio remoto e flags de compatibilidade V2. Ajustes pontuais em auth, guard de escopo, observações e leitores. Scheduler isola falha de manutenção de agendas das limpezas seguintes e registra alerta de volume sem R2.
 
-**Status: gate instalado, NÃO aprovado.** Dependências do repositório e tipos gerados não estão disponíveis no ambiente local desta sessão; não foi executada a compilação integral. É provável que haja erros residuais nos módulos exclusivos da V2, especialmente scripts JS/testes e tipos D1. Não considerar ativar strict como prova de paridade nem desabilitar o gate para aprovar. Resolver os erros antes de concluir a PR. Nenhum CI ou deploy executado.
+**Status: gate instalado, NÃO aprovado.** Dependências do repositório e tipos gerados não estão disponíveis no ambiente local desta sessão; não foi executada a compilação integral. A tentativa anterior de `npm ci` foi bloqueada por resposta 403 do registry. Foram corrigidos tipos nos testes de navegação/relatórios e em adaptadores, scripts de benchmark, smoke, retenção, diagnósticos e migrations. O conjunto estrito ainda não foi comprovado; podem restar erros em módulos exclusivos da V2, scripts JS e tipos D1. Não considerar ativar strict como prova de paridade nem desabilitar o gate para aprovar. Nenhum CI ou deploy executado.
 
 ## Proteção de digitação durante inclusão incremental
 
@@ -73,10 +89,16 @@ Portada a suíte de concorrência da main, direcionada às dez migrations V2. Os
 
 ## Lote de ferramentas de build e contratos
 
-Após comparação das diferenças com a main, reaproveitados os blobs de testes CSV/PDF, contratos compartilhados e de autenticação, presença, repositórios e API integrada, além de scripts de build, verificação de artefatos e benchmark PBKDF2. O Vite incorpora a allowlist restrita do WASM, mantendo a denylist padrão. Não alteradas dependências, scripts de deploy ou configurações remotas. Testes HTTP sintéticos legados continuam sendo verificados com ACCESS_MODE desativado e não substituem a cobertura dos perfis V2. Suites copiadas aguardam execução integral e revisão de expectativas V2; o benchmark ampliado de agendas/avisos ainda precisa ser adaptado ao schema isolado e à migration proposta.
+Após comparação das diferenças com a main, reaproveitados os blobs de testes CSV/PDF, contratos compartilhados e de autenticação, presença, repositórios e API integrada, além de scripts de build, verificação de artefatos e benchmark PBKDF2. O Vite incorpora a allowlist restrita do WASM, mantendo a denylist padrão. Não alteradas dependências, scripts de deploy ou configurações remotas. Testes HTTP sintéticos legados continuam sendo verificados com ACCESS_MODE desativado e não substituem a cobertura dos perfis V2. O benchmark de agendas agora carrega as migrations reais de `migrations-v2/` e mantém dados sintéticos em SQLite local; não mede Cloudflare D1. Suítes copiadas aguardam execução integral e revisão de expectativas V2.
 
 ## Lote de testes de navegador e revalidação local
 
-Portadas suites Playwright de agendas, conferência, diagnósticos, histórico, importação, recebimento, lojas, usuários e canal de Avisos, além da fixture tipada compartilhada e tsconfig web que inclui todos os testes/configuração. Os testes de layout e comportamento originais não foram afrouxados. Auth/navigation e relatório possuem divergências V2 e ainda requerem reconciliação manual; demais suites devem ser verificadas contra redesign, permissões, fixtures de sessão e nova navegação. A falha E2E anterior de altura do layout segue pendente de diagnóstico. Nenhum Playwright ou build completo executado neste lote.
+Portadas suites Playwright de agendas, conferência, diagnósticos, histórico, importação, recebimento, lojas, usuários e canal de Avisos, além da fixture tipada compartilhada e tsconfig web que inclui todos os testes/configuração. Os testes de layout e comportamento originais não foram afrouxados. Auth/navigation e relatório foram ajustados para os contratos V2 e tipados estritamente; ainda falta executar Playwright e revisar suas expectativas em navegador. Demais suites devem ser verificadas contra redesign, permissões, fixtures de sessão e nova navegação. A falha E2E anterior de altura do layout segue pendente de diagnóstico. Nenhum Playwright ou build completo executado neste lote.
 
 Revalidação local em Node 22.16: 12/12 aprovados nos cinco arquivos de testes disponíveis (nexello-comparison-sqlite, nexello-comparison, nexello-lifecycle, v2-avisos-sqlite e v2-report-filters). Os cinco testes e sete arquivos de apoio tiveram hashes Git conferidos com o commit 501767196fec6da9185b749650601101db896b27. tsc 5.8.3 strict/noUncheckedIndexedAccess passou no módulo isolado report-filters. Reexecutada ainda a proteção SQL de digitação com os dez blobs de migrations conferidos, verificando marcação geral, fornecedor, versão stale, integridade e FK. Não equivale ao gate integral; dependências Hono/Zod/Wrangler/Playwright indisponíveis no ambiente desta execução. Nenhuma operação remota no D1, deploy ou CI.
+
+Nova execução neste checkout, em Node 24.22.3: os mesmos cinco arquivos passaram 13/13. A primeira execução revelou que o adaptador SQLite local não implementava `D1PreparedStatement.first(columnName)`; o adaptador e o tipo local foram alinhados ao contrato D1, e o teste agora verifica tanto a linha quanto a coluna selecionada. `git diff --check` também passou. Build, typecheck integral e Playwright continuam bloqueados pela ausência de `node_modules` e cache npm; nenhuma dependência foi instalada, e nenhum CI, deploy ou acesso remoto ao D1 foi executado.
+
+Também executados neste checkout: `npm run test:v2-schema` (2/2 aprovados) e `npm run check:migrations` (gate aprovado, sem migration destrutiva não aprovada). O npm exibiu aviso de configuração legada `http-proxy`; não interferiu nos resultados.
+
+A revisão também encontrou que o CHECK do tipo permitia título nulo em avisos oficiais após o rebuild. A proposta 0011 agora restringe título nulo a mensagens de chat; o hash da proposta foi atualizado acima. A suíte SQLite de Avisos cobre preservação dos campos legados de eventos, chat sem título, rejeição de combinações de título inválidas, reações válidas/inválidas, resolução de destino por ID, isolamento após renomear loja e rollback da reconstrução quando uma instrução posterior falha. Resultado observado após essas asserções: `tests/unit/v2-avisos-sqlite.test.ts`, 3/3 aprovados em SQLite local. Isso não substitui validação no runtime D1 antes de solicitar aprovação para a operação remota.

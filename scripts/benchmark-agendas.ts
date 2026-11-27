@@ -2,7 +2,11 @@
 // Node 22+ inclui node:sqlite (experimental em algumas versões).
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { AgendaSummaryRow } from "../worker/repositories/agendas.ts";
 import { listAdminAgendas, listStoreAgendas } from "../worker/repositories/agendas.ts";
 
 const quick = process.argv.includes("--quick");
@@ -11,40 +15,29 @@ const stores = 10;
 const appointmentsPerAgenda = 15;
 const repetitions = quick ? 2 : 5;
 const db = new DatabaseSync(":memory:");
-db.exec(`
-  CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT NOT NULL, nome TEXT NOT NULL);
-  CREATE TABLE usuarios (id TEXT PRIMARY KEY, nome TEXT NOT NULL);
-  CREATE TABLE agendas (
-    id TEXT PRIMARY KEY, loja_id TEXT NOT NULL, data_agenda TEXT NOT NULL,
-    arquivo_original TEXT NOT NULL, criado_por TEXT NOT NULL,
-    status_dia TEXT NOT NULL, concluido_em TEXT, concluido_por TEXT,
-    digitado_em TEXT, digitado_por TEXT,
-    criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL,
-    UNIQUE (loja_id, data_agenda)
-  );
-  CREATE TABLE agendamentos (
-    id TEXT PRIMARY KEY, agenda_id TEXT NOT NULL,
-    ativo INTEGER NOT NULL, status TEXT NOT NULL, origem TEXT NOT NULL,
-    horario_inicio TEXT NOT NULL
-  );
-  CREATE INDEX idx_agendas_loja_data ON agendas(loja_id, data_agenda);
-  CREATE INDEX idx_agendamentos_agenda_horario ON agendamentos(agenda_id, horario_inicio);
-`);
+db.exec("PRAGMA foreign_keys = ON");
+const migrationsDir = fileURLToPath(new URL("../migrations-v2/", import.meta.url));
+const migrations = readdirSync(migrationsDir)
+  .filter(name => /^\d{4}_[\w-]+\.sql$/.test(name))
+  .sort();
+for (const name of migrations) db.exec(readFileSync(join(migrationsDir, name), "utf8"));
+const fixedNow = "2026-10-19T12:00:00.000Z";
 for (let index = 0; index < stores; index++)
-  db.prepare("INSERT INTO lojas (id,codigo,nome) VALUES (?,?,?)")
-    .run(`l${index}`, String(index + 1).padStart(2, "0"), `Loja ${index + 1}`);
-db.prepare("INSERT INTO usuarios (id,nome) VALUES (?,?)").run("u1", "Admin sintético");
+  db.prepare("INSERT INTO lojas (id,codigo,nome,criado_em,atualizado_em) VALUES (?,?,?,?,?)")
+    .run(`l${index}`, String(index + 1).padStart(2, "0"), `Loja ${index + 1}`, fixedNow, fixedNow);
+db.prepare("INSERT INTO usuarios (id,nome,login,senha_hash,papel,criado_em,atualizado_em) VALUES (?,?,?,?,?,?,?)")
+  .run("u1", "Admin sintético", "benchmark-local", "hash-ficticio", "admin", fixedNow, fixedNow);
 
 const insertAgenda = db.prepare(`INSERT INTO agendas
   (id,loja_id,data_agenda,arquivo_original,criado_por,status_dia,criado_em,atualizado_em)
   VALUES (?,?,?,?,?,?,?,?)`);
 const insertAppointment = db.prepare(`INSERT INTO agendamentos
-  (id,agenda_id,ativo,status,origem,horario_inicio) VALUES (?,?,?,?,?,?)`);
-const fixedNow = "2026-10-19T12:00:00.000Z";
-function dateAt(index) {
+  (id,agenda_id,protocolo,horario_inicio,horario_fim,fornecedor,ativo,status,origem,criado_em,atualizado_em)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+function dateAt(index: number): string {
   return new Date(Date.UTC(2025, 0, 1 + index)).toISOString().slice(0, 10);
 }
-function addFixture(from, to) {
+function addFixture(from: number, to: number): void {
   db.exec("BEGIN TRANSACTION");
   try {
     for (let i = from; i < to; i++) {
@@ -54,8 +47,9 @@ function addFixture(from, to) {
       insertAgenda.run(agenda, `l${store}`, date, "agenda.csv", "u1", "aberto", fixedNow, fixedNow);
       for (let j = 0; j < appointmentsPerAgenda; j++) {
         const status = ["aguardando", "recebido", "nao_chegou", "recusado"][j % 4];
-        insertAppointment.run(`p${i}-${j}`, agenda, 1, status,
-          j % 7 === 0 ? "manual" : "importado", String(j).padStart(2, "0") + ":00");
+        insertAppointment.run(`p${i}-${j}`, agenda, `P${j}`, String(j).padStart(2, "0") + ":00",
+          String(j).padStart(2, "0") + ":30", `Fornecedor ${j}`, 1, status,
+          j % 7 === 0 ? "manual" : "importado", fixedNow, fixedNow);
       }
     }
     db.exec("COMMIT");
@@ -67,30 +61,44 @@ function addFixture(from, to) {
 
 // Adaptador restrito ao contrato .prepare().bind().all() do D1.
 // Roda as próprias consultas do repositório, não cópias de SQL.
-let lastQuery = null;
+type RecordedQuery = { sql: string; values: SQLInputValue[] };
+function sqliteValue(value: unknown): SQLInputValue {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
+  throw new TypeError("Valor SQL não suportado pelo benchmark de leitura.");
+}
+let lastQuery: RecordedQuery | null = null;
 const adapter = {
-  prepare(sql) {
+  prepare(sql: string) {
     const statement = db.prepare(sql);
-    let values = [];
-    lastQuery = { sql, values };
-    return {
-      bind(...params) {
-        values = params;
-        lastQuery.values = params;
-        return this;
+    const query: RecordedQuery = { sql, values: [] };
+    lastQuery = query;
+    const prepared: D1PreparedStatement = {
+      bind(...params: unknown[]) {
+        query.values = params.map(sqliteValue);
+        lastQuery = query;
+        return prepared;
       },
-      async all() {
-        return { results: statement.all(...values) };
-      }
+      async first<T = Record<string, unknown>>(): Promise<T | null> {
+        return (statement.get(...query.values) as T | undefined) ?? null;
+      },
+      async all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+        return { success: true, results: statement.all(...query.values) as T[] };
+      },
+      async run<T = Record<string, unknown>>(): Promise<D1Result<T>> {
+        const result = statement.run(...query.values);
+        return { success: true, meta: { changes: Number(result.changes) } };
+      },
+      async raw<T = unknown>(): Promise<T[]> { throw new Error("Benchmark usa somente consultas all()."); }
     };
+    return prepared;
   }
-};
-const median = values => {
+} as D1Database;
+const median = (values: number[]): number => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 };
 
-async function measure(label, fn, expected) {
+async function measure(label: string, fn: () => Promise<AgendaSummaryRow[]>, expected: number) {
   await fn(); // aquecimento sem contabilizar
   const ms = [];
   for (let i = 0; i < repetitions; i++) {
@@ -99,13 +107,14 @@ async function measure(label, fn, expected) {
     ms.push(performance.now() - start);
     assert.equal(rows.length, expected, `Quantidade inesperada em ${label}`);
   }
+  if (!lastQuery) throw new Error("Nenhuma consulta foi executada pelo benchmark.");
   const plan = db.prepare("EXPLAIN QUERY PLAN " + lastQuery.sql).all(...lastQuery.values);
   return {
     scenario: label,
     count: expected,
     median_ms: Number(median(ms).toFixed(2)),
-    uses_temporary_sort: plan.some(row => /USE TEMP B-TREE/.test(row.detail)),
-    plan: plan.map(row => row.detail)
+    uses_temporary_sort: plan.some(row => /USE TEMP B-TREE/.test(String(row.detail))),
+    plan: plan.map(row => String(row.detail))
   };
 }
 

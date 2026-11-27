@@ -4,7 +4,10 @@
 CREATE TABLE avisos_v2_novo (
   id TEXT NOT NULL PRIMARY KEY,
   tipo TEXT NOT NULL CHECK (tipo IN ('aviso','evento','chat')),
-  titulo TEXT,
+  titulo TEXT CHECK (
+    (tipo = 'chat' AND titulo IS NULL)
+    OR (tipo IN ('aviso','evento') AND titulo IS NOT NULL)
+  ),
   mensagem TEXT NOT NULL,
   criado_por TEXT REFERENCES usuarios(id),
   criado_em TEXT NOT NULL,

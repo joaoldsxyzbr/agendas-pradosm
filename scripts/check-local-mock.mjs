@@ -38,6 +38,7 @@ try {
     await delay(1000);
   }
   assert.ok(ready,"Servidor e D1 local não ficaram prontos.");
+  /** @param {string} loginName */
   async function login(loginName){
     const res=await fetch(base+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:base},body:JSON.stringify({login:loginName,senha:password})});
     assert.equal(res.status,200,"Login local: "+loginName);
@@ -70,6 +71,7 @@ try {
     const list=await quickList.json();
     assert.equal(list.accounts.length,6);
     assert.ok(list.accounts.every(a=>Object.keys(a).sort().join(",")==="label,login"));
+    /** @param {string} login @param {string} [origin] */
     const fast=(login,origin=base)=>fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,"X-Agenda-Local-Token":token},body:JSON.stringify({login})});
     assert.equal((await fast("admin.mock","https://example.invalid")).status,403);
     assert.equal((await fast("unknown.mock")).status,400);

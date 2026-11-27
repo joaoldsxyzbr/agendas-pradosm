@@ -5,22 +5,24 @@ import {openLocalDatabase} from "../../scripts/local-sqlite.mjs";
 import {buildMockSql,mockId} from "../../scripts/mock-data.mjs";
 import {app} from "../../worker/app.ts";
 import {businessDate} from "../../shared/time.ts";
+import {testEnv} from "../helpers/sqlite-d1.ts";
 
 test("controle de acesso real: criação, escopo, ações, sessão revogada, auditoria",async()=>{
   const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations-v2/",import.meta.url)));
   try{
     const password="teste-local-integracao-123";
     await local.seed(await buildMockSql(password,new Date(),{access:true,v2:true}));
-    const env={DB:local.DB,SESSION_SECRET:"segredo-sintetico-integracao-sem-producao-123456789",REALTIME_MODE:"off",ACCESS_MODE:"on",LOGIN_RATE_LIMITER:{async limit(){return {success:true}}}};
+    const env=testEnv(local.DB,"segredo-sintetico-integracao-sem-producao-123456789",{async limit(){return {success:true}}});
+    env.ACCESS_MODE="on";
     const origin="http://localhost";
-    async function request(path,method="GET",cookie="",body?,storeId?){
+    async function request(path: string,method: string="GET",cookie: string="",body?: unknown,storeId?: string): Promise<Response>{
       const headers=new Headers({Origin:origin});
       if(cookie)headers.set("Cookie",cookie);
       if(body!==undefined)headers.set("Content-Type","application/json");
       if(storeId)headers.set("X-Agenda-Store",storeId);
       return app.request(origin+path,{method,headers,...(body!==undefined?{body:JSON.stringify(body)}:{})},env);
     }
-    async function login(loginName,senha=password){
+    async function login(loginName: string,senha: string=password){
       const r=await request("/api/auth/login","POST","",{login:loginName,senha});
       assert.equal(r.status,200,loginName);
       const cookie=r.headers.get("set-cookie")?.split(";")[0];
@@ -134,7 +136,7 @@ test("relatório conta todos os fornecedores sem agenda antes do limite e separa
     assert.equal(login.status,200);
     const cookie=login.headers.get("set-cookie")?.split(";")[0];
     assert.ok(cookie);
-    async function get(path,extra=""){
+    async function get(path: string,extra: string=""){
       const response=await app.request(origin+path+"?start="+start+"&end="+day+extra,{headers:{Cookie:cookie}},env);
       assert.equal(response.status,200,await response.clone().text());
       return response.json();
