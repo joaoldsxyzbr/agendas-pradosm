@@ -17,7 +17,7 @@ const listed = [
   "worker/repositories/stores.ts", "worker/repositories/users.ts",
   "worker/services/agenda-maintenance.ts", "worker/services/realtime.ts",
   "worker/services/retention.ts", "worker/services/nexello-report.ts",
-  "worker/services/nexello-agenda.ts", "worker/services/nexello-lifecycle.ts", "worker/services/nexello-comparison.ts",
+  "worker/services/nexello-agenda.ts", "worker/services/nexello-evidence.ts", "worker/services/nexello-lifecycle.ts", "worker/services/nexello-comparison.ts",
   "worker/routes/admin-agendas.ts", "worker/routes/admin-audit.ts",
   "worker/routes/admin-retention.ts", "worker/routes/admin-reports.ts",
   "worker/routes/admin-stores.ts", "worker/routes/admin-nexello.ts",
