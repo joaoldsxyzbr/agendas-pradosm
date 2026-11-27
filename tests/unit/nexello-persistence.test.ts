@@ -32,7 +32,8 @@ test("prepared confirmation commits exactly once and preserves existing local fi
     assert.equal(await total(f.DB,"agendamentos"),1);assert.equal(await total(f.DB,"auditoria"),1);
     const row=await f.DB.prepare("SELECT status,itens,volumes,paletes,carga_batida FROM agendamentos").first();
     assert.deepEqual({...row},{status:"aguardando",itens:null,volumes:null,paletes:null,carga_batida:null});
-    const evidence=await f.DB.prepare("SELECT fonte,hash_evidencia,hash_registro FROM nexello_evidencias").first();
+    const evidence=await f.DB.prepare("SELECT fonte,hash_evidencia,hash_registro FROM nexello_evidencias").first<{fonte:string;hash_evidencia:string;hash_registro:string}>();
+    assert.ok(evidence);
     assert.equal(evidence.fonte,"revisao_admin");assert.equal(evidence.hash_evidencia,"a".repeat(64));
     assert.match(evidence.hash_registro,/^[0-9a-f]{64}$/);
     await assert.rejects(f.DB.prepare("UPDATE nexello_evidencias SET hash_evidencia=?").bind("b".repeat(64)).run(),/NEXELLO_EVIDENCIA_IMUTAVEL/);
@@ -40,8 +41,8 @@ test("prepared confirmation commits exactly once and preserves existing local fi
     await f.DB.prepare("UPDATE agendamentos SET status='recebido',observacao='preservar',itens=9").run();
     const next=await prepareVerifiedReview(f.DB,actor,{...base,entries:base.entries.map(r=>({...r,protocol:"123457"}))},now);
     await confirmPreparedReview(f.DB,actor,next.reviewId,next.hash,now);
-    assert.equal((await f.DB.prepare("SELECT itens FROM agendamentos WHERE protocolo='123456'").first()).itens,9);
-    assert.equal((await f.DB.prepare("SELECT status FROM agendamentos WHERE protocolo='123456'").first()).status,"recebido");
+    assert.equal((await f.DB.prepare("SELECT itens FROM agendamentos WHERE protocolo='123456'").first<{itens:number|null}>())?.itens,9);
+    assert.equal((await f.DB.prepare("SELECT status FROM agendamentos WHERE protocolo='123456'").first<{status:string}>())?.status,"recebido");
     assert.equal(await total(f.DB,"nexello_evidencias"),2);
   }finally{f.close();}
 });
@@ -120,4 +121,33 @@ test("individual logout blocks confirmation even between validation and atomic b
     await confirmPreparedReview(f.DB,otherSession,replacement.reviewId,replacement.hash,now);
     assert.equal(await total(f.DB,"agendamentos"),1);
   }finally{f.close();}
+});
+
+test("digitization at agenda or supplier level blocks preparation and concurrent confirmation",async()=>{
+  for(const kind of ["agenda","supplier"] as const){
+    const f=fixture();
+    try{
+      const initial=await prepareVerifiedReview(f.DB,actor,base,now);
+      await confirmPreparedReview(f.DB,actor,initial.reviewId,initial.hash,now);
+      const next={...base,entries:base.entries.map(r=>({...r,protocol:"123457"}))};
+      const draft=await prepareVerifiedReview(f.DB,actor,next,now);
+      if(kind==="agenda")await f.DB.prepare("UPDATE agendas SET digitado_em=?,digitado_por='u'").bind(now.toISOString()).run();
+      else await f.DB.prepare("INSERT INTO agenda_digitacao_fornecedor(agenda_id,fornecedor_chave,fornecedor_nome,dados_hash,digitado_em,digitado_por) SELECT id,'fornecedor','Fictício','hash',?,'u' FROM agendas").bind(now.toISOString()).run();
+      await assert.rejects(prepareVerifiedReview(f.DB,actor,next,now),/NEXELLO_DIGITACAO_PROTEGIDA/);
+      await assert.rejects(confirmPreparedReview(f.DB,actor,draft.reviewId,draft.hash,now));
+      assert.equal(await total(f.DB,"agendamentos"),1);
+      assert.equal(await total(f.DB,"sincronizacoes_nexello"),1);
+      assert.equal(await total(f.DB,"nexello_evidencias"),1);
+      assert.equal(await total(f.DB,"auditoria"),1);
+      assert.equal(await total(f.DB,"nexello_revisoes_pendentes"),1);
+      const agenda=await f.DB.prepare("SELECT versao_importacao,digitado_em,digitado_por FROM agendas").first<{versao_importacao:number;digitado_em:string|null;digitado_por:string|null}>();
+      assert.equal(agenda?.versao_importacao,1);
+      if(kind==="agenda"){
+        assert.equal(agenda?.digitado_em,now.toISOString());assert.equal(agenda?.digitado_por,"u");
+      }else{
+        const check=await f.DB.prepare("SELECT digitado_em,digitado_por FROM agenda_digitacao_fornecedor").first<{digitado_em:string;digitado_por:string}>();
+        assert.equal(check?.digitado_em,now.toISOString());assert.equal(check?.digitado_por,"u");
+      }
+    }finally{f.close();}
+  }
 });
