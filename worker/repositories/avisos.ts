@@ -282,7 +282,7 @@ async function listLeitoresComAcesso(db:D1Database,avisoId:string){
     const visible=stores.results.filter(s=>(access.scope.mode==="all"||access.scope.storeIds.includes(s.id))&&(global||destinatarios.has(s.id)));
     if(!global&&!visible.length)continue;
     if(!access.customized&&!visible.length)continue;
-    const registro:LeitorCanal={id:user.id,nome:user.nome,loja:visible.length===1?visible[0].codigo:null,lidoEm:lidos.get(user.id)??null};
+    const registro:LeitorCanal={id:user.id,nome:user.nome,loja:visible.length===1?(visible[0]?.codigo??null):null,lidoEm:lidos.get(user.id)??null};
     (registro.lidoEm?vistos:faltantes).push(registro);
   }
   return {vistos,faltantes};

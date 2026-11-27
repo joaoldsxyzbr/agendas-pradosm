@@ -36,6 +36,7 @@ export const enforceAccess=createMiddleware<AppEnv>(async(c,next)=>{
   }
   if(policy.scope==="agenda-id"||policy.scope==="appointment-id"){
     const id=path.split("/")[4];
+    if(!id)return deny();
     const row=policy.scope==="agenda-id"?
       await c.env.DB.prepare("SELECT loja_id FROM agendas WHERE id=?").bind(id).first<{loja_id:string}>():
       await c.env.DB.prepare("SELECT a.loja_id FROM agendamentos p JOIN agendas a ON a.id=p.agenda_id WHERE p.id=?").bind(id).first<{loja_id:string}>();
@@ -53,7 +54,7 @@ export const enforceAccess=createMiddleware<AppEnv>(async(c,next)=>{
     const inputs=batch?.success?batch.data.agendas:single?.success?[single.data]:null;
     if(!inputs)return c.json({error:"REQUISICAO_INVALIDA",message:"Dados de importação inválidos."},400);
     for(const input of inputs){
-      if(!permitsImportReplacement(access.permissions,input.replace))return deny();
+      if(!permitsImportReplacement(access.permissions,input.replace===true))return deny();
       const store=await findStoreByCode(c.env.DB,input.storeCode);
       if(!store||!canAccessStore(access.scope,store.id))return deny();
     }

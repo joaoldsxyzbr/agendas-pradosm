@@ -724,7 +724,7 @@ adminAppointmentRoutes.patch("/:id/status", async (c) => {
       404
     );
   }
-  let observation;
+  let observation: string | null;
   try {
     observation = validateStatusObservation(parsed.data.status, parsed.data.observation ?? null);
   } catch (error) {

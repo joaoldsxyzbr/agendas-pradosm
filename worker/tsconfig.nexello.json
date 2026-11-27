@@ -5,7 +5,6 @@
     "noUncheckedIndexedAccess": true
   },
   "include": [
-    "types.d.ts",
     "repositories/nexello-*.ts",
     "services/nexello-*.ts",
     "routes/admin-nexello.ts",
@@ -30,6 +29,14 @@
     "repositories/users.ts",
     "middleware/auth.ts",
     "middleware/access-policy.ts",
-    "../shared/auth.ts"
+    "../shared/auth.ts",
+    "pdf-types.d.ts",
+    "services/notice-scope.ts"
+  ],
+  "exclude": [
+    "types.d.ts"
+  ],
+  "files": [
+    "./.tmp/runtime.d.ts"
   ]
 }

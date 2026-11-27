@@ -103,7 +103,7 @@ authRoutes.post("/bootstrap-register", async (c) => {
 });
 
 authRoutes.post("/login", async (c) => {
-  let body;
+  let body: unknown;
   try {
     body = await c.req.json();
   } catch {

@@ -54,3 +54,9 @@ Portados os blobs da main do cliente WebSocket compartilhado, hooks de conferên
 ## Lote de testes de paridade
 
 Reaproveitados da main adaptadores SQLite/D1 e recording-D1 tipados, contratos históricos e testes de paginação, rotas, digitação, concorrência de agendas, importação, status e indisponibilidade realtime. Acrescentado teste de modo off e contas personalizadas, com verificação de que nenhuma chamada ao hub legado ocorre. Não foram executados neste lote; os testes de integração devem ser revisados contra a V2 e suas migrations. Preservados testes próprios da V2. Não copiar automaticamente suites de retenção, recuperação ou migrations de produção; esses contratos divergem deliberadamente por não usar R2 e por manter schema isolado.
+
+## Lote de engenharia: tipagem do runtime e gates
+
+Incorporados o tsconfig Worker strict, declarações PDF com unknown e mocks Node sem any, tsconfig Node strict/checkJs e descoberta automática de módulos da main. O verificador gera os tipos oficiais do Wrangler via configuração temporária sem bindings/credenciais e valida Worker completo, gate V2 adicional noUncheckedIndexedAccess e scripts/testes Node. Mantidos scripts de bloqueio remoto e flags de compatibilidade V2. Ajustes pontuais em auth, guard de escopo, observações e leitores. Scheduler isola falha de manutenção de agendas das limpezas seguintes e registra alerta de volume sem R2.
+
+**Status: gate instalado, NÃO aprovado.** Dependências do repositório e tipos gerados não estão disponíveis no ambiente local desta sessão; não foi executada a compilação integral. É provável que haja erros residuais nos módulos exclusivos da V2, especialmente scripts JS/testes e tipos D1. Não considerar ativar strict como prova de paridade nem desabilitar o gate para aprovar. Resolver os erros antes de concluir a PR. Nenhum CI ou deploy executado.
