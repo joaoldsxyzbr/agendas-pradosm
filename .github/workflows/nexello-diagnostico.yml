@@ -73,9 +73,21 @@ jobs:
                   sys.exit("ID invalido.")
               ids.append(ident)
           print("IDs autorizados:", json.dumps(ids))
+          for item in catalog:
+              ident = str(item.get("id_consulta", ""))
+              name = str(item.get("relatorio", "")).casefold()
+              norm = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+              tags = [k for k in ("agend", "situac", "cancel", "pedido", "nota", "receb", "remet", "fornec", "doca", "produto", "diverg", "entidade", "histor") if k in norm]
+              print("Categorias ID", ident, json.dumps(tags))
           for ident in ids:
+              if ident not in ("40", "46"):
+                  continue
               sleep(2.1)
-              result = get(ident + "?limit=2&page=1")
+              try:
+                  result = get(ident + "?limit=2&page=1")
+              except SystemExit:
+                  print("Relatorio indisponivel ID", ident)
+                  continue
               if not isinstance(result, dict) or not isinstance(result.get("data"), list) or len(result["data"]) > 2:
                   sys.exit("Pagina invalida.")
               fields = {}
