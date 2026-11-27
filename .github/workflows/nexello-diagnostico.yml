@@ -54,109 +54,85 @@ jobs:
               except Exception:
                   sys.exit("Falha de transporte ou resposta JSON invalida.")
 
-          from collections import Counter, defaultdict
-          from datetime import datetime
+          from collections import Counter
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          from urllib.parse import urlencode
           from time import sleep
-          import unicodedata
 
-          def norm(value):
-              if not isinstance(value, str):
-                  return ""
-              return " ".join("".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if not unicodedata.combining(c)).split())
+          # Catalogo completo; somente campos e metadados, nunca valores comerciais.
+          catalog = get("consultas")
+          if not isinstance(catalog, list) or len(catalog) > 12:
+              sys.exit("Catalogo fora do limite previsto.")
+          ids = []
+          for item in catalog:
+              if not isinstance(item, dict):
+                  sys.exit("Catalogo invalido.")
+              ident = str(item.get("id_consulta", ""))
+              if not re.fullmatch(r"[1-9]\d{0,8}", ident):
+                  sys.exit("ID invalido.")
+              ids.append(ident)
+          print("IDs autorizados:", json.dumps(ids))
+          for ident in ids:
+              sleep(2.1)
+              result = get(ident + "?limit=2&page=1")
+              if not isinstance(result, dict) or not isinstance(result.get("data"), list) or len(result["data"]) > 2:
+                  sys.exit("Pagina invalida.")
+              fields = {}
+              for row in result["data"]:
+                  if not isinstance(row, dict):
+                      sys.exit("Linha invalida.")
+                  for k,v in row.items():
+                      if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", k):
+                          fields.setdefault(k, set()).add(type(v).__name__)
+              print("Catalogo ID", ident, json.dumps({
+                  "campos": {k: sorted(v) for k,v in fields.items()},
+                  "total": result.get("total") if type(result.get("total")) is int else None
+              }, ensure_ascii=True))
 
-          def date(value):
-              if not isinstance(value, str):
-                  return None
-              for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
-                  try:
-                      return datetime.strptime(value[:10], fmt).date().isoformat()
-                  except ValueError:
-                      pass
-              return None
-
-          def times(value):
-              if not isinstance(value, str):
-                  return []
-              return re.findall(r"\b(?:[01]\d|2[0-3]):[0-5]\d\b", value)
-
-          def store(value):
-              value = norm(value)
-              m = re.fullmatch(r"(f\d{1,3})\s*-\s*.+", value)
-              return m.group(1) if m else value
-
-          def key(row, ident):
-              if ident == 60:
-                  d = date(row.get("data_agenda_inicio"))
-                  t = times(row.get("hora_agendada"))
-                  s = store(row.get("filial_entrega"))
-                  supplier = norm(row.get("fornecedor"))
-              else:
-                  start, end = ("data_agenda_inicio", "data_agenda_fim") if ident == 1 else ("agendado_para_inicio", "agendado_para_fim")
-                  d = date(row.get(start))
-                  t = times(row.get(start))[:1] + times(row.get(end))[:1]
-                  s = store(row.get("filial"))
-                  supplier = norm(row.get("entidade_remetente" if ident == 1 else "fornecedor"))
-              return (d, *t, s, supplier) if d and len(t) == 2 and s and supplier else None
-
-          def fetchpage(ident, p):
-              result = get(str(ident) + "?limit=100&page=" + str(p))
+          # NF-e: somente a rota documentada, dia atual e controle de data distante.
+          # Nenhuma chave, XML, numero, protocolo ou nome e impresso.
+          def get_nfe(day):
+              url = "https://integracao-organiza.nexello.com.br/integracao/api/v2/notas-fiscais/listar?" + urlencode({"data_agendada": day, "page": 1})
+              req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token, "Accept": "application/json"}, method="GET")
+              try:
+                  with opener.open(req, timeout=20) as resp:
+                      raw = resp.read(1048577)
+                      if len(raw) > 1048576:
+                          return {"erro": "limite"}
+                      result = json.loads(raw)
+              except urllib.error.HTTPError as err:
+                  return {"http": err.code}
+              except Exception:
+                  return {"erro": "transporte/json"}
               if not isinstance(result, dict) or not isinstance(result.get("data"), list):
-                  sys.exit("Formato inesperado.")
-              total, last = result.get("total"), result.get("last_page")
-              if type(total) is not int or total < 0 or type(last) is not int or last != max(1, (total + 99) // 100):
-                  sys.exit("Metadados invalidos.")
-              if result.get("page") != p or result.get("per_page") != 100:
-                  sys.exit("Pagina divergente.")
+                  return {"erro": "formato"}
               rows = result["data"]
-              if len(rows) != min(100, max(0, total - (p - 1) * 100)) or not all(isinstance(row, dict) for row in rows):
-                  sys.exit("Pagina incompleta.")
-              return rows, total, last
-
-          # Snapshot limitado do relatorio 60; jamais percorrer historicos 1 e 30.
-          all60, total, last = fetchpage(60, 1)
-          if last > 15:
-              sys.exit("Teto de 1500 linhas excedido.")
-          for p in range(2, last + 1):
-              sleep(2.1)
-              rows, n, pages = fetchpage(60, p)
-              if (n, pages) != (total, last):
-                  sys.exit("Metadados mudaram.")
-              all60.extend(rows)
-
-          groups = defaultdict(list)
-          for row in all60:
-              groups[str(row.get("protocolo"))].append(row)
-          duplicates = [rows for rows in groups.values() if len(rows) > 1]
-          identity = ("data_agenda_inicio", "hora_agendada", "filial_entrega", "fornecedor", "tipo")
-          print("Duplicidade agregada:", json.dumps({
-              "total": total, "protocolos": len(groups), "grupos_repetidos": len(duplicates),
-              "grupos_mesma_identidade": sum(len({tuple(norm(r.get(k)) for k in identity) for r in rows}) == 1 for rows in duplicates),
-              "grupos_linhas_identicas": sum(len({json.dumps(r, sort_keys=True) for r in rows}) == 1 for rows in duplicates),
-              "grupos_documentos_divergentes": sum(len({(norm(r.get("nfe_numeros")), norm(r.get("numero_pedido"))) for r in rows}) > 1 for rows in duplicates),
-              "filiais_cd_exato": sum(norm(r.get("filial_entrega")) == "cd" for r in all60),
-              "filiais_sem_codigo_nao_cd": sum(not re.fullmatch(r"f\d{1,3}\s*-\s*.+", norm(r.get("filial_entrega"))) and norm(r.get("filial_entrega")) != "cd" for r in all60)
-          }))
-          main = Counter(k for r in all60 if (k := key(r, 60)) is not None)
-          days = {k[0] for k in main}
-          for ident in (1, 30):
-              sleep(2.1)
-              first, n, pages = fetchpage(ident, 1)
-              sample = first
-              if pages > 1:
-                  sleep(2.1)
-                  tail, n2, pages2 = fetchpage(ident, pages)
-                  if (n, pages) != (n2, pages2):
-                      sys.exit("Metadados mudaram em relatorio complementar.")
-                  sample = first + tail
-              other = Counter(k for r in sample if (k := key(r, ident)) is not None)
-              overlap = set(main) & set(other)
-              fields = sorted({k for r in sample for k in r if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", k)})
-              print("Complementar", ident, json.dumps({
-                  "total": n, "paginas": pages, "amostra": len(sample),
-                  "campos": fields, "chaves_validas": sum(other.values()),
-                  "linhas_em_dias_do_60": sum(v for k,v in other.items() if k[0] in days),
-                  "chaves_coincidentes": len(overlap),
-                  "chaves_unicas_nos_dois": sum(main[k] == 1 and other[k] == 1 for k in overlap),
-                  "chaves_ambiguas": sum(main[k] != 1 or other[k] != 1 for k in overlap)
-              }))
+              if len(rows) > 100 or not all(isinstance(row, dict) for row in rows):
+                  return {"erro": "limite/formato"}
+              def category(v):
+                  if not isinstance(v, str):
+                      return "ausente"
+                  v = "".join(c for c in unicodedata.normalize("NFKD", v.casefold()) if not unicodedata.combining(c))
+                  for label, fragment in (("sem_solicitacao","sem solicita"),("cancelado","cancel"),("reagendado","reagend"),("confirmado","confirm"),("aceito","aceit"),("pendente","penden"),("recusado","recus"),("agendado","agend"),("aguardando","aguard")):
+                      if fragment in v:
+                          return label
+                  return "outro"
+              def matches(v):
+                  if not isinstance(v, str):
+                      return False
+                  return v[:10] == day or v[:10] == datetime.strptime(day,"%Y-%m-%d").strftime("%d/%m/%Y")
+              return {
+                  "total": result.get("total") if type(result.get("total")) is int else None,
+                  "per_page": result.get("per_page") if type(result.get("per_page")) is int else None,
+                  "linhas": len(rows), "datas_coincidentes": sum(matches(r.get("data_agendada")) for r in rows),
+                  "status_nf": dict(Counter(r.get("status") if r.get("status") in ("S","X","C","N") else "outro" for r in rows)),
+                  "situacao_agendamento": dict(Counter(category(r.get("situacao_agendamento")) for r in rows)),
+                  "campo_protocolo": sum("protocolo" in r for r in rows)
+              }
+          today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+          sleep(2.1)
+          print("NFE dia atual:", json.dumps(get_nfe(today.isoformat())))
+          sleep(2.1)
+          print("NFE controle data distante:", json.dumps(get_nfe("1900-01-01")))
           PY
