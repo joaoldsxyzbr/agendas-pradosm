@@ -13,3 +13,13 @@ Base V2 7365c54c89e1e88e06172a2ea61fd540f31c33d9; referência main 481b92f65d93f
 ## Limites
 
 Build/CI/migration remota/deploy não executados. Restante dos conflitos não resolvido. Não habilitar branch para uso operacional antes de integrar contratos e validar. Avisos ainda anteriores ao chat.
+
+## Proposta de evolução do canal de Avisos
+
+Arquivo de estudo: `docs/plans/sql/0011_avisos_canal.sql` (fora de migrations-v2 para não ser aplicado por engano). SHA-256 local: `bd383380c94480897e69ffdccc8a137ad06f73401b1d82434c8ff898e4b7eb90`. Não editar migrations 0001–0010 já aplicadas.
+
+O CHECK de tipo e o NOT NULL do título exigem reconstrução da tabela pai. Recriar também os dois filhos em tabelas intermediárias, copiar os registros, remover os filhos antigos antes do pai e renomear; as referências apontam para o novo pai. Não usar foreign_keys OFF, BEGIN/COMMIT explícitos no D1 ou DROP direto do pai. Reações e destino por ID estável seguem os contratos 0030/0031. Código legado sem correspondência mantém loja_id NULL e não deve ser tratado como destino global.
+
+Teste real local (Python sqlite3, dez migrations do snapshot V2, transação com foreign_keys ON): preservou dois avisos incluindo evento histórico, uma leitura, dois destinos (um resolvido e outro não resolvido) e usuário; rollback integral quando uma inserção inválida falhou depois da reconstrução; inserção de chat sem título, reação, resolução de escrita legada, estabilidade do destino após renomear loja, foreign_key_check vazio e integrity_check ok. Asserções verificaram que só os dois filhos referenciam avisos antes da alteração. Não equivale a executar em D1 remoto.
+
+Contrato bloqueado para execução: exige aprovação explícita para reconstrução, registro de aprovação com hash, conferência de backup e contagens no banco correto, validação no runtime D1, revisão de permissões e teste de preservação. Não desabilitar o gate global. Banco preview permanece com dez migrations e usuário existente. O novo canal ainda não está conectado.
