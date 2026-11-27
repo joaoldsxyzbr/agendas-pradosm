@@ -92,3 +92,12 @@ Testes sintéticos obrigatórios: todo ciclo de vida acima; nulos, vazios, dupli
 - [ ] Remover workflow temporário, CI final verde, revisão de diff, autorização explícita para merge.
 
 **Decisão de segurança:** autenticação bem-sucedida e coincidência de campos não bastam para autorizar sincronização de produção. A lacuna mais importante é estado e identidade ao longo do tempo, não a falta de itens/volumes. Não inventar contrato nem forçar automação plena. Nenhum deploy ou escrita em Nexello/D1 é parte deste estudo.
+
+
+### Atualização de investigação e limites
+
+O catálogo integral confirmou os IDs 1, 29, 30, 40, 60, 46, 27 e 57. A execução 45996265913 retornou relatório 29 vazio, depois falhou ao acessar 40 (transporte/JSON; não comprova inexistência ou falta de autorização). O teste 45996525668 isola erros e consulta apenas 40/46 e a listagem de NF-e com data_agendada, sem expor dados individuais. Ainda não houve prova de estado por protocolo.
+
+D1 Free: a documentação oficial atual estabelece 50 consultas D1 por invocação, db.batch conta como uma, 100 parâmetros por statement, 30 segundos para o batch inteiro e 500 MB por banco. Evitar N+1 na leitura de protocolos; usar consultas agrupadas parametrizadas e orçamento real de statements, CPU e tamanho. Limite interno de 800 statements não implica capacidade efetiva. Fonte: https://developers.cloudflare.com/d1/platform/limits/.
+
+A validação do estado deve utilizar as exportações oficiais e eventos naturais conhecidos, sem executar operações de escrita na Nexello. A estratégia de fallback com CSV de situação é recomendação técnica, não autorização para alterar o contrato atual de importação.
