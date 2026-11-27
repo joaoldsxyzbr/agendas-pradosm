@@ -8,8 +8,8 @@ function supplierKey(value: string): string {
 
 function parseArray(raw: string | null): string[] {
   try {
-    const result = JSON.parse(raw ?? "[]");
-    return Array.isArray(result) ? result.filter(v => typeof v === "string") : [];
+    const result: unknown = JSON.parse(raw ?? "[]");
+    return Array.isArray(result) ? result.filter((v): v is string => typeof v === "string") : [];
   } catch {
     return [];
   }
@@ -17,9 +17,9 @@ function parseArray(raw: string | null): string[] {
 
 function parseCsvFields(raw: string | null): Record<string, string> {
   try {
-    const value = JSON.parse(raw ?? "{}");
+    const value: unknown = JSON.parse(raw ?? "{}");
     return value && typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).filter(([key, cell]) => typeof key === "string" && typeof cell === "string")) as Record<string, string>
+      ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
       : {};
   } catch {
     return {};
@@ -96,7 +96,7 @@ async function listAgendaSuppliers(db: D1Database, agendaId: string) {
     listAppointmentsByAgenda(db, agendaId),
     listSupplierChecks(db, agendaId)
   ]);
-  const groups = groupRows(appointments as ImportedRow[]);
+  const groups = groupRows(appointments);
   return Promise.all(groups.map(async group => {
     const hash = await fingerprint(group.rows);
     const check = saved.get(group.key);
@@ -117,7 +117,11 @@ async function listAgendaSuppliers(db: D1Database, agendaId: string) {
  * O hash é o mesmo usado para validar o check no fornecedor expandido:
  * marcações de um CSV substituído não são contadas se os dados mudaram.
  */
-async function listDigitacaoProgressByDate(db: D1Database, date: string) {
+async function listDigitacaoProgressByDate(db: D1Database, date: string, storeIds?: readonly string[]) {
+  if(storeIds !== undefined && !storeIds.length) return new Map<string,{digitadas:number;fornecedores:number}>();
+  if(storeIds && storeIds.length>50)throw new Error("ACESSO_ESCOPO_LIMITE");
+  const scope=storeIds?" AND a.loja_id IN ("+storeIds.map(()=>"?").join(",")+")":"";
+  const args=[date,...(storeIds??[])];
   const [appointments, checks] = await Promise.all([
     db.prepare(
       "SELECT ag.id, ag.agenda_id, ag.protocolo, ag.fornecedor, ag.horario_inicio, " +
@@ -128,13 +132,13 @@ async function listDigitacaoProgressByDate(db: D1Database, date: string) {
       // utiliza idx_agendamentos_agenda_horario (387 rows_read no COUNT),
       // sem migration ou mudança na seleção das linhas.
       "FROM agendas a CROSS JOIN agendamentos ag ON ag.agenda_id = a.id " +
-      "WHERE a.data_agenda = ? AND ag.ativo = 1"
-    ).bind(date).all<ImportedRow & { agenda_id: string }>(),
+      "WHERE a.data_agenda = ? AND ag.ativo = 1"+scope
+    ).bind(...args).all<ImportedRow & { agenda_id: string }>(),
     db.prepare(
       "SELECT d.agenda_id, d.fornecedor_chave, d.dados_hash, d.digitado_em " +
       "FROM agenda_digitacao_fornecedor d JOIN agendas a ON a.id = d.agenda_id " +
-      "WHERE a.data_agenda = ?"
-    ).bind(date).all<Pick<SupplierCheck, "fornecedor_chave" | "dados_hash" | "digitado_em"> & { agenda_id: string }>()
+      "WHERE a.data_agenda = ?"+scope
+    ).bind(...args).all<Pick<SupplierCheck, "fornecedor_chave" | "dados_hash" | "digitado_em"> & { agenda_id: string }>()
   ]);
   const byAgenda = new Map<string, ImportedRow[]>();
   for (const row of appointments.results ?? []) {
@@ -166,7 +170,7 @@ async function changeSupplierCheck(db: D1Database, agenda: { id: string; loja_id
   supplier: string; hash: string; digitado: boolean; expectedDigitadoEm?: string | null;
 }) {
   const rows = await listAppointmentsByAgenda(db, agenda.id);
-  const group = groupRows(rows as ImportedRow[]).find(item => item.key === supplierKey(input.supplier));
+  const group = groupRows(rows).find(item => item.key === supplierKey(input.supplier));
   if (!group) return null;
   const hash = await fingerprint(group.rows);
   if (hash !== input.hash) throw stateConflict();
