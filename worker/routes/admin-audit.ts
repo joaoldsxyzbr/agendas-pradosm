@@ -9,7 +9,7 @@ const AuditFilters = z.object({
   agendaId: z.string().trim().min(1).optional(),
   userId: z.string().trim().min(1).max(80).optional(),
   storeId: z.string().trim().min(1).max(80).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const d=new Date(value+"T00:00:00.000Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional()
 });
 adminAuditRoutes.get("/", async (c) => {

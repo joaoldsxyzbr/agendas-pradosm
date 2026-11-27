@@ -54,13 +54,14 @@ async function updateStore(db:D1Database, current:StoreRow, input:z.output<typeo
   const nome = input.nome ?? current.nome;
   const ativo = input.ativo === void 0 ? current.ativo : input.ativo ? 1 : 0;
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  await db.batch([
+  const [write,audit]=await db.batch([
     db.prepare(
-      "UPDATE lojas SET codigo = ?, nome = ?, ativo = ?, atualizado_em = ? WHERE id = ?"
-    ).bind(codigo, nome, ativo, now, current.id),
+      "UPDATE lojas SET codigo = ?, nome = ?, ativo = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND codigo = ? COLLATE BINARY AND nome = ? AND ativo = ? AND atualizado_em = ?"
+    ).bind(codigo, nome, ativo, now, current.id,current.codigo,current.nome,current.ativo,current.atualizado_em),
     auditStatement(db, {
       userId: actorUserId,
       action: "loja_atualizada",
+      onlyIfPreviousWrite:true,
       entity: "loja",
       entityId: current.id,
       storeId: current.id,
@@ -78,6 +79,8 @@ async function updateStore(db:D1Database, current:StoreRow, input:z.output<typeo
       createdAt: now
     })
   ]);
+  if(!write?.success||!audit?.success)throw new Error("LOJA_GRAVACAO_INDETERMINADA");
+  if(write.meta?.changes!==1)throw new Error("LOJA_CONFLITO_ESTADO");
   const updated=await findStoreById(db,current.id);
   if(!updated)throw new Error("LOJA_GRAVACAO_INDETERMINADA");
   return updated;
@@ -91,13 +94,14 @@ async function hasStoreUsers(db:D1Database, storeId:string, custom=false):Promis
 }
 async function softDeleteStore(db:D1Database, current:StoreRow, actorUserId:string):Promise<boolean> {
   const now = (/* @__PURE__ */ new Date()).toISOString();
-  const [result] = await db.batch([
+  const [result,audit] = await db.batch([
     db.prepare(
-      "UPDATE lojas SET ativo = 0, excluido_em = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL"
-    ).bind(now, now, current.id),
+      "UPDATE lojas SET ativo = 0, excluido_em = ?, atualizado_em = ? WHERE id = ? AND excluido_em IS NULL AND codigo = ? COLLATE BINARY AND nome = ? AND ativo = ? AND atualizado_em = ?"
+    ).bind(now, now, current.id,current.codigo,current.nome,current.ativo,current.atualizado_em),
     auditStatement(db, {
       userId: actorUserId,
       action: "loja_removida",
+      onlyIfPreviousWrite:true,
       entity: "loja",
       entityId: current.id,
       storeId: current.id,
@@ -116,8 +120,9 @@ async function softDeleteStore(db:D1Database, current:StoreRow, actorUserId:stri
       createdAt: now
     })
   ]);
-  if(!result?.success||typeof result.meta?.changes!=="number")throw new Error("LOJA_GRAVACAO_INDETERMINADA");
-  return result.meta.changes>0;
+  if(!result?.success||!audit?.success||typeof result.meta?.changes!=="number")throw new Error("LOJA_GRAVACAO_INDETERMINADA");
+  if(result.meta.changes!==1)throw new Error("LOJA_CONFLITO_ESTADO");
+  return true;
 }
 export {
   createStore,

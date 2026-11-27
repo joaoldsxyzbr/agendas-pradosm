@@ -71,6 +71,7 @@ adminStoreRoutes.post("/", async (c) => {
     const store = await createStore(c.env.DB, parsed.data, actor.id);
     return c.json(storeJson(store), 201);
   } catch (error) {
+    if(error instanceof Error&&error.message==="LOJA_CONFLITO_ESTADO")return c.json({error:"LOJA_CONFLITO_ESTADO",message:"A loja foi alterada por outra operação. Atualize a lista e tente novamente."},409);
     if(error instanceof Error&&error.message.includes("NEXELLO_LOJA_CODIGO_PROTEGIDO"))return c.json({error:"NEXELLO_LOJA_CODIGO_PROTEGIDO",message:"O código desta loja possui vínculo Nexello. A troca foi bloqueada para preservar a identidade da unidade."},409);
     if (isDuplicateCode(error)) {
       return c.json(
@@ -132,7 +133,13 @@ adminStoreRoutes.delete("/:id", async (c) => {
   }
   const actor = c.get("authUser");
   if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
-  const deleted = await softDeleteStore(c.env.DB, current, actor.id);
+  let deleted:boolean;
+  try{deleted=await softDeleteStore(c.env.DB,current,actor.id);}
+  catch(error:unknown){
+    if(error instanceof Error&&error.message.includes("LOJA_POSSUI_USUARIOS"))return c.json({error:"LOJA_POSSUI_USUARIOS",message:"Há usuários vinculados à loja. Atualize a lista."},409);
+    if(error instanceof Error&&error.message==="LOJA_CONFLITO_ESTADO")return c.json({error:"LOJA_CONFLITO_ESTADO",message:"A loja foi alterada por outra operação. Atualize a lista e tente novamente."},409);
+    throw error;
+  }
   if (!deleted) {
     return c.json(
       { error: "LOJA_NAO_ENCONTRADA", message: "Loja n\xE3o encontrada." },

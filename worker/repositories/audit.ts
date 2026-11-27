@@ -49,7 +49,8 @@ function auditStatement(db:D1Database, input:AuditInput):D1PreparedStatement {
   );
 }
 async function recordAudit(db:D1Database, input:AuditInput):Promise<void> {
-  await auditStatement(db, input).run();
+  const result=await auditStatement(db,input).run();
+  if(!result.success||result.meta?.changes!==1)throw new Error("AUDITORIA_GRAVACAO_FALHOU");
 }
 async function listAudit(db:D1Database, filters: { entity?: string; entityId?: string; agendaId?: string; userId?: string; storeId?: string; date?: string; limit?: number } = {}) {
   const clauses = [];
@@ -76,7 +77,9 @@ async function listAudit(db:D1Database, filters: { entity?: string; entityId?: s
   }
   if (filters.date) {
     clauses.push("a.criado_em >= ? AND a.criado_em < ?");
-    values.push(filters.date + "T00:00:00.000Z", filters.date + "T23:59:59.999Z");
+    const start=new Date(filters.date+"T00:00:00.000Z");
+    if(!Number.isFinite(start.getTime())||start.toISOString().slice(0,10)!==filters.date)throw new Error("AUDITORIA_DATA_INVALIDA");
+    values.push(start.toISOString(),new Date(start.getTime()+86400000).toISOString());
   }
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 500);
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
