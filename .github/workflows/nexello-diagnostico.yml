@@ -54,61 +54,61 @@ jobs:
               except Exception:
                   sys.exit("Falha de transporte ou resposta JSON invalida.")
 
-          from collections import Counter
-          from urllib.parse import urlencode
           from datetime import datetime
+          from zoneinfo import ZoneInfo
+          from collections import Counter
+          from time import sleep
 
-          def page(params):
-              result = get("60?" + urlencode(params))
+          # Relatorio 60 somente, teto absoluto: 15 paginas e 1500 linhas.
+          # Sem filtros nao documentados, sem exportar payload ou identificadores.
+          limit = 100
+          max_pages = 15
+          today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+          seen = set()
+          counts = Counter()
+          daily = Counter()
+          expected = None
+          for number in range(1, max_pages + 1):
+              if number > 1:
+                  sleep(2.1)
+              result = get("60?limit=100&page=" + str(number))
               if not isinstance(result, dict) or not isinstance(result.get("data"), list):
                   sys.exit("Formato inesperado.")
-              if len(result["data"]) > 20:
-                  sys.exit("Limite de amostra nao respeitado.")
-              if not all(isinstance(row, dict) for row in result["data"]):
-                  sys.exit("Registro invalido.")
-              return result
-
-          def shape(value):
-              if not isinstance(value, str):
-                  return type(value).__name__
-              if not value.strip():
-                  return "vazio"
-              return re.sub(r"[A-Za-zÀ-ÿ]+", "L", re.sub(r"\d", "9", value))[:80]
-
-          def date_of(value):
-              if not isinstance(value, str):
-                  return None
-              for fmt, length in (("%Y-%m-%d", 10), ("%d/%m/%Y", 10), ("%d-%m-%Y", 10)):
+              total, last = result.get("total"), result.get("last_page")
+              if type(total) is not int or total < 0 or type(last) is not int or last != max(1, (total + limit - 1) // limit):
+                  sys.exit("Metadados invalidos.")
+              if last > max_pages:
+                  sys.exit("Relatorio excedeu teto preventivo de 1500 linhas.")
+              if expected is None:
+                  expected = (total, last)
+              if expected != (total, last) or result.get("page") != number or result.get("per_page") != limit:
+                  sys.exit("Paginacao mudou durante consulta.")
+              rows = result["data"]
+              if len(rows) != min(limit, max(0, total - (number - 1) * limit)):
+                  sys.exit("Pagina incompleta.")
+              for row in rows:
+                  if not isinstance(row, dict):
+                      sys.exit("Registro invalido.")
+                  protocol = str(row.get("protocolo", ""))
+                  if not re.fullmatch(r"\d{6,20}", protocol):
+                      counts["protocolos_invalidos"] += 1
+                  elif protocol in seen:
+                      counts["protocolos_repetidos"] += 1
+                  seen.add(protocol)
                   try:
-                      return datetime.strptime(value[:length], fmt).date().isoformat()
-                  except ValueError:
-                      pass
-              return None
-
-          result = page({"limit": 20, "page": 1})
-          rows = result["data"]
-          print("Amostra:", len(rows))
-          fields = sorted({key for row in rows for key in row
-                           if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", key)})
-          print("Campos:", json.dumps(fields))
-          for key in ("data_agenda_inicio", "hora_agendada", "filial_entrega", "tipo", "nfe_numeros", "numero_pedido"):
-              print("Formatos", key, json.dumps(dict(Counter(shape(row.get(key)) for row in rows)), ensure_ascii=True))
-          types = {"nota fiscal", "pedido", "cnpj", "agenda fixa"}
-          print("Tipos reconhecidos:", sum(isinstance(row.get("tipo"), str) and row["tipo"].strip().casefold() in types for row in rows))
-          print("Protocolos unicos na amostra:", len({str(row.get("protocolo")) for row in rows}))
-          print("Campos ausentes da importacao:", json.dumps([k for k in ("data_agenda_fim", "doca", "qtd_itens", "qtd_volumes", "paletes", "carga_batida") if k not in fields]))
-          known = next((d for row in rows if (d := date_of(row.get("data_agenda_inicio")))), None)
-          if not known:
-              sys.exit("Formato de data nao reconhecido para sondagem.")
-          # Hipoteses de filtro, nao documentadas. A data conhecida nao e registrada.
-          for name in ("data", "data_agendada", "data_agenda_inicio"):
-              empty = page({"limit": 2, "page": 1, name: "1900-01-01"})
-              matched = page({"limit": 2, "page": 1, name: known})
-              print("Sondagem", name, json.dumps({
-                  "total_data_inexistente": empty.get("total") if type(empty.get("total")) is int else None,
-                  "linhas_data_inexistente": len(empty["data"]),
-                  "total_data_conhecida": matched.get("total") if type(matched.get("total")) is int else None,
-                  "linhas_data_conhecida": len(matched["data"]),
-                  "linhas_coincidentes": sum(date_of(row.get("data_agenda_inicio")) == known for row in matched["data"])
-              }))
+                      date = datetime.strptime(row.get("data_agenda_inicio", ""), "%d/%m/%Y").date()
+                      daily[date] += 1
+                      counts["dias_anteriores" if date < today else "hoje" if date == today else "dias_futuros"] += 1
+                  except (ValueError, TypeError):
+                      counts["datas_invalidas"] += 1
+                  store = row.get("filial_entrega")
+                  counts["filiais_com_codigo" if isinstance(store, str) and re.fullmatch(r"F\d{1,3}\s*-\s*\S.*", store.strip(), re.I) else "filiais_sem_codigo_inequivoco"] += 1
+                  counts["linhas"] += 1
+              if number == last:
+                  break
+          print("Metadados:", json.dumps({"total": expected[0], "paginas": expected[1]}))
+          print("Contagens agregadas:", json.dumps(dict(counts), ensure_ascii=True))
+          print("Dias distintos:", len(daily))
+          print("Maior quantidade em um dia:", max(daily.values(), default=0))
+          print("Limite de leitura respeitado; nenhuma gravacao realizada.")
           PY
