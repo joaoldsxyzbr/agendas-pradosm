@@ -50,3 +50,7 @@ Reaproveitados os blobs exatos da main de quatro clientes HTTP e da rota de conf
 ## Lote Realtime
 
 Portados os blobs da main do cliente WebSocket compartilhado, hooks de conferência/recebimento e hub tipado com evento avisos.changed, validação de attachment e expiração. Rota baseada na main com tratamento explícito de falhas do binding; proteção adicional bloqueia conexões de contas personalizadas e conexões diretas no modo off. Layout recebe invalidação do canal nas demais telas para contas legadas, sem duplicar sockets de recebimento/conferência. Mantido fallback HTTP e heartbeat REST de presença. Nenhuma configuração de ambiente alterada: REALTIME_MODE=off na V2. Não habilitar realtime personalizado antes de implementar escopos no hub. Testes de integração e compilação integral pendentes.
+
+## Lote de testes de paridade
+
+Reaproveitados da main adaptadores SQLite/D1 e recording-D1 tipados, contratos históricos e testes de paginação, rotas, digitação, concorrência de agendas, importação, status e indisponibilidade realtime. Acrescentado teste de modo off e contas personalizadas, com verificação de que nenhuma chamada ao hub legado ocorre. Não foram executados neste lote; os testes de integração devem ser revisados contra a V2 e suas migrations. Preservados testes próprios da V2. Não copiar automaticamente suites de retenção, recuperação ou migrations de produção; esses contratos divergem deliberadamente por não usar R2 e por manter schema isolado.

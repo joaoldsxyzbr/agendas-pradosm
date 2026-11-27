@@ -121,8 +121,11 @@
     ],
     "avisos": [
       "get(\"/\"",
+      "post(\"/\"",
+      "put(\"/:id/reacao\"",
       "post(\"/:id/lido\"",
       "post(\"/marcar-todos\"",
+      "get(\"/:id/leitores\"",
       "post(\"/\""
     ]
   }

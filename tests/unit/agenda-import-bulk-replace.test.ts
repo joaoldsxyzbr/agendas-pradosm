@@ -1,3 +1,5 @@
+import { recordingD1 } from "../helpers/recording-d1.ts";
+import type { AgendaRow, AppointmentRow, ImportEntry } from "../../worker/repositories/agendas.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -11,54 +13,15 @@ import {
 // (IMPORTACAO_FALHOU) porque o bind incluía csv_campos sem o
 // placeholder correspondente. A validação aqui reproduz a checagem
 // do D1 para todos os statements gerados.
-function arityDb(existingAppointments = []) {
-  const calls = [];
-  const statements = [];
-  const placeholderCount = (sql) => (sql.match(/\?/g) ?? []).length;
-  const assertArity = (sql, values) => {
-    assert.equal(
-      values.length,
-      placeholderCount(sql),
-      `bind com ${values.length} valores para ${placeholderCount(sql)} placeholders: ${sql}`
-    );
-  };
-  return {
-    calls,
-    statements,
-    prepare(sql) {
-      const call = { sql, values: [] };
-      calls.push(call);
-      const statement = {
-        sql,
-        async all() {
-          return {
-            results: sql.includes("FROM agendamentos WHERE agenda_id")
-              ? existingAppointments
-              : []
-          };
-        },
-        async first() { return sql.startsWith("SELECT versao_importacao FROM agendas") ? { versao_importacao: 0 } : null; },
-        async run() { return { meta: { changes: 1 } }; }
-      };
-      statement.bind = (...values) => {
-        assertArity(sql, values);
-        call.values = values;
-        statement.values = values;
-        statements.push(statement);
-        return statement;
-      };
-      return statement;
-    },
-    async batch(batchStatements) {
-      for (const statement of batchStatements) {
-        assert.match(statement.sql, /INSERT|UPDATE/);
-      }
-      return batchStatements.map(() => ({ meta: { changes: 1 } }));
-    }
-  };
+function arityDb(existingAppointments: AppointmentRow[] = []) {
+  return recordingD1({ arity: true,
+    all: sql => sql.includes("FROM agendamentos WHERE agenda_id") ? existingAppointments : [],
+    first: sql => sql.startsWith("SELECT versao_importacao FROM agendas") ? { versao_importacao: 0 } : null,
+    batch(statements) { for (const statement of statements) assert.match(statement.sql, /INSERT|UPDATE/); return 1; }
+  });
 }
 
-const existingAgenda = {
+const existingAgenda: AgendaRow = {
   id: "agenda-1",
   loja_id: "loja-1",
   data_agenda: "2026-11-06",
@@ -73,7 +36,7 @@ const existingAgenda = {
   atualizado_em: "2026-11-06T10:00:00.000Z"
 };
 
-const existingAppointments = [
+const existingAppointments: AppointmentRow[] = [
   {
     id: "apt-1",
     agenda_id: "agenda-1",
@@ -122,7 +85,7 @@ const existingAppointments = [
   }
 ];
 
-const input = {
+const input: ImportEntry["input"] = {
   storeCode: "CD DOCA 07",
   date: "2026-11-06",
   originalFileName: "agendas-de-recebimento0005305.csv",
@@ -154,7 +117,7 @@ const input = {
       type: "Carga seca",
       nfe: [],
       orders: ["P1"],
-      csvFields: null
+      csvFields: undefined
     }
   ]
 };
