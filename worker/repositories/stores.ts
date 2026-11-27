@@ -49,7 +49,7 @@ async function createStore(db:D1Database, input:z.output<typeof CreateStoreInput
   if(!created)throw new Error("LOJA_GRAVACAO_INDETERMINADA");
   return created;
 }
-async function updateStore(db:D1Database, current:StoreRow, input:z.output<typeof UpdateStoreInput>, actorUserId:string):Promise<StoreRow> {
+async function updateStore(db:D1Database, current:StoreRow, input:Omit<z.output<typeof UpdateStoreInput>,"id">, actorUserId:string):Promise<StoreRow> {
   const codigo = input.codigo ?? current.codigo;
   const nome = input.nome ?? current.nome;
   const ativo = input.ativo === void 0 ? current.ativo : input.ativo ? 1 : 0;
@@ -80,7 +80,7 @@ async function updateStore(db:D1Database, current:StoreRow, input:z.output<typeo
     })
   ]);
   if(!write?.success||!audit?.success)throw new Error("LOJA_GRAVACAO_INDETERMINADA");
-  if(write.meta?.changes!==1)throw new Error("LOJA_CONFLITO_ESTADO");
+  if(write.meta?.changes!==1)throw Object.assign(new Error("LOJA_CONFLITO_ESTADO"),{code:"CONFLITO_ESTADO"});
   const updated=await findStoreById(db,current.id);
   if(!updated)throw new Error("LOJA_GRAVACAO_INDETERMINADA");
   return updated;
