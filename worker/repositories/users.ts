@@ -20,12 +20,13 @@ async function findUserForSession(db, id, sessionKey) {
        AND NOT EXISTS (SELECT 1 FROM sessoes_revogadas WHERE session_key = ?) LIMIT 1`
   ).bind(id, sessionKey).first();
 }
-async function revokeSession(db, sessionKey, expiresAt) {
-  await db.prepare(
-    "INSERT OR IGNORE INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?)"
+async function revokeSession(db:D1Database, sessionKey:string, expiresAt:number):Promise<void> {
+  const result=await db.prepare(
+    "INSERT INTO sessoes_revogadas (session_key, expira_em) VALUES (?, ?) ON CONFLICT(session_key) DO UPDATE SET expira_em = MAX(sessoes_revogadas.expira_em, excluded.expira_em)"
   ).bind(sessionKey, expiresAt).run();
+  if(!result.success)throw new Error("SESSAO_REVOGACAO_FALHOU");
 }
-async function pruneRevokedSessions(db, nowSeconds = Math.floor(Date.now() / 1000)) {
+async function pruneRevokedSessions(db:D1Database, nowSeconds = Math.floor(Date.now() / 1000)) {
   return db.prepare("DELETE FROM sessoes_revogadas WHERE expira_em <= ?")
     .bind(nowSeconds).run();
 }

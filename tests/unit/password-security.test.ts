@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { PASSWORD_HASH_ITERATIONS, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../../worker/lib/password.ts";
+import { DUMMY_HASH, PASSWORD_HASH_ITERATIONS, hashPassword, passwordNeedsUpgrade, verifyPassword } from "../../worker/lib/password.ts";
 
 // Hash sintético gerado em teste, nunca obtido do D1 ou de credenciais reais.
-async function fixtureHash(password, iterations) {
+async function fixtureHash(password: string, iterations: number) {
   const salt = new Uint8Array(16).fill(19);
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]
@@ -45,5 +45,15 @@ describe("Segurança do hash de senha PBKDF2", () => {
       assert.equal(await verifyPassword("SenhaDeTesteSegura2026", value), false);
       assert.equal(passwordNeedsUpgrade(value), false);
     }
+  });
+
+  it("guarda: hash dummy do login acompanha as iterações atuais", () => {
+    const parts = DUMMY_HASH.split("$");
+    assert.equal(parts.length, 4);
+    assert.equal(parts[0], "pbkdf2_sha256");
+    assert.ok(parts[2] && parts[3]);
+    assert.equal(Number(parts[1]), PASSWORD_HASH_ITERATIONS,
+      "DUMMY_HASH ficou para tras em um bump de CURRENT_ITERATIONS - regenere com hashPassword.");
+    assert.equal(passwordNeedsUpgrade(DUMMY_HASH), false);
   });
 });

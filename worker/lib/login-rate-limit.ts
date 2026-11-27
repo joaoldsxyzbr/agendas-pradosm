@@ -1,4 +1,5 @@
-async function checkLoginRateLimit(limiter, login, actor) {
+export type LoginRateLimitDecision = "allowed" | "limited" | "unavailable";
+async function checkLoginRateLimit(limiter: RateLimit | null | undefined, login: string, actor?: string | null): Promise<LoginRateLimitDecision> {
   if (!limiter) {
     console.warn("Login rate limiter unavailable; denying request.");
     return "unavailable";

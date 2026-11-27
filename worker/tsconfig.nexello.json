@@ -21,6 +21,10 @@
     "routes/admin-audit.ts",
     "routes/admin-retention.ts",
     "services/access-session.ts",
-    "../shared/permissions.ts"
+    "../shared/permissions.ts",
+    "lib/session.ts",
+    "lib/password.ts",
+    "lib/http.ts",
+    "lib/login-rate-limit.ts"
   ]
 }
