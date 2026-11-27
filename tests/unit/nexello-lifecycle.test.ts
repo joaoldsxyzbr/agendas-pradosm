@@ -7,7 +7,7 @@ const appointment: NexelloAppointment = {
   protocol: "123456", date: "2026-11-27", storeCode: "F01", startTime: "08:00",
   endTime: "09:00", supplier: "Fornecedor fictício", type: "Pedido", nfe: [], orders: ["00123"],
 };
-const current: LocalOccurrence = { id: "local-1", appointment, state: "aguardando", active: true, manual: false, closedDay: false };
+const current: LocalOccurrence = { id: "local-1", appointment, state: "aguardando", active: true, manual: false, closedDay: false, digitized:false, verifiedExternalLink:true };
 const confirmed: Observation = { appointment, state: "confirmed" };
 const action = (observed: Observation[], local: LocalOccurrence[]): ReviewAction | undefined =>
   reviewNexelloOccurrences(observed, local)[0]?.action;
@@ -17,8 +17,8 @@ test("absence or unknown external state never authorizes cancellation or inserti
   assert.equal(action([{ ...confirmed, state: "unknown" }], [current]), "unverified");
   assert.equal(action([{ ...confirmed, state: "pending" }], []), "not_eligible");
 });
-test("identical duplicates collapse but divergent documents and locations conflict", () => {
-  assert.equal(action([confirmed, confirmed], []), "new_candidate");
+test("identical and divergent duplicates are both blocked", () => {
+  assert.equal(action([confirmed, confirmed], []), "duplicate_conflict");
   assert.equal(action([confirmed, { ...confirmed, appointment: { ...appointment, orders: ["02"] } }], []), "duplicate_conflict");
   assert.equal(action([confirmed, { ...confirmed, appointment: { ...appointment, storeCode: "F02" } }], []), "duplicate_conflict");
 });
@@ -37,4 +37,19 @@ test("cancel and move preserve operational conflicts", () => {
     assert.equal(action([{ ...confirmed, appointment: { ...appointment, date: "2026-11-28" } }], [row]), "local_conflict");
   }
   assert.equal(action([confirmed], [current, { ...current, id: "local-2" }]), "local_conflict");
+});
+
+test("existing records require an explicitly verified link and known undigitized state",()=>{
+  const cancelled:Observation={...confirmed,state:"cancelled"};
+  const moved:Observation={...confirmed,appointment:{...appointment,date:"2026-11-28"}};
+  for(const row of [{...current,digitized:true},{...current,digitized:undefined},{...current,verifiedExternalLink:false},{...current,verifiedExternalLink:undefined}]){
+    assert.equal(action([cancelled],[row]),"local_conflict");
+    assert.equal(action([moved],[row]),"local_conflict");
+  }
+  for(const change of [{supplier:"Outro"},{orders:["999"]},{startTime:"08:30"}]){
+    assert.equal(action([{...cancelled,appointment:{...appointment,...change}}],[current]),"local_conflict");
+  }
+  assert.equal(action([{...moved,appointment:{...moved.appointment,supplier:"Outro"}}],[current]),"local_conflict");
+  const withoutDocs={...appointment,orders:[]};
+  assert.equal(action([{...confirmed,appointment:{...withoutDocs,date:"2026-11-28"}}],[{...current,appointment:withoutDocs}]),"local_conflict");
 });

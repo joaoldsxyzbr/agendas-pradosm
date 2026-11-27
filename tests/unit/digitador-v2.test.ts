@@ -46,7 +46,7 @@ test("Digitador V2: acesso operacional, bloqueio de administração, sessão e N
       ["GET","/api/admin/users/"+admin.user.id+"/access"], ["PUT","/api/admin/users/"+admin.user.id+"/access"],
       ["GET","/api/admin/audit"], ["GET","/api/admin/diagnostics"],
       ["GET","/api/admin/retention/status"], ["POST","/api/admin/retention/run"],
-      ["POST","/api/admin/stores"], ["PATCH","/api/admin/stores"], ["DELETE","/api/admin/stores/"+store],
+      ["GET","/api/admin/stores/nexello-destinos"], ["POST","/api/admin/stores/nexello-destinos"], ["POST","/api/admin/stores"], ["PATCH","/api/admin/stores"], ["DELETE","/api/admin/stores/"+store],
     ] as const) assert.equal((await request(path,method,digitador.cookie)).status,403,method+" "+path);
     const cfg = await request("/api/admin/users/"+digitador.user.id+"/access","GET",admin.cookie);
     assert.equal(cfg.status,200);

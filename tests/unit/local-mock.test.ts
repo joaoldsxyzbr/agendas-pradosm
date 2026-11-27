@@ -14,15 +14,16 @@ test("seed mock: migrations reais, perfis disponíveis, agendas da data operacio
   const db=new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for(const file of readdirSync(new URL("../../migrations/",import.meta.url)).filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort()){
-      db.exec(readFileSync(new URL("../../migrations/"+file,import.meta.url),"utf8"));
+    for(const file of readdirSync(new URL("../../migrations-v2/",import.meta.url)).filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort()){
+      db.exec(readFileSync(new URL("../../migrations-v2/"+file,import.meta.url),"utf8"));
     }
     const password=randomBytes(18).toString("base64url");
-    const seed=await buildMockSql(password,now);
+    const seed=await buildMockSql(password,now,{access:true,v2:true});
     db.exec(seed);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM lojas").get().n,3);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM usuario_acesso WHERE perfil='digitador' AND ativo=1").get().n,1);
     const users=db.prepare("SELECT * FROM usuarios").all();
-    assert.equal(users.length,MOCK_ACCOUNTS.filter(u=>!u.profile).length);
+    assert.equal(users.length,MOCK_ACCOUNTS.length);
     assert.deepEqual(new Set(users.map(u=>u.papel)),new Set(["admin","visualizador","conferente"]));
     for (const u of users) assert.equal(await verifyPassword(password,u.senha_hash),true);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM agendas").get().n,21);
@@ -37,7 +38,7 @@ test("seed mock: migrations reais, perfis disponíveis, agendas da data operacio
     const first=db.prepare("SELECT id FROM agendamentos WHERE status='aguardando' LIMIT 1").get().id;
     db.prepare("UPDATE agendamentos SET status='recebido' WHERE id=?").run(first);
     const counts=["lojas","usuarios","agendas","agendamentos","historico_status","auditoria","avisos"].map(t=>db.prepare("SELECT COUNT(*) AS n FROM "+t).get().n);
-    db.exec(await buildMockSql(password,now));
+    db.exec(await buildMockSql(password,now,{access:true,v2:true}));
     assert.deepEqual(["lojas","usuarios","agendas","agendamentos","historico_status","auditoria","avisos"].map(t=>db.prepare("SELECT COUNT(*) AS n FROM "+t).get().n),counts);
     assert.equal(db.prepare("SELECT nome FROM usuarios WHERE id=?").get(user).nome,"Alterado pelo teste");
     assert.equal(db.prepare("SELECT status FROM agendamentos WHERE id=?").get(first).status,"recebido");

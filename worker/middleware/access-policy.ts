@@ -1,5 +1,5 @@
-// Matriz de rotas para contas personalizadas (#248). Não substitui ainda os guards vigentes.
-// Um identificador de loja do cliente nunca é suficiente: a integração deverá resolver a entidade real.
+// Matriz de rotas para contas personalizadas; complementa autenticação e guards.
+// Um identificador de loja do cliente nunca é suficiente: resolver a entidade real no servidor.
 import { canAccessStore, type Permission, type StoreScope } from "../../shared/permissions.ts";
 
 export type ScopeCheck="none"|"all-stores"|"filtered-list"|"agenda-id"|"appointment-id"|"store-id"|"import-batch"|"selected-store"|"notice-filter"|"realtime";

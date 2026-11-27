@@ -1,6 +1,5 @@
-// Catálogo puro de autorização (etapa preparatória da issue #248).
-// Ainda não substitui a autorização vigente; não importar em rotas antes de
-// integrar persistência, escopo por loja e revogação de sessões.
+// Catálogo de autorização efetiva compartilhado entre Worker e interface.
+// O servidor resolve perfil, escopo, exceções e revogação; a UI não concede acesso.
 export const ACCESS_PROFILES = ["admin", "digitador", "visualizador", "conferente"] as const;
 export type AccessProfile = typeof ACCESS_PROFILES[number];
 

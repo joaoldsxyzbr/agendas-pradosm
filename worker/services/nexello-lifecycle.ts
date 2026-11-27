@@ -9,6 +9,9 @@ export interface LocalOccurrence {
   active: boolean;
   manual: boolean;
   closedDay: boolean;
+  // Unknown protection/identity is not clearance to modify an existing row.
+  digitized?: boolean;
+  verifiedExternalLink?: boolean;
 }
 export interface Observation {
   appointment: NexelloAppointment;
@@ -33,6 +36,19 @@ export function appointmentFingerprint(a: NexelloAppointment): string {
   ]);
 }
 
+function canReviewMutation(row:LocalOccurrence):boolean {
+  return row.active && !row.manual && !row.closedDay && row.state==="aguardando" &&
+    row.digitized===false && row.verifiedExternalLink===true;
+}
+// Protocol alone is not an identity. Require supplier/type and nonempty,
+// matching document sets before even suggesting a change of date or slot.
+// This remains a review heuristic, not a verified upstream identifier.
+function sameStableFields(a:NexelloAppointment,b:NexelloAppointment):boolean{
+  const docs=(values:string[])=>JSON.stringify([...new Set(values)].sort());
+  return a.protocol===b.protocol && a.supplier===b.supplier && a.type===b.type &&
+    a.nfe.length+a.orders.length>0 && b.nfe.length+b.orders.length>0 &&
+    docs(a.nfe)===docs(b.nfe) && docs(a.orders)===docs(b.orders);
+}
 export function reviewNexelloOccurrences(
   observed: readonly Observation[],
   local: readonly LocalOccurrence[],
@@ -60,23 +76,20 @@ export function reviewNexelloOccurrences(
     const current = candidates[0];
     let action: ReviewAction;
     if (!first) action = "not_observed";
-    else if (source.some(row => row.state !== first.state ||
-      appointmentFingerprint(row.appointment) !== appointmentFingerprint(first.appointment))) action = "duplicate_conflict";
+    else if (source.length !== 1) action = "duplicate_conflict";
     else if (candidates.length > 1) action = "local_conflict";
     else if (first.state === "unknown") action = "unverified";
     else if (first.state === "pending" || first.state === "rejected") action = "not_eligible";
     else if (first.state === "cancelled") {
       if (!current || !current.active) action = "not_eligible";
-      else if (current.manual || current.closedDay || current.state !== "aguardando" ||
-        current.appointment.date !== first.appointment.date ||
-        current.appointment.storeCode !== first.appointment.storeCode ||
-        first.appointment.storeCode === null) action = "local_conflict";
+      else if (!canReviewMutation(current) || first.appointment.storeCode === null ||
+        appointmentFingerprint(current.appointment) !== appointmentFingerprint(first.appointment)) action = "local_conflict";
       else action = "cancel_candidate";
     } else if (!first.appointment.storeCode) action = "unresolved_store";
     else if (!current) action = "new_candidate";
     else if (current.manual || !current.active) action = "local_conflict";
     else if (appointmentFingerprint(current.appointment) === appointmentFingerprint(first.appointment)) action = "unchanged";
-    else if (current.closedDay || current.state !== "aguardando") action = "local_conflict";
+    else if (!canReviewMutation(current) || !sameStableFields(current.appointment, first.appointment)) action = "local_conflict";
     else if (current.appointment.date !== first.appointment.date ||
       current.appointment.storeCode !== first.appointment.storeCode) action = "move_candidate";
     else action = "update_candidate";

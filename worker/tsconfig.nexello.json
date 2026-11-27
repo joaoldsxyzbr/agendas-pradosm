@@ -19,6 +19,8 @@
     "repositories/diagnostics.ts",
     "routes/diagnostics.ts",
     "routes/admin-audit.ts",
-    "routes/admin-retention.ts"
+    "routes/admin-retention.ts",
+    "services/access-session.ts",
+    "../shared/permissions.ts"
   ]
 }
