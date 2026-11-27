@@ -53,10 +53,17 @@ test("V2 protects external state, manual entries, CD and referential integrity",
     const sync = db.prepare("INSERT INTO sincronizacoes_nexello(id,usuario_id,data_inicio,data_fim,situacao,hash_conteudo,linhas_lidas,criado_em) VALUES('s','u','2026-11-27','2026-11-28','em_revisao',?,2,'t')");
     sync.run(h);
     const link = db.prepare("INSERT INTO agendamento_nexello(agendamento_id,sincronizacao_id,estado_externo,evidencia,observado_em,hash_conteudo) VALUES(?,'s',?,?,'t',?)");
+    assert.throws(() => link.run("p","desconhecido","relatorio_60",h), /NEXELLO_REVISAO_INVALIDA/);
+    db.exec("UPDATE sincronizacoes_nexello SET situacao='confirmada',finalizado_em='t' WHERE id='s'");
+    assert.throws(() => db.exec("UPDATE sincronizacoes_nexello SET linhas_lidas=999 WHERE id='s'"), /NEXELLO_REVISAO_FINALIZADA/);
     assert.throws(() => link.run("p","confirmado","relatorio_60",h), /CHECK constraint/);
     assert.throws(() => link.run("m","desconhecido","relatorio_60",h), /NEXELLO_VINCULO_MANUAL/);
-    assert.throws(() => link.run("inexistente","desconhecido","relatorio_60",h), /FOREIGN KEY/);
+    assert.throws(() => link.run("inexistente","desconhecido","relatorio_60",h), /NEXELLO_REVISAO_INVALIDA|FOREIGN KEY/);
     link.run("p","desconhecido","relatorio_60",h);
+    assert.throws(() => db.exec("UPDATE agendas SET arquivo_original='outro.csv' WHERE id='a'"), /NEXELLO_AGENDA_PROTEGIDA/);
+    db.exec("UPDATE agendas SET arquivo_original='contingencia.csv' WHERE id='b'");
+    db.exec("UPDATE agendamentos SET status='recebido' WHERE id='p'");
+    assert.equal(db.prepare("SELECT status FROM agendamentos WHERE id='p'").get()?.status,"recebido");
     assert.throws(() => db.exec("UPDATE agendamentos SET origem='manual' WHERE id='p'"), /NEXELLO_VINCULO_MANUAL/);
     assert.throws(() => db.exec("UPDATE agendamento_nexello SET agendamento_id='q' WHERE agendamento_id='p'"), /NEXELLO_VINCULO_IMUTAVEL/);
     assert.throws(() => db.exec("INSERT INTO nexello_destinos(filial_externa,loja_id,criado_por,criado_em) VALUES('CD','l','u','t')"), /CHECK constraint/);
