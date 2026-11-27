@@ -1,0 +1,98 @@
+name: Nexello - diagnostico temporario de leitura
+
+on:
+  push:
+    branches: [feat/sincronizacao-manual-agendas-api]
+    paths: ['.github/workflows/nexello-diagnostico.yml']
+
+permissions: {}
+
+jobs:
+  diagnostico:
+    if: github.repository == 'joaoldsxyzbr/agendas-pradosm' && github.ref == 'refs/heads/feat/sincronizacao-manual-agendas-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Consultar catalogo e estrutura sem expor dados
+        env:
+          NEXELLO_API_TOKEN: ${{ secrets.NEXELLO_API_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.request
+          import urllib.error
+          import unicodedata
+
+          BASE = "https://integracao-organiza.nexello.com.br/integracao/api/v2/relatorio-personalizado/"
+          token = os.environ.get("NEXELLO_API_TOKEN", "").strip()
+          if not token:
+              sys.exit("Secret NEXELLO_API_TOKEN ausente ou indisponivel.")
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+
+          def get(path):
+              req = urllib.request.Request(BASE + path, headers={
+                  "Authorization": "Bearer " + token,
+                  "Accept": "application/json",
+              }, method="GET")
+              try:
+                  with opener.open(req, timeout=20) as response:
+                      raw = response.read(1048577)
+                      if len(raw) > 1048576:
+                          sys.exit("Resposta excedeu o limite de diagnostico.")
+                      return json.loads(raw)
+              except urllib.error.HTTPError as error:
+                  sys.exit("Consulta GET falhou: HTTP " + str(error.code))
+              except Exception:
+                  sys.exit("Falha de transporte ou resposta JSON invalida.")
+
+          def normalized(value):
+              return "".join(c for c in unicodedata.normalize("NFKD", value.casefold())
+                             if not unicodedata.combining(c))
+
+          reports = get("consultas")
+          if not isinstance(reports, list):
+              sys.exit("Catalogo em formato diferente do documentado.")
+          candidates = set()
+          for report in reports:
+              if not isinstance(report, dict):
+                  continue
+              name, ident = report.get("relatorio"), report.get("id_consulta")
+              if isinstance(name, str) and "agend" in normalized(name):
+                  if type(ident) is int and 0 < ident <= 2147483647:
+                      candidates.add(ident)
+                  elif isinstance(ident, str) and re.fullmatch(r"[0-9]{1,9}", ident) and int(ident) > 0:
+                      candidates.add(int(ident))
+          print("Catalogo acessivel; total de relatorios:", len(reports))
+          print("IDs candidatos a agendamentos:", sorted(candidates))
+          if not candidates:
+              sys.exit("Nenhum relatorio de agendamento identificado pelo nome.")
+          if len(candidates) > 3:
+              sys.exit("Mais de tres candidatos; selecionar relatorio antes da consulta.")
+          for ident in sorted(candidates):
+              result = get(str(ident) + "?limit=2&page=1")
+              if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+                  sys.exit("Formato inesperado no relatorio " + str(ident))
+              rows = result["data"]
+              fields = {}
+              for row in rows[:2]:
+                  if not isinstance(row, dict):
+                      sys.exit("Registro nao e objeto.")
+                  for key, val in row.items():
+                      if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", key):
+                          fields.setdefault(key, set()).add(type(val).__name__)
+              print("Relatorio", ident, "- quantidade da pagina:", len(rows))
+              print("Campos e tipos observados:", json.dumps({k: sorted(v) for k, v in sorted(fields.items())}, ensure_ascii=True))
+              print("Metadados de paginacao:", json.dumps({
+                  k: result[k] for k in ("page", "last_page", "per_page", "total")
+                  if type(result.get(k)) is int
+              }))
+          PY
