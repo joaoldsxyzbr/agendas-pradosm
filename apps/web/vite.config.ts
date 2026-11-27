@@ -19,6 +19,16 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    fs: {
+      // Vite serve a UI em apps/web; o WASM instalado pelo lockfile da raiz
+      // precisa ser servido sob demanda. Permitir apenas esse arquivo, não o
+      // repositório inteiro, mantendo strict e a denylist padrão.
+      strict: true,
+      allow: [
+        fileURLToPath(new URL(".", import.meta.url)),
+        fileURLToPath(new URL("../../node_modules/@llamaindex/liteparse-wasm/pkg/liteparse_wasm_bg.wasm", import.meta.url)),
+      ],
+    },
     proxy: {
       "/api": {
         target: workerOrigin,

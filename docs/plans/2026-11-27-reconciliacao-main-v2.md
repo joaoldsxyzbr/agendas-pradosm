@@ -70,3 +70,7 @@ Validação local: Python sqlite3 com os dez blobs de migrations verificados, co
 ## Concorrência e cadastro de lojas
 
 Portada a suíte de concorrência da main, direcionada às dez migrations V2. Os testes de remoção de loja vinculada e associação a loja removida exigem as rejeições explícitas dos triggers V2, sem flexibilizar a integridade. Corrigido o tratamento 409 de alteração concorrente no PATCH de lojas (estava no POST), preservando o código de conflito comum dos repositórios e o bloqueio de remoção por trigger. O repositório não exige a duplicação do ID no objeto de campos de atualização. Testes integrados ainda não executados; compilação integral depende das dependências locais. Sem CI, deploy ou alteração no D1.
+
+## Lote de ferramentas de build e contratos
+
+Após comparação das diferenças com a main, reaproveitados os blobs de testes CSV/PDF, contratos compartilhados e de autenticação, presença, repositórios e API integrada, além de scripts de build, verificação de artefatos e benchmark PBKDF2. O Vite incorpora a allowlist restrita do WASM, mantendo a denylist padrão. Não alteradas dependências, scripts de deploy ou configurações remotas. Testes HTTP sintéticos legados continuam sendo verificados com ACCESS_MODE desativado e não substituem a cobertura dos perfis V2. Suites copiadas aguardam execução integral e revisão de expectativas V2; o benchmark ampliado de agendas/avisos ainda precisa ser adaptado ao schema isolado e à migration proposta.
