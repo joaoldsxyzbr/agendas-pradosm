@@ -86,3 +86,13 @@ GET consultas lista os relatórios autorizados; GET {id}?limit=2&page=1 foi conf
 - [x] Relatórios candidatos identificados; ID 60 priorizado.
 - [ ] Contrato efetivo, paridade e filtro de data/filial confirmados.
 - [ ] Implementação, testes, CI da entrega, revisão e autorização de merge.
+
+### Diagnóstico complementar e primeiro lote de código
+
+Execução https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45993328740: a consulta de 20 registros do relatório 60 funcionou; 20 protocolos distintos na amostra, 20 tipos reconhecidos pelo contrato atual, data DD/MM/AAAA e intervalo HH:MM - HH:MM em todos os registros. NF-e e pedidos apresentam listas de dígitos separadas por vírgulas e hífen como ausência na amostra. Filial apresenta formatos com código e nome, além de uma forma sem código numérico (necessária verificação do CD/doca). Nenhum valor comercial foi registrado. Não extrapolar a amostra para todo o relatório.
+
+Lacunas confirmadas na amostra: itens, volumes, paletes, carga batida e doca ausentes. Horário final resolvido pelo intervalo de hora_agendada, sujeito à validação do intervalo. A primeira sondagem de filtro não documentado recebeu HTTP 500, interrompendo as demais; não há filtro funcional confirmado. Não repetir sondagens indiscriminadamente nem fazer varredura histórica.
+
+Implementado cliente de página GET isolado em worker/services/nexello-report.ts e testes sintéticos em tests/unit/nexello-report.test.ts (commit ab4b61853af1e0a1478b4369e91500c9dc317c38). Valida origem fixa HTTPS, parâmetros documentados, timeout, limite de resposta, metadados de paginação e erros sanitizados. Sem rotas, gravação, configuração de produção ou chamada pela aplicação. Os testes/CI precisam ser confirmados.
+
+Escopo reafirmado pelo usuário: somente as mesmas informações da importação atual. Próximo critério obrigatório: obter relatório equivalente ao CSV, com protocolo, data/intervalo, fornecedor, filial/doca, itens, volumes, paletes, carga batida, tipo, NF-e e pedidos, com filtro por data documentado. Não substituir valores existentes por null nem inventar valores para campos ausentes. Não adicionar campos comerciais novos. Se necessário, pedir ajuste do relatório 60 ou outro relatório equivalente ao exportador atual da Nexello. Manter PR draft; não liberar o botão funcional até a paridade estar comprovada.
