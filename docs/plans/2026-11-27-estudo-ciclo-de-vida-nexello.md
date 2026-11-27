@@ -83,7 +83,7 @@ Testes sintéticos obrigatórios: todo ciclo de vida acima; nulos, vazios, dupli
 - [x] Coleção original, código, schema e documentação operacional revisados.
 - [x] Conectividade e autenticação; catálogo inicial; campos e formatos; volume e duplicidade; amostras de complementares.
 - [x] Cliente e normalizador isolados; CI 45994856265 verde no commit 55afca8. Não equivale a aprovação da integração.
-- [ ] Resultado do diagnóstico dos oito relatórios e NF-e (45996265913).
+- [x] Diagnóstico dos oito IDs e tentativa NF-e concluído (45996265913 e 45996525668), com limitações explícitas.
 - [ ] Comparação com relatório de estados/agenda do dia; prova de aceitação e cobertura por tipo e situação.
 - [ ] Identidade/reagendamento e CD resolvidos (ou exclusões explícitas com contingência); decidir se CPF ocorre; comprovar origem de enriquecimento ou manter desconhecido.
 - [ ] Prévia somente leitura, testes, medição de CPU e orçamento; sem dados escritos.
@@ -96,7 +96,7 @@ Testes sintéticos obrigatórios: todo ciclo de vida acima; nulos, vazios, dupli
 
 ### Atualização de investigação e limites
 
-O catálogo integral confirmou os IDs 1, 29, 30, 40, 60, 46, 27 e 57. A execução 45996265913 retornou relatório 29 vazio, depois falhou ao acessar 40 (transporte/JSON; não comprova inexistência ou falta de autorização). O teste 45996525668 isola erros e consulta apenas 40/46 e a listagem de NF-e com data_agendada, sem expor dados individuais. Ainda não houve prova de estado por protocolo.
+O catálogo integral confirmou os IDs 1, 29, 30, 40, 60, 46, 27 e 57. A execução 45996265913 retornou relatório 29 vazio, depois falhou ao acessar 40 (transporte/JSON; não comprova inexistência ou falta de autorização). O teste 45996525668 concluiu com sucesso operacional e limitações de acesso: 40 voltou a ficar indisponível (transporte/JSON); 46 é relatório de pedidos (251481 registros, campos pedido, tipo, fornecedor, filial, quantidade, datas, situação_entrega, pendência; sem protocolo de agenda observado); não é prova de estado de agenda. A rota de NF-e respondeu HTTP 401 tanto para dia atual quanto para data de controle. Token funciona para relatórios, mas não há acesso confirmado à listagem NF-e; motivo exato do 401 desconhecido. Não utilizar como fonte. Nenhum relatório novo comprovou estado individual de agendamento. A próxima etapa é validar contra exportações oficiais e eventos conhecidos, não ampliar varreduras da API.
 
 D1 Free: a documentação oficial atual estabelece 50 consultas D1 por invocação, db.batch conta como uma, 100 parâmetros por statement, 30 segundos para o batch inteiro e 500 MB por banco. Evitar N+1 na leitura de protocolos; usar consultas agrupadas parametrizadas e orçamento real de statements, CPU e tamanho. Limite interno de 800 statements não implica capacidade efetiva. Fonte: https://developers.cloudflare.com/d1/platform/limits/.
 
