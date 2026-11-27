@@ -33,9 +33,18 @@ export const ACCESS_PAGES = [
 export function canUse(user:SessionUser|null|undefined,permission:Permission,legacy:boolean):boolean{
   return !!user&&(user.permissoes?user.permissoes.includes(permission):legacy);
 }
+// Navegação do canal segue o perfil efetivo, não o papel físico de armazenamento.
+export function noticePath(user:SessionUser):"/app/avisos"|"/admin/avisos"{
+  return (user.perfil??user.papel)==="conferente"?"/app/avisos":"/admin/avisos";
+}
+export function canUseNotice(user:SessionUser|null|undefined,permission:Permission):boolean{
+  if(!user)return false;
+  if(user.perfil||user.permissoes)return user.permissoes?.includes("avisos.ver")===true&&user.permissoes.includes(permission);
+  return user.papel==="admin"||user.papel==="conferente"&&["avisos.ver","avisos.marcar_lido","avisos.conversar","avisos.reagir"].includes(permission);
+}
 export function homeForUser(user:SessionUser):string{
   if(!user.permissoes)return homeForRole(user.papel);
-  return ACCESS_PAGES.find(([,p])=>user.permissoes?.includes(p))?.[0]??(user.permissoes.includes("auditoria.ver")?"/admin/diagnostics":"/sem-acesso");
+  return ACCESS_PAGES.find(([,p])=>user.permissoes?.includes(p))?.[0]??(user.permissoes.includes("auditoria.ver")?"/admin/diagnostics":canUseNotice(user,"avisos.ver")?noticePath(user):"/sem-acesso");
 }
 export async function loadSession(): Promise<SessionUser | null> {
   try {

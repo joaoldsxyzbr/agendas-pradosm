@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { moveVisibleMenuItem, readMenuOrder, writeMenuOrder } from "./menu-order";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { NavLink, Outlet, useNavigate } from "react-router";
-import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, PanelLeft, Settings2, Store, Users } from "lucide-react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router";
+import { ClipboardCheck, ClipboardList, FileBarChart, FileUp, LogOut, Megaphone, PanelLeft, Settings2, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { logout, ACCESS_PAGES, canUse, type SessionUser, type Role } from "@/features/auth/session";
-import { AvisosBell } from "@/features/avisos/avisos-bell";
+import { logout, ACCESS_PAGES, canUse, canUseNotice, noticePath, type SessionUser, type Role } from "@/features/auth/session";
+import { AvisosMenuBadge } from "@/features/avisos/avisos-menu-badge";
+import { AvisosToasts } from "@/features/avisos/avisos-toasts";
 import { PradoMark } from "@/components/operations/prado-mark";
 
 const menu = [
@@ -18,6 +19,8 @@ const menu = [
   { path: "/admin/users", label: "Usuários", icon: Users, roles: ["admin"] },
   { path: "/admin/diagnostics", label: "Logs e Auditoria", icon: Settings2, roles: ["admin"] },
   { path: "/app", label: "Conferência", icon: ClipboardCheck, roles: ["conferente"] },
+  { path: "/admin/avisos", label: "Avisos", icon: Megaphone, roles: ["admin"] },
+  { path: "/app/avisos", label: "Avisos", icon: Megaphone, roles: ["conferente"] },
 ] as const;
 const defaultMenuOrder = menu.map(item => item.path);
 
@@ -56,6 +59,9 @@ function writeSidebarCollapsed(role: Role, collapsed: boolean) {
 
 export function AppLayout({ user }: { user: SessionUser }) {
   const navigate = useNavigate();
+  const {pathname}=useLocation();
+  const canal=pathname.endsWith("/avisos");
+  const temCanal=canUseNotice(user,"avisos.ver");
   const client = useQueryClient();
   const [collapsed, setCollapsed] = useState(() => readSidebarCollapsed(user.papel));
   const [order, setOrder] = useState(() => readMenuOrder(user.id, defaultMenuOrder));
@@ -73,7 +79,7 @@ export function AppLayout({ user }: { user: SessionUser }) {
       navigate("/login", { replace: true });
     },
   });
-  const authorized = menu.filter(item => user.permissoes ? (user.permissoes.some(p=>ACCESS_PAGES.some(([path,permission])=>path===item.path&&permission===p))||(item.path==="/admin/diagnostics"&&user.permissoes.includes("auditoria.ver"))) : (item.roles as readonly Role[]).includes(user.papel));
+  const authorized = menu.filter(item => item.path.endsWith("/avisos")?temCanal&&item.path===noticePath(user):user.permissoes ? (user.permissoes.some(p=>ACCESS_PAGES.some(([path,permission])=>path===item.path&&permission===p))||(item.path==="/admin/diagnostics"&&user.permissoes.includes("auditoria.ver"))) : (item.roles as readonly Role[]).includes(user.papel));
   const items = [...authorized].sort((a,b) => order.indexOf(a.path) - order.indexOf(b.path));
   const visible: string[] = items.map(item => item.path);
   const saveOrder = (next: string[]) => {
@@ -129,9 +135,10 @@ export function AppLayout({ user }: { user: SessionUser }) {
         dropTarget === path && "ring-1 ring-inset ring-sky-400 bg-sky-500/15")}>
       <Icon size={16} aria-hidden="true" />
       <span className={compact ? "sr-only" : undefined}>{label}</span>
+      {path.endsWith("/avisos")&&<AvisosMenuBadge />}
     </NavLink>)}
   </nav>;
-  return <div className="flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row">
+  return <div className={cn("flex min-h-svh w-screen min-w-0 max-w-[100vw] flex-col overflow-x-clip md:w-full md:max-w-full md:flex-row",canal&&"h-svh overflow-hidden")}>
     <aside className={cn("hidden shrink-0 flex-col prado-sidebar border-r p-3 md:sticky md:top-0 md:flex md:h-svh md:max-h-svh md:overflow-y-auto", collapsed ? "w-[76px]" : "w-60")}>
       <div className={cn("mb-7 border-b border-slate-700/70 p-3", collapsed && "flex flex-col items-center gap-2")}>
         {collapsed ? <>
@@ -152,11 +159,10 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <div className="flex-1">{renderNav(collapsed)}</div>
       <div className={cn("border-t border-slate-700/70 px-2 pt-3 text-xs text-slate-400", collapsed && "truncate text-center")}>{labels[user.perfil??user.papel]}</div>
     </aside>
-    <div className="flex w-screen min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
+    <div className="flex w-screen min-h-0 min-w-0 max-w-[100vw] flex-1 flex-col md:w-full md:max-w-full">
       <header className="prado-topbar flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-4 py-2 md:px-6">
         <span className="text-sm font-semibold text-slate-200">Painel operacional</span>
         <div className="flex items-center gap-3">
-          {canUse(user,"avisos.ver",true)&&<AvisosBell papel={user.papel} canPublish={canUse(user,"avisos.publicar",user.papel==="admin")} canMarkRead={canUse(user,"avisos.marcar_lido",true)} />}
           {user.lojasDisponiveis && user.lojasDisponiveis.length>1 && canUse(user,"conferencia.ver",false) && <select aria-label="Loja de conferência" className="max-w-40 rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-white" value={user.lojaId??""}
             onChange={event=>{sessionStorage.setItem("agenda-store",event.target.value);window.location.reload();}}>
             {user.lojasDisponiveis.map(store=><option key={store.id} value={store.id}>{store.codigo} — {store.nome}</option>)}
@@ -171,7 +177,8 @@ export function AppLayout({ user }: { user: SessionUser }) {
       <span className="sr-only" aria-live="polite">{announcement}</span>
       {storageFailed && <p className="px-5 pt-2 text-xs text-amber-300" role="status">Não foi possível salvar a ordem neste navegador.</p>}
       {signout.isError && <p role="alert" className="px-5 pt-2 text-xs text-rose-300">Não foi possível encerrar a sessão.</p>}
-      <main className="w-full min-w-0 max-w-full flex-1 overflow-x-clip p-4 md:p-7"><Outlet /></main>
+      <main className={cn("w-full min-w-0 max-w-full flex-1",canal?"flex min-h-0 flex-col overflow-hidden":"overflow-x-clip p-4 md:p-7")}><Outlet /></main>
+      {temCanal&&<AvisosToasts key={user.id} userId={user.id} canalPath={noticePath(user)} />}
     </div>
   </div>;
 }

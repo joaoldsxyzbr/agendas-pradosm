@@ -27,3 +27,7 @@ Contrato bloqueado para execução: exige aprovação explícita para reconstru�
 ## Lote backend Avisos
 
 Portar contrato, repositório e rotas da main, com escopo estável por ID, autorização de chat/reações/leitores separada, validação de destino real e régua global restrita a quem possui permissão e escopo global. Visualizador sem acesso padrão ao canal (paridade main); exceções explícitas ainda podem conceder permissões. Digitador e conferente mantêm canal conforme perfil. Chat é global como na main, inclusive para conferentes vinculados; não confundir isso com publicação oficial direcionada. Contas personalizadas seguem permissões efetivas. O repositório de leitores considera perfis efetivos quando ACCESS_MODE=on. Testes unitários de política adicionados. A interface e a aprovação da migration 0011 continuam pendentes; manter branch não publicada.
+
+## Lote de interface Avisos
+
+Canal da main incorporado à navegação V2, mantendo menu reordenável, identidade visual e escopo do perfil efetivo. Badge no menu, toasts, busca, paginação, leitura e reações; ações separadas por permissão. Conta com lojas atribuídas não pode publicar para todas nem escolher destinos fora do escopo. Leitores só com escopo global. Sessão que só tem Avisos direcionada ao canal. Realtime permanece desativado no V2; atualização por HTTP. Antigo sino retirado. Não executado build/Playwright neste lote. Migration 0011 ainda não aplicada nem integrada ao diretório executável.
