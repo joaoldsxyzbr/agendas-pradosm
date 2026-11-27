@@ -33,3 +33,6 @@ Antes de congelar schema inicial: validar identidade/reagendamento (protocolo ig
 7. Provisionamento exclusivamente do novo Worker/D1, segredos independentes, liberar scripts só com guardas de identidade; D1 novo a partir do schema aprovado. Teste operacional isolado; CI verde e autorização antes de merge na preview/deploy. Eventual migração para produção é outro projeto/PR com aprovação explícita.
 
 O módulo nexello-lifecycle é uma primeira classificação conservadora, não identidade persistente nem autorização de mudança. Dados do relatório 60 entram como unknown. Candidatos de atualização, transferência e cancelamento só são possíveis com evidência explícita e ainda exigem validação independente. Ausência jamais é cancelamento.
+
+## Política temporária de CI (decisão do responsável)
+Durante a reconstrução, os pushes e PRs para preview não disparam o CI geral. Os gatilhos de main permanecem e workflow_dispatch permite a validação final. Não desabilitar testes, checks de segurança ou a exigência de aprovação. Antes de liberar a V2, executar o CI integral no commit final e restaurar os gatilhos de preview quando for apropriado; nenhum merge na main sem autorização explícita. Usar testes locais focados durante os lotes quando disponíveis.
