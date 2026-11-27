@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #101923;
-  --color-surface: #142338;
-  --color-surface-raised: #192c43;
-  --color-action: #438ffc;
+  --color-background: #131c25;
+  --color-surface: #192734;
+  --color-surface-raised: #223443;
+  --color-action: #90c8df;
 }
 
-:root { color-scheme: dark; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+:root { color-scheme: dark; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
 /* Rolagem horizontal existe apenas nos componentes de tabela e navegação;
  * nunca no documento. A camada clip não altera os contêineres internos. */
 html, body, #root { min-height: 100%; max-width: 100%; overflow-x: clip; }
-body { margin: 0; background: #101923; color: #eaf2fc; }
+body { margin: 0; background: #131c25; color: #e8eef4; font-size: 14px; }
 button, input { font: inherit; }
 ::selection { background: #275a91; color: white; }
 /* Quem pede menos movimento ao sistema não vê skeleton pulsando nem
@@ -22,3 +22,27 @@ button, input { font: inherit; }
     animation: none;
   }
 }
+
+/* Prado V2: estrutura operacional. As cores de estado continuam semânticas. */
+:root {
+  --prado-ink: #101a23;
+  --prado-canvas: #131c25;
+  --prado-panel: #192734;
+  --prado-rule: #344956;
+  --prado-paper: #e8eef4;
+  --prado-signal: #90c8df;
+}
+.prado-sidebar { background: var(--prado-ink); border-color: var(--prado-rule); }
+.prado-topbar { background: var(--prado-canvas); border-color: var(--prado-rule); }
+.prado-nav-link { position: relative; border-inline-start: 3px solid transparent; }
+.prado-nav-link[aria-current="page"] { border-inline-start-color: var(--prado-signal); background: #223847; color: #d9eff7; }
+.prado-mark { display: inline-grid; width: 34px; height: 34px; place-items: center; flex-shrink: 0; background: #90c8df; color: #101a23; border-radius: 5px; }
+.prado-mark svg { width: 23px; height: 23px; }
+.prado-login { background: var(--prado-canvas); }
+.prado-login-identity { background: var(--prado-ink); border-color: var(--prado-rule); }
+.prado-login-input { background: #101a23; border: 1px solid #526777; color: var(--prado-paper); border-radius: 5px; min-height: 44px; width: 100%; padding: 0 12px; }
+.prado-login-input:focus-visible { outline: 2px solid var(--prado-signal); outline-offset: 2px; }
+.prado-flow { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0; }
+.prado-flow-step { position: relative; min-width: 0; padding: 20px 12px 12px 0; border-top: 2px solid #536b7a; }
+.prado-flow-step::before { content: ""; position: absolute; width: 10px; height: 10px; top: -6px; left: 0; border: 2px solid var(--prado-signal); background: var(--prado-ink); border-radius: 2px; }
+.prado-flow-step:last-child { border-top-color: var(--prado-signal); }
