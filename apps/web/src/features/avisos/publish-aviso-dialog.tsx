@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { getStores } from "@/features/receiving/api";
+import { useSession } from "@/app/session-query";
+import { canUseNotice } from "@/features/auth/session";
 import { publishAviso } from "./api";
 import { publicarAvisoSchema } from "./model";
 
@@ -17,13 +19,17 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [urgente, setUrgente] = useState(false);
-  const [modo, setModo] = useState<"todas" | "escolher">("todas");
+  const user=useSession().data;
+  const canPublish=canUseNotice(user,"avisos.publicar");
+  const restricted=!!user?.perfil&&user.escopo?.mode!=="all";
+  const [modo, setModo] = useState<"todas" | "escolher">(()=>restricted?"escolher":"todas");
   const [selecionadas, setSelecionadas] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const lojas = useQuery({ queryKey: ["avisos", "stores"], queryFn: getStores, staleTime: 60_000 });
+  const lojas = useQuery({ queryKey: ["avisos", "stores"], queryFn: getStores, enabled:canPublish&&!restricted, staleTime: 60_000 });
 
+  const destinos=restricted?(user?.lojasDisponiveis??[]):(lojas.data??[]).filter(store=>store.ativo);
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -39,8 +45,9 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (submitting) return;
-    if (modo === "escolher" && selecionadas.length === 0) {
+    if (submitting || !canPublish) return;
+    if (restricted&&modo==="todas") { setError("Escolha lojas do seu escopo."); return; }
+    if (modo === "escolher" && (selecionadas.length === 0 || selecionadas.some(code=>!destinos.some(store=>store.codigo===code)))) {
       setError("Selecione ao menos uma loja.");
       return;
     }
@@ -67,7 +74,7 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const inputCls = "w-full rounded-md border border-[#3b5876] bg-[#17283d] px-3 py-2 text-sm text-slate-100 outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400";
+  const inputCls = "w-full rounded-md border border-[#526777] bg-[#131c25] px-3 py-2 text-sm text-slate-100 outline-offset-2 focus-visible:outline-2 focus-visible:outline-sky-400";
 
   return <dialog ref={ref} aria-labelledby="publish-aviso-heading"
     onCancel={event => { if (submitting) { event.preventDefault(); return; } onClose(); }}
@@ -95,13 +102,13 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
       <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
         <input type="checkbox" checked={urgente} onChange={event => setUrgente(event.target.checked)}
           className="size-4 accent-rose-500" aria-label="Aviso urgente" disabled={submitting} />
-        Urgente (destaca o aviso e faz o badge do sino pulsar em vermelho)
+        Urgente (destaca o aviso e faz o indicador do menu pulsar em vermelho)
       </label>
       <fieldset className="block space-y-1.5">
         <legend className="text-xs font-semibold text-slate-300">Público</legend>
         <div className="flex flex-wrap gap-1.5">
           <Button type="button" size="sm" variant={modo === "todas" ? "default" : "secondary"}
-            aria-pressed={modo === "todas"} disabled={submitting}
+            aria-pressed={modo === "todas"} disabled={submitting||restricted}
             onClick={() => setModo("todas")}>Todas as lojas</Button>
           <Button type="button" size="sm" variant={modo === "escolher" ? "default" : "secondary"}
             aria-pressed={modo === "escolher"} disabled={submitting}
@@ -109,7 +116,7 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
         </div>
         {modo === "escolher" && (
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Lojas destinatárias">
-            {(lojas.data ?? []).map(store => (
+            {destinos.map(store => (
               <Button key={store.id} type="button" size="sm" className="h-7 px-2"
                 variant={selecionadas.includes(store.codigo) ? "default" : "secondary"}
                 aria-pressed={selecionadas.includes(store.codigo)}
@@ -120,13 +127,13 @@ export function PublishAvisoDialog({ onClose }: { onClose: () => void }) {
           </div>
         )}
       </fieldset>
-      <p className="rounded-md border border-[#344956] bg-[#12213a] px-3 py-2 text-xs text-slate-400">
+      <p className="rounded-md border border-[#344956] bg-[#131c25] px-3 py-2 text-xs text-slate-400">
         O aviso fica registrado permanentemente: nunca é excluído, apenas marcado como lido. A lista de avisos é o histórico completo, visível a todas as lojas destinatárias.
       </p>
       {error && <p role="alert" className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" size="sm" disabled={submitting} onClick={onClose}>Cancelar</Button>
-        <Button type="submit" size="sm" disabled={submitting || !titulo.trim() || !mensagem.trim() || (modo === "escolher" && selecionadas.length === 0)}>
+        <Button type="submit" size="sm" disabled={submitting || !canPublish || (restricted&&modo==="todas") || !titulo.trim() || !mensagem.trim() || (modo === "escolher" && selecionadas.length === 0)}>
           {submitting ? "Publicando…" : "Publicar aviso"}</Button>
       </div>
     </form>

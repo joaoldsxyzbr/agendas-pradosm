@@ -14,7 +14,8 @@ export default {
     env: Env,
     _ctx: ExecutionContext,
   ) {
-    await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
+    try { await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime)); }
+    catch { console.error("Scheduled agenda maintenance failed"); }
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }
     catch { console.warn("Scheduled diagnostics retention unavailable"); }
     try { await pruneExpiredNexelloReviews(env.DB, new Date(controller.scheduledTime)); }
@@ -34,7 +35,8 @@ export default {
         event: "retention_summary",
         runId: resumo.runId,
         exportacaoPulada: resumo.exportacaoPulada,
-        totalLinhas: resumo.totalLinhas
+        totalLinhas: resumo.totalLinhas,
+        alertaTamanhoBanco: resumo.alertaTamanhoBanco
       }));
     } catch {
       console.error("Scheduled retention monitoring failed");

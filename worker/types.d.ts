@@ -1,5 +1,5 @@
-// Tipos ambientais do runtime Cloudflare Workers usados pelo Worker.
-// Subconjunto das APIs efetivamente usadas; sem dependências externas.
+// Subconjunto de tipos ambientais para mocks Node exclusivamente.
+// O Worker é compilado contra os tipos oficiais gerados pelo Wrangler.
 
 interface D1Result<T = unknown> {
   results?: T[];
@@ -9,7 +9,7 @@ interface D1Result<T = unknown> {
 
 interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
-  first<T = Record<string, unknown>>(): Promise<T | null>;
+  first<T = Record<string, unknown>>(columnName?: string): Promise<T | null>;
   all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
   run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
   raw<T = unknown>(): Promise<T[]>;
@@ -72,7 +72,7 @@ interface WebSocketRequestResponsePair {}
 
 interface WebSocket {
   serializeAttachment(data: unknown): void;
-  deserializeAttachment(): any;
+  deserializeAttachment(): unknown;
 }
 
 interface ResponseInit {
@@ -94,13 +94,5 @@ declare module "cloudflare:workers" {
     webSocketClose?(ws: WebSocket, code: number, reason: string, wasClean?: boolean): void | Promise<void>;
     webSocketError?(ws: WebSocket, error: unknown): void | Promise<void>;
     alarm?(): void | Promise<void>;
-  }
-}
-
-declare module "@llamaindex/liteparse-wasm" {
-  export default function initLiteParse(): unknown;
-  export class LiteParse {
-    constructor(options?: Record<string, unknown>);
-    parse(bytes: Uint8Array): Promise<any>;
   }
 }

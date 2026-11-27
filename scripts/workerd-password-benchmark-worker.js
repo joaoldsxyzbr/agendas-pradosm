@@ -3,6 +3,7 @@ import { verifyPassword } from "../worker/lib/password.js";
 // Isolado do Worker de negocio. Executado SOMENTE com wrangler dev --local
 // e --ip 127.0.0.1. Nenhuma rota de benchmark e publicada na producao.
 export default {
+  /** @param {Request} request @returns {Promise<Response>} */
   async fetch(request) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {

@@ -44,6 +44,7 @@ const {password,sessionSecret}=JSON.parse(readFileSync(credentialsFile,"utf8"));
 if(typeof password!=="string" || !/^[A-Za-z0-9_-]{24}$/.test(password) ||
    typeof sessionSecret!=="string" || !/^[a-f0-9]{96}$/.test(sessionSecret)) throw Error("Credenciais locais inválidas; preserve o diretório ou recrie um ambiente limpo.");
 const env={...process.env,WRANGLER_SEND_METRICS:"false"};
+/** @param {string[]} cliArgs */
 function run(cliArgs) {
   const result=spawnSync(process.execPath,[wrangler,...cliArgs],{cwd:root,env,stdio:"inherit"});
   if (result.error) throw result.error;

@@ -149,22 +149,22 @@ export function HistoryPage() {
   const stores = useQuery({ queryKey: ["admin", "stores"], queryFn: getStores });
   const agendas = useQuery({
     queryKey: [...historyAgendasKey, filters?.storeCode ?? "", filters?.date ?? "", page],
-    queryFn: () => listHistoryAgendas(filters!.storeCode, filters!.date, page),
+    queryFn: ({ signal }) => listHistoryAgendas(filters!.storeCode, filters!.date, page, signal),
     enabled: filters !== null,
   });
   const detail = useQuery({
     queryKey: [...historyDetailKey, agendaId],
-    queryFn: () => getAgendaDetail(agendaId!),
+    queryFn: ({ signal }) => getAgendaDetail(agendaId!, signal),
     enabled: Boolean(agendaId),
   });
   const dayEvents = useQuery({
     queryKey: [...historyDayEventsKey, agendaId],
-    queryFn: () => listDayEvents(agendaId!),
+    queryFn: ({ signal }) => listDayEvents(agendaId!, signal),
     enabled: Boolean(agendaId),
   });
   const statusEvents = useQuery({
     queryKey: [...historyStatusEventsKey, statusAppointmentId],
-    queryFn: () => listStatusEvents(statusAppointmentId!),
+    queryFn: ({ signal }) => listStatusEvents(statusAppointmentId!, signal),
     enabled: Boolean(statusAppointmentId),
   });
 

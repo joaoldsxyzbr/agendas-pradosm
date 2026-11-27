@@ -9,7 +9,7 @@ const output = join(base, "dist");
 const web = join(base, "apps", "web");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
-function run(args, cwd) {
+function run(args: string[], cwd: string) {
   const result = spawnSync(npm, args, { cwd, env: process.env, stdio: "inherit", shell: process.platform === "win32" });
   if (result.status !== 0) throw Error("Falha no comando npm " + args.join(" "));
 }

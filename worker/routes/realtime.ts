@@ -1,3 +1,4 @@
+import { realtimeFailureKind } from "../lib/realtime-failure.ts";
 import type { AppEnv } from "../env.ts";
 import { Hono } from "hono";
 import {
@@ -5,12 +6,12 @@ import {
 } from "../../shared/realtime.ts";
 import { originMatchesRequest } from "../lib/http.ts";
 const realtimeRoutes = new Hono<AppEnv>();
-function realtimeMode(value) {
+function realtimeMode(value: string): "off" | "shadow" | "on" {
   return value === "shadow" || value === "on" ? value : "off";
 }
 realtimeRoutes.get("/config", (c) => {
   const config = {
-    mode: realtimeMode(c.env.REALTIME_MODE),
+    mode: c.get("authUser")?.perfil || c.get("effectiveAccess")?.customized ? "off" : realtimeMode(c.env.REALTIME_MODE),
     protocolVersion: REALTIME_PROTOCOL_VERSION
   };
   return c.json(config);
@@ -36,6 +37,11 @@ realtimeRoutes.get("/", async (c) => {
     );
   }
   const user = c.get("authUser");
+  if (!user) return c.json({ error: "NAO_AUTENTICADO", message: "Sessão inválida ou expirada." }, 401);
+  // O hub ainda resolve autorização pelo papel legado. Nunca encaminhar
+  // contas personalizadas nem habilitar sockets quando o ambiente está off.
+  if (user.perfil || c.get("effectiveAccess")?.customized) return c.json({ error: "ACESSO_NEGADO", message: "Tempo real indisponível para este perfil." }, 403);
+  if (realtimeMode(c.env.REALTIME_MODE) === "off") return c.json({ error: "REALTIME_DESATIVADO", message: "Use a atualização HTTP." }, 503);
   if (user.papel === "conferente" && !user.lojaId) {
     return c.json(
       {
@@ -45,8 +51,6 @@ realtimeRoutes.get("/", async (c) => {
       403
     );
   }
-  const hubId = c.env.REALTIME_HUB.idFromName("agenda-prado");
-  const hub = c.env.REALTIME_HUB.get(hubId);
   const headers = new Headers(c.req.raw.headers);
   headers.set("X-Agenda-Realtime-User-Id", user.id);
   headers.set("X-Agenda-Realtime-Role", user.papel);
@@ -59,12 +63,18 @@ realtimeRoutes.get("/", async (c) => {
   } else {
     headers.delete("X-Agenda-Realtime-Store-Id");
   }
-  return hub.fetch(
-    new Request(c.req.url, {
-      method: "GET",
-      headers
-    })
-  );
+  let stage: "binding" | "request" | "hub_fetch" = "binding";
+  try {
+    const hubId = c.env.REALTIME_HUB.idFromName("agenda-prado");
+    const hub = c.env.REALTIME_HUB.get(hubId);
+    stage = "request";
+    const request = new Request(c.req.url, { method: "GET", headers });
+    stage = "hub_fetch";
+    return await hub.fetch(request);
+  } catch (error) {
+    console.warn("realtime_upgrade_unavailable", { stage, kind: realtimeFailureKind(error) });
+    return c.json({ error: "REALTIME_INDISPONIVEL", message: "Tempo real temporariamente indisponível." }, 503);
+  }
 });
 export {
   realtimeRoutes

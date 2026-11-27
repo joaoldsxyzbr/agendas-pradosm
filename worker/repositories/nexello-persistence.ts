@@ -65,9 +65,10 @@ async function readPending(db:D1Database,id:string):Promise<PendingReview|null>{
 export async function prepareVerifiedReview(db:D1Database,actor:NexelloActor,
   input:Omit<VerifiedNewBatch,"reviewId"|"expectedAgenda">,now=new Date()){
   await requireActor(db,actor);
-  const agenda=await db.prepare("SELECT id,versao_importacao,status_dia FROM agendas WHERE loja_id=? AND data_agenda=?")
-    .bind(input.storeId,input.date).first<{id:string;versao_importacao:number;status_dia:string}>();
+  const agenda=await db.prepare("SELECT a.id,a.versao_importacao,a.status_dia,CASE WHEN a.digitado_em IS NOT NULL OR EXISTS(SELECT 1 FROM agenda_digitacao_fornecedor d WHERE d.agenda_id=a.id AND d.digitado_em IS NOT NULL) THEN 1 ELSE 0 END AS digitacao_protegida FROM agendas a WHERE a.loja_id=? AND a.data_agenda=?")
+    .bind(input.storeId,input.date).first<{id:string;versao_importacao:number;status_dia:string;digitacao_protegida:number}>();
   if(agenda&&agenda.status_dia!=="aberto")throw new Error("NEXELLO_DATA_ENCERRADA");
+  if(agenda&&agenda.digitacao_protegida!==0)throw new Error("NEXELLO_DIGITACAO_PROTEGIDA");
   const batch=Batch.parse({...input,reviewId:crypto.randomUUID(),expectedAgenda:agenda?{id:agenda.id,version:agenda.versao_importacao}:null});
   if(batch.date<businessDate(now))throw new Error("NEXELLO_DATA_ENCERRADA");
   const mapping=await db.prepare("SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.codigo=d.filial_externa AND l.ativo=1 AND l.excluido_em IS NULL")
@@ -168,9 +169,7 @@ async function persistVerifiedNewAppointments(
   ];
   if(batch.expectedAgenda){
     statements.push(db.prepare(`
-      UPDATE agendas SET versao_importacao=CASE WHEN loja_id=? AND data_agenda=? AND status_dia='aberto'
-        AND versao_importacao=? THEN versao_importacao+1 ELSE -1 END,
-        atualizado_em=?,digitado_em=NULL,digitado_por=NULL WHERE id=?
+      UPDATE agendas SET versao_importacao=CASE WHEN loja_id=? AND data_agenda=? AND status_dia='aberto' AND versao_importacao=? AND digitado_em IS NULL AND NOT EXISTS(SELECT 1 FROM agenda_digitacao_fornecedor d WHERE d.agenda_id=agendas.id AND d.digitado_em IS NOT NULL) THEN versao_importacao+1 ELSE -1 END, atualizado_em=? WHERE id=?
     `).bind(batch.storeId,batch.date,batch.expectedAgenda.version,at,agendaId));
   }else{
     statements.push(db.prepare(`

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { businessDate } from "../shared/time.ts";
 import { hashPassword } from "../worker/lib/password.ts";
 
+/** @type {ReadonlyArray<{login:string,name:string,role:"admin"|"visualizador"|"conferente",store?:number|null,profile?:"digitador"}>} */
 export const MOCK_ACCOUNTS = Object.freeze([
   { login: "admin.mock", name: "Administrador de teste", role: "admin", store: null },
   { login: "digitador.mock", name: "Digitador de teste", role: "visualizador", profile: "digitador", store: null },
@@ -11,25 +12,30 @@ export const MOCK_ACCOUNTS = Object.freeze([
   { login: "conferente02.mock", name: "Conferente 02 de teste", role: "conferente", store: 2 },
   { login: "conferente03.mock", name: "Conferente 03 de teste", role: "conferente", store: 3 },
 ]);
+/** @param {string} key @returns {string} */
 export function mockId(key) {
   const hex = createHash("sha256").update("agenda-prado-local-mock-v1:" + key).digest("hex");
   return hex.slice(0,8)+"-"+hex.slice(8,12)+"-4"+hex.slice(13,16)+"-8"+hex.slice(17,20)+"-"+hex.slice(20,32);
 }
+/** @param {string|number|null} value @returns {string} */
 function sql(value) {
   if (value === null) return "NULL";
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value !== "string") throw Error("Valor inesperado no fixture.");
   return "'" + value.replaceAll("'", "''") + "'";
 }
+/** @param {string} table @param {Record<string,string|number|null>} row @returns {string} */
 function insert(table, row) {
   return "INSERT INTO " + table + " (" + Object.keys(row).join(",") + ") VALUES (" +
     Object.values(row).map(sql).join(",") + ") ON CONFLICT(id) DO NOTHING;";
 }
+/** @param {string} date @param {number} offset @returns {string} */
 export function offsetDay(date, offset) {
   const value = new Date(date + "T12:00:00.000Z");
   value.setUTCDate(value.getUTCDate() + offset);
   return value.toISOString().slice(0,10);
 }
+/** @param {Date} [now] @returns {string} */
 export function mockImportCsv(now = new Date()) {
   const day = offsetDay(businessDate(now), 1).split("-").reverse().join("/");
   return [
@@ -43,11 +49,13 @@ export function mockImportCsv(now = new Date()) {
     "",
   ].join("\n");
 }
+/** @param {string} password @param {Date} [now] @param {{access?:boolean,v2?:boolean}} [options] @returns {Promise<string>} */
 export async function buildMockSql(password, now = new Date(), options = {}) {
   if (typeof password !== "string" || password.length < 12) throw Error("Senha local inválida.");
   const today = businessDate(now);
   const stamp = now.toISOString();
   const admin = mockId("user:admin.mock");
+  /** @type {string[]} */
   const rows = [];
   const stores = [1, 2, 3].map(i => ({ id: mockId("store:"+i), codigo: "F90"+i,
     nome: "Loja fictícia 0"+i, ativo: 1, criado_em: stamp, atualizado_em: stamp }));
@@ -80,6 +88,7 @@ export async function buildMockSql(password, now = new Date(), options = {}) {
         agenda_id:agendaId,detalhes:"Importação fictícia.",criado_em:time}));
       if(past) rows.push(insert("historico_agenda",{id:mockId("history:agenda:"+agendaId),
         agenda_id:agendaId,usuario_id:userId,acao:"concluido",detalhes:"Fechamento fictício.",alterado_em:time}));
+      /** @type {{name:string,status:string,note:string|null,manual?:boolean}[]} */
       const samples=[
         {name:"Fornecedor Mock Norte",status:"recebido",note:null},
         {name:"Fornecedor Mock Sul",status:"nao_chegou",note:"Sem pedido"},

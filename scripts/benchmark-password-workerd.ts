@@ -9,9 +9,9 @@ const salt = new Uint8Array(16).fill(57);
 const key = await crypto.subtle.importKey(
   "raw", new TextEncoder().encode(PASSWORD), "PBKDF2", false, ["deriveBits"]
 );
-const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 
-async function verifyOnce(password, encoded, expected) {
+async function verifyOnce(password: string, encoded: string, expected: boolean): Promise<number> {
   const started = performance.now();
   const response = await fetch(BASE + "/verify", {
     method: "POST",
@@ -33,7 +33,7 @@ for (const iterations of [100_000]) {
   const encoded = ["pbkdf2_sha256", iterations,
     Buffer.from(salt).toString("base64"), Buffer.from(bits).toString("base64")].join("$");
   await verifyOnce(PASSWORD, encoded, true); // warm-up
-  const timings = [];
+  const timings: number[] = [];
   for (let i = 0; i < 5; i++) {
     timings.push(await verifyOnce(PASSWORD, encoded, true));
   }

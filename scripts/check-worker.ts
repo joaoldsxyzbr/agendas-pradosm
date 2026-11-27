@@ -1,37 +1,26 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { z } from "zod";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(".");
 const web = join(root, "apps", "web");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const listed = [
-  "worker/app.ts", "worker/index.ts", "worker/env.ts",
-  "worker/lib/http.ts", "worker/lib/login-rate-limit.ts", "worker/lib/password.ts",
-  "worker/lib/presence.ts", "worker/lib/session.ts", "worker/lib/time.ts",
-  "worker/middleware/enforce-access.ts", "worker/services/access-session.ts", "worker/services/agenda-digitacao.ts",
-  "worker/middleware/auth.ts", "worker/middleware/access-policy.ts", "worker/repositories/access.ts", "worker/realtime/RealtimeHub.ts",
-  "worker/repositories/agendas.ts", "worker/repositories/audit.ts",
-  "worker/repositories/nexello-destinations.ts", "worker/repositories/nexello-rate.ts", "worker/repositories/nexello-persistence.ts",
-  "worker/repositories/avisos.ts",
-  "worker/repositories/diagnostics.ts", "worker/repositories/presence.ts",
-  "worker/repositories/stores.ts", "worker/repositories/users.ts",
-  "worker/services/agenda-maintenance.ts", "worker/services/realtime.ts",
-  "worker/services/retention.ts", "worker/services/nexello-report.ts",
-  "worker/services/nexello-agenda.ts", "worker/services/nexello-evidence.ts", "worker/services/nexello-lifecycle.ts", "worker/services/nexello-comparison.ts",
-  "worker/routes/admin-agendas.ts", "worker/routes/admin-audit.ts",
-  "worker/routes/admin-retention.ts", "worker/routes/admin-reports.ts",
-  "worker/routes/admin-stores.ts", "worker/routes/admin-nexello.ts",
-  "worker/routes/admin-users.ts", "worker/routes/auth.ts",
-  "worker/routes/avisos.ts",
-  "worker/routes/diagnostics.ts", "worker/routes/presence.ts",
-  "worker/routes/realtime.ts", "worker/routes/store-agendas.ts",
-  "shared/agenda.ts", "shared/api.ts", "shared/auth.ts", "shared/avisos.ts", "shared/observations.ts", "shared/realtime.ts",
-  "shared/store.ts", "shared/time.ts", "shared/permissions.ts", "shared/nexello-destinations.ts", "shared/nexello-preview.ts", "shared/nexello-review.ts",
-  "shared/import/extractPdfText.ts", "shared/import/pdf-engine-liteparse.ts",
-  "shared/import/parseAgendaBatch.ts", "shared/import/parseAgendaText.ts",
-  "shared/import/readCsvText.ts", "shared/import/validateImportBatch.ts"
-];
+// Descobre módulos novos automaticamente, sem manter um segundo inventário
+// manual de arquivos além do próprio diretório e do tsconfig.
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts") ? [path] : [];
+  });
+}
+const listed = ["worker", "shared"].flatMap(sourceFiles).sort();
+for (const entry of ["worker/app.ts", "worker/index.ts", "worker/env.ts"]) {
+  if (!existsSync(join(root, entry))) throw Error("Entrada esperada ausente: " + entry);
+}
+
 
 // O TypeScript do projeto vive nas dependências da UI React.
 if (!existsSync(join(web, "node_modules", "typescript", "package.json")) ||
@@ -57,8 +46,31 @@ for (const file of listed) {
 }
 
 const tsc = join(web, "node_modules", "typescript", "bin", "tsc");
+// Apenas data/flags de compatibilidade, sem bindings, assets ou credenciais.
+const compatibilitySchema = z.object({ compatibility_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), compatibility_flags: z.array(z.string()).optional() });
+const prod = compatibilitySchema.parse(JSON.parse(readFileSync(join(root,"wrangler.jsonc"),"utf8").replace(/^\s*\/\/.*$/gm,"")));
+const local = compatibilitySchema.parse(JSON.parse(readFileSync(join(root,"wrangler.local.jsonc"),"utf8").replace(/^\s*\/\/.*$/gm,"")));
+if (prod.compatibility_date !== local.compatibility_date ||
+    JSON.stringify([...(prod.compatibility_flags ?? [])].sort()) !== JSON.stringify([...(local.compatibility_flags ?? [])].sort()))
+  throw Error("Configuração de compatibilidade local difere da produção.");
+const generated = join(root,"worker",".tmp","runtime.d.ts");
+const configDir = mkdtempSync(join(tmpdir(),"agendas-types-"));
+try {
+  mkdirSync(dirname(generated), {recursive:true});
+  rmSync(generated, {force:true});
+  const config = join(configDir,"wrangler.json");
+  writeFileSync(config, JSON.stringify({ name:"agendas-types-local", main:join(root,"worker","index.ts"), ...prod }));
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^(CLOUDFLARE_|CF_|WRANGLER_)/i.test(key)));
+  Object.assign(env,{CI:"true",WRANGLER_SEND_METRICS:"false",CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV:"false",CLOUDFLARE_INCLUDE_PROCESS_ENV:"false"});
+  const types = spawnSync(process.execPath, [join(root,"node_modules","wrangler","bin","wrangler.js"),"types",generated,"--include-env","false","--config",config], {cwd:root,env,encoding:"utf8",timeout:120_000});
+  if (types.status !== 0 || !existsSync(generated)) throw Error("Falha ao gerar tipos oficiais do runtime:\n" + (types.stderr || types.stdout));
+} finally { rmSync(configDir,{recursive:true,force:true}); }
+
 const check = spawnSync(process.execPath, [tsc, "-p", "worker"], { cwd: root, encoding: "utf8" });
-if (check.status !== 0) throw Error("TypeScript do Worker reprovado:\n" + (check.stderr || check.stdout));
-const strictCheck = spawnSync(process.execPath, [tsc, "-p", "worker/tsconfig.nexello.json"], { cwd: root, encoding: "utf8" });
-if (strictCheck.status !== 0) throw Error("TypeScript estrito da integração reprovado:\n" + (strictCheck.stderr || strictCheck.stdout));
-console.log("Worker e contratos em TypeScript: " + count + " módulos com imports e tipos verificados.");
+if (check.status !== 0) throw Error("TypeScript do Worker (runtime oficial) reprovado:\n" + (check.stderr || check.stdout));
+const scopedStrict = spawnSync(process.execPath, [tsc, "-p", "worker/tsconfig.nexello.json"], { cwd: root, encoding: "utf8" });
+if (scopedStrict.status !== 0) throw Error("TypeScript estrito V2 (índices verificados) reprovado:\n" + (scopedStrict.stderr || scopedStrict.stdout));
+const nodeCheck = spawnSync(process.execPath, [tsc, "-p", "tsconfig.node.json"], { cwd: root, encoding: "utf8" });
+if (nodeCheck.status !== 0) throw Error("TypeScript Node estrito reprovado:\n" + (nodeCheck.stderr || nodeCheck.stdout));
+console.log("Scripts e testes consolidados sob strict.");
+console.log("Worker e contratos em TypeScript: " + count + " módulos com imports e tipos verificados; todos os módulos sob strict.");

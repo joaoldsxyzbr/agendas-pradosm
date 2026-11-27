@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { app } from "../../worker/app.ts";
 import { createSessionToken } from "../../worker/lib/session.ts";
 import {
@@ -10,7 +11,11 @@ import {
 
 const secret = "diagnosticos-teste-local-credencial-sintetica-2026";
 
-function fixture() {
+function fixture(): {
+  sql: DatabaseSync;
+  db: D1Database;
+  call: (user: string | null, path: string, method?: string, body?: unknown | null, origin?: string) => Promise<Response>;
+} {
   const sql = new DatabaseSync(":memory:");
   sql.exec(`CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL);
     CREATE TABLE lojas (id TEXT PRIMARY KEY, codigo TEXT, nome TEXT, ativo INTEGER, excluido_em TEXT, criado_em TEXT, atualizado_em TEXT);
@@ -26,23 +31,13 @@ function fixture() {
   ins.run("admin1",null,"Admin sintético","admin","hash-sintetico","admin");
   ins.run("viewer1",null,"Viewer sintético","viewer","hash-sintetico","visualizador");
   ins.run("clerk1","store1","Conferente sintético","clerk","hash-sintetico","conferente");
-  const db = { prepare(statement) {
-    const stmt = sql.prepare(statement);
-    let vals = [];
-    const bound = {
-      bind(...values) { vals = values; return bound; },
-      async first() { return stmt.get(...vals) ?? null; },
-      async all() { return { success:true,results: stmt.all(...vals) }; },
-      async run() { const result = stmt.run(...vals); return { success:true,meta:{changes:Number(result.changes)} }; }
-    };
-    return bound;
-  } };
-  const env = { DB:db, SESSION_SECRET:secret };
-  async function call(user, path, method="GET", body=null, origin="http://localhost") {
+  const db = sqliteD1(sql);
+  const env = testEnv(db, secret);
+  async function call(user: string | null, path: string, method="GET", body: unknown | null=null, origin="http://localhost"): Promise<Response> {
     const token = user && await createSessionToken(user,1,secret);
-    const headers = { Origin:origin };
-    if(token) headers.Cookie = "agenda_session=" + token;
-    if(body!==null) headers["Content-Type"] = "application/json";
+    const headers = new Headers({ Origin:origin });
+    if(token) headers.set("Cookie", "agenda_session=" + token);
+    if(body!==null) headers.set("Content-Type", "application/json");
     return app.request("http://localhost" + path, {
       method,headers,body:body===null?undefined:JSON.stringify(body)
     }, env);
@@ -102,7 +97,7 @@ describe("Diagnósticos seguros", () => {
       f.sql.prepare("INSERT INTO auditoria (id,usuario_id,acao,entidade,entidade_id,criado_em) VALUES ('log1','admin1','teste','usuario','admin1',?)").run(oldAudit);
       await pruneDiagnostics(f.db,new Date("2026-10-22T00:00:00.000Z"));
       assert.equal((await listDiagnostics(f.db)).length,1);
-      assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM auditoria").get().n,1);
+      assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM auditoria").get()?.n ?? 0),1);
       for(let i=0;i<29;i++) await recordDiagnostic(f.db,event);
       assert.equal((await f.call("admin1","/api/diagnostics/events","POST",{
         evento:"IMPORT_SELECTED",nivel:"info",operacao:"importacao"
@@ -117,9 +112,9 @@ it("limits concurrent browser events atomically without suppressing worker error
     const data={origem:"browser",nivel:"error",evento:"IMPORT_READ_FAILED",operacao:"importacao",userId:"admin1"};
     const result=await Promise.all(Array.from({length:40},()=>recordBrowserDiagnostic(f.db,data,now)));
     assert.equal(result.filter(Boolean).length,30);
-    assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get().n,30);
+    assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get()?.n ?? 0),30);
     await recordDiagnostic(f.db,{...data,origem:"worker",evento:"WORKER_EXCEPTION"});
-    assert.equal(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get().n,31);
+    assert.equal(Number(f.sql.prepare("SELECT COUNT(*) AS n FROM diagnosticos").get()?.n ?? 0),31);
     assert.ok(await recordBrowserDiagnostic(f.db,data,new Date(now.getTime()+60001)));
   }finally{f.sql.close();}
 });

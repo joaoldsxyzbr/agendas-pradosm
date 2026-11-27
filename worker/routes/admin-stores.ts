@@ -71,7 +71,6 @@ adminStoreRoutes.post("/", async (c) => {
     const store = await createStore(c.env.DB, parsed.data, actor.id);
     return c.json(storeJson(store), 201);
   } catch (error) {
-    if(error instanceof Error&&error.message==="LOJA_CONFLITO_ESTADO")return c.json({error:"LOJA_CONFLITO_ESTADO",message:"A loja foi alterada por outra operação. Atualize a lista e tente novamente."},409);
     if(error instanceof Error&&error.message.includes("NEXELLO_LOJA_CODIGO_PROTEGIDO"))return c.json({error:"NEXELLO_LOJA_CODIGO_PROTEGIDO",message:"O código desta loja possui vínculo Nexello. A troca foi bloqueada para preservar a identidade da unidade."},409);
     if (isDuplicateCode(error)) {
       return c.json(
@@ -97,6 +96,7 @@ adminStoreRoutes.patch("/", async (c) => {
     const store = await updateStore(c.env.DB, current, parsed.data, actor.id);
     return c.json(storeJson(store));
   } catch (error) {
+    if(error instanceof Error&&error.message==="LOJA_CONFLITO_ESTADO")return c.json({error:"LOJA_CONFLITO_ESTADO",message:"A loja foi alterada por outra operação. Atualize a lista e tente novamente."},409);
     if(error instanceof Error&&error.message.includes("NEXELLO_LOJA_CODIGO_PROTEGIDO"))return c.json({error:"NEXELLO_LOJA_CODIGO_PROTEGIDO",message:"O código desta loja possui vínculo Nexello. A troca foi bloqueada para preservar a identidade da unidade."},409);
     if (isDuplicateCode(error)) {
       return c.json(

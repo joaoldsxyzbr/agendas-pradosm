@@ -15,6 +15,8 @@ import {
   publishAvisoStatements
 } from "../../worker/repositories/avisos.ts";
 import { importAgendaBatchAtomic } from "../../worker/repositories/agendas.ts";
+import { recordingD1 } from "../helpers/recording-d1.ts";
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 
 const SECRET = "somente-testes-sinteticos-de-avisos-sem-credencial-real";
 
@@ -104,37 +106,7 @@ describe("Contratos de avisos (shared/avisos.ts)", () => {
 // ---------------------------------------------------------------------------
 
 function arityDb() {
-  const statements = [];
-  const placeholderCount = (sql) => (sql.match(/\?/g) ?? []).length;
-  const assertArity = (sql, values) => {
-    assert.equal(
-      values.length,
-      placeholderCount(sql),
-      `bind com ${values.length} valores para ${placeholderCount(sql)} placeholders: ${sql}`
-    );
-  };
-  return {
-    statements,
-    prepare(sql) {
-      const statement = {
-        sql,
-        async all() { return { results: [] }; },
-        async first() { return null; },
-        async run() { return { meta: { changes: 1 } }; }
-      };
-      statement.bind = (...values) => {
-        assertArity(sql, values);
-        statement.values = values;
-        statements.push(statement);
-        return statement;
-      };
-      return statement;
-    },
-    async batch(batchStatements) {
-      // Os statements já entram no array via bind(); não duplicar aqui.
-      return batchStatements.map(() => ({ meta: { changes: 1 } }));
-    }
-  };
+  return recordingD1({ arity: true });
 }
 
 describe("Statements de avisos: bind igual aos placeholders", () => {
@@ -228,7 +200,12 @@ describe("Statements de avisos: bind igual aos placeholders", () => {
 // (mesmo padrão do recebimento-api-integrated).
 // ---------------------------------------------------------------------------
 
-function fixture() {
+function fixture(): {
+  sqlite: DatabaseSync;
+  call: (userId: string, path: string, options?: { method?: string; body?: unknown }) => Promise<Response>;
+  avisosCount: () => number;
+  auditCount: (action: string) => number;
+} {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec([
     "CREATE TABLE sessoes_revogadas (session_key TEXT PRIMARY KEY, expira_em INTEGER NOT NULL)",
@@ -255,51 +232,22 @@ function fixture() {
   sqlite.prepare("INSERT INTO agendas (id,loja_id,data_agenda,arquivo_original,criado_por,status_dia,criado_em,atualizado_em) VALUES (?,?,?,?,?,?,?,?)")
     .run("agenda1", "loja1", "2026-11-11", "sintetico.csv", "adm1", "aberto", now, now);
 
-  const db = {
-    prepare(sql) {
-      const statement = sqlite.prepare(sql);
-      let bindings = [];
-      const request = {
-        sql,
-        bind(...values) { bindings = values; return request; },
-        async first() { return statement.get(...bindings) ?? null; },
-        async all() { return { results: statement.all(...bindings) }; },
-        async run() {
-          const result = statement.run(...bindings);
-          return { success: true, meta: { changes: Number(result.changes) } };
-        }
-      };
-      return request;
-    },
-    async batch(statements) {
-      sqlite.exec("BEGIN");
-      try {
-        const results = [];
-        for (const statement of statements) results.push(await statement.run());
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (error) {
-        sqlite.exec("ROLLBACK");
-        throw error;
-      }
-    }
-  };
-  const env = { DB: db, SESSION_SECRET: SECRET, REALTIME_MODE: "off" };
-  async function call(userId, path, { method = "GET", body } = {}) {
+  const db = sqliteD1(sqlite);
+  const env = testEnv(db, SECRET);
+  async function call(userId: string, path: string, { method = "GET", body }: { method?: string; body?: unknown } = {}): Promise<Response> {
     const token = await createSessionToken(userId, 1, SECRET);
     return app.request("http://localhost" + path, {
       method,
       headers: {
         "Content-Type": "application/json",
         Origin: "http://localhost",
-        Cookie: "agenda_session=" + token,
-        ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
+        Cookie: "agenda_session=" + token
       },
       ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) })
     }, env);
   }
-  const avisosCount = () => sqlite.prepare("SELECT count(*) AS n FROM avisos").get().n;
-  const auditCount = (acao) => sqlite.prepare("SELECT count(*) AS n FROM auditoria WHERE acao = ?").get(acao).n;
+  const avisosCount = () => Number(sqlite.prepare("SELECT count(*) AS n FROM avisos").get()?.n ?? 0);
+  const auditCount = (acao: string) => Number(sqlite.prepare("SELECT count(*) AS n FROM auditoria WHERE acao = ?").get(acao)?.n ?? 0);
   return { sqlite, call, avisosCount, auditCount };
 }
 
@@ -439,7 +387,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await outroResp.json()).jaLido, true);
       const leiturasConf1 = f.sqlite
         .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'conf1'")
-        .get().n;
+        .get()?.n;
       assert.equal(leiturasConf1, 0, "conferente não grava leitura do que não enxerga");
       const visaoConf = await (await f.call("conf1", "/api/avisos")).json();
       assert.equal(visaoConf.naoLidos, 0);
@@ -449,7 +397,7 @@ describe("Rotas de avisos integradas", () => {
       assert.equal((await admResp.json()).jaLido, false);
       const leiturasAdm = f.sqlite
         .prepare("SELECT count(*) AS n FROM avisos_lidos WHERE usuario_id = 'adm1' AND aviso_id = 'ev1'")
-        .get().n;
+        .get()?.n;
       assert.equal(leiturasAdm, 1);
     } finally {
       f.sqlite.close();

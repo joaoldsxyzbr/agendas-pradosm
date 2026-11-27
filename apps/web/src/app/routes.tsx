@@ -4,6 +4,7 @@ import { AppLayout } from "./layouts";
 import { useSession } from "./session-query";
 // Cada área é carregada quando a rota é visitada. Evita transferir relatórios,
 // exportação e conferência para quem utiliza somente outra área do sistema.
+const AvisosPage = lazy(() => import("@/features/avisos/avisos-page").then(m=>({default:m.AvisosPage})));
 const LoginPage = lazy(() => import("@/features/auth/login-page").then(m => ({ default: m.LoginPage })));
 const AgendasPage = lazy(() => import("@/features/agendas/agendas-page").then(m => ({ default: m.AgendasPage })));
 const ImportPage = lazy(() => import("@/features/import/import-page").then(m => ({ default: m.ImportPage })));
@@ -16,7 +17,7 @@ const UsersPage = lazy(() => import("@/features/users/users-page").then(m => ({ 
 const DiagnosticsPage = lazy(() => import("@/features/diagnostics/diagnostics-page").then(m => ({ default: m.DiagnosticsPage })));
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/loading";
-import { homeForUser, ACCESS_PAGES, type Role, type SessionUser } from "@/features/auth/session";
+import { homeForUser, ACCESS_PAGES, canUseNotice, noticePath, type Role, type SessionUser } from "@/features/auth/session";
 
 // O Suspense fica dentro do Outlet: o menu permanece visível enquanto a tela carrega.
 function DeferredPage({ children }: { children: ReactNode }) {
@@ -31,6 +32,11 @@ function Guard({ roles, path }: { roles: Role[]; path?:string }) {
     <Button onClick={() => void session.refetch()}>Tentar novamente</Button>
   </main>;
   if (!session.data) return <Navigate to="/login" replace />;
+  if(path?.endsWith("/avisos")){
+    if(!canUseNotice(session.data,"avisos.ver"))return <Navigate to={homeForUser(session.data)} replace />;
+    if(path!==noticePath(session.data))return <Navigate to={noticePath(session.data)} replace />;
+    return <Outlet context={session.data}/>;
+  }
   const permission=ACCESS_PAGES.find(([p])=>p===path)?.[1];
   if(path!=="/sem-acesso" && (session.data.permissoes ? !permission||(!session.data.permissoes.includes(permission)&&!(path==="/admin/diagnostics"&&session.data.permissoes.includes("auditoria.ver"))) : !roles.includes(session.data.papel))) return <Navigate to={homeForUser(session.data)} replace />;
   return <Outlet context={session.data} />;
@@ -78,6 +84,8 @@ export function AppRoutes() {
     <Route element={<Guard roles={["conferente"]} path="/app" />}>
       <Route element={<LayoutRoute />}><Route path="/app" element={<DeferredPage><ConferencePage /></DeferredPage>} /></Route>
     </Route>
+    <Route element={<Guard roles={["admin"]} path="/admin/avisos" />}><Route element={<LayoutRoute />}><Route path="/admin/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} /></Route></Route>
+    <Route element={<Guard roles={["conferente"]} path="/app/avisos" />}><Route element={<LayoutRoute />}><Route path="/app/avisos" element={<DeferredPage><AvisosPage /></DeferredPage>} /></Route></Route>
     <Route element={<Guard roles={[]} path="/sem-acesso" />}><Route element={<LayoutRoute />}><Route path="/sem-acesso" element={<p>Nenhuma área foi liberada para este usuário. Solicite acesso ao administrador.</p>} /></Route></Route>
     <Route path="*" element={<UnknownRoute />} />
   </Routes>;

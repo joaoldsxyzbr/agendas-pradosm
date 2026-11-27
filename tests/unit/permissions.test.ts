@@ -5,14 +5,15 @@ import { ACCESS_PROFILES, PERMISSIONS, resolvePermissions, hasPermission, canAcc
 test("catálogo único, quatro perfis e administrador completo", () => {
   assert.equal(new Set(PERMISSIONS).size, PERMISSIONS.length);
   assert.equal(ACCESS_PROFILES.length, 4);
-  assert.deepEqual([...resolvePermissions("admin")], [...PERMISSIONS]);
+  assert.deepEqual([...resolvePermissions("admin")!], [...PERMISSIONS]);
 });
 
-test("visualizador não grava negócios; marcar próprios avisos continua permitido", () => {
+test("visualizador não grava negócios nem acessa o canal por padrão", () => {
   const access = resolvePermissions("visualizador");
   assert.equal(hasPermission(access, "recebimento.ver"), true);
   assert.equal(hasPermission(access, "relatorios.ver"), true);
-  assert.equal(hasPermission(access, "avisos.marcar_lido"), true);
+  assert.equal(hasPermission(access, "avisos.marcar_lido"), false);
+  assert.equal(hasPermission(access, "avisos.ver"), false);
   for (const p of ["recebimento.editar", "agendas.editar", "conferencia.editar", "importacao.executar", "avisos.publicar"]) {
     assert.equal(hasPermission(access, p), false, p);
   }

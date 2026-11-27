@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const dist = "dist";
-const read = file => readFileSync(join(dist, file), "utf8");
+const read = (file: string) => readFileSync(join(dist, file), "utf8");
 
 if (!existsSync(join(dist, "index.html"))) throw Error("index.html do React ausente do dist.");
 const html = read("index.html");

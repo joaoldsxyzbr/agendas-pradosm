@@ -1,3 +1,7 @@
+import { z } from "zod";
+const rowSchema = z.object({ id: z.string(), storeId: z.string(), total: z.number(), recebido: z.number() });
+const pageSchema = z.object({ items: z.array(rowSchema), hasMore: z.boolean() });
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -35,19 +39,7 @@ function fixture() {
     }
   }
   let lastSql = "";
-  const db = {
-    prepare(sql) {
-      lastSql = sql;
-      const stmt = sqlite.prepare(sql);
-      let args = [];
-      const request = {
-        bind(...values) { args = values; return request; },
-        async all() { return { results: stmt.all(...args) }; },
-        async first() { return stmt.get(...args) ?? null; }
-      };
-      return request;
-    }
-  };
+  const db = sqliteD1(sqlite, { prepare: sql => { lastSql = sql; } });
   return { sqlite, db, getLastSql: () => lastSql };
 }
 
@@ -84,18 +76,18 @@ describe("Paginação do histórico administrativo (SQLite sintético)", () => {
     const secret = "teste-historico-sintetico-sem-segredo-real";
     try {
       const token = await createSessionToken("admin-sintetico", 1, secret);
-      const env = { DB: f.db, SESSION_SECRET: secret, REALTIME_MODE: "off" };
+      const env = testEnv(f.db, secret);
       const get = async (query = "") => app.request("http://localhost/api/admin/agendas" + query, {
         method: "GET", headers: { Cookie: "agenda_session=" + token }
       }, env);
       const legacy = await get();
       assert.equal(legacy.status, 200);
-      const legacyRows = await legacy.json();
+      const legacyRows = z.array(rowSchema).parse(await legacy.json());
       assert.equal(Array.isArray(legacyRows), true);
       assert.equal(legacyRows.length, 54);
       const first = await get("?limit=20&offset=0");
       assert.equal(first.status, 200);
-      const firstData = await first.json();
+      const firstData = pageSchema.parse(await first.json());
       assert.deepEqual(Object.keys(firstData).sort(), ["hasMore", "items"]);
       assert.equal(firstData.items.length, 20);
       assert.equal(firstData.hasMore, true);

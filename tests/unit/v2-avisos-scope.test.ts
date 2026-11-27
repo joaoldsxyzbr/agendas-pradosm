@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { noticeScope,noticeScopeArgs,noticeVisibilitySql,canUseNotice } from "../../worker/services/notice-scope.ts";
+import { routePolicy,permitsAction } from "../../worker/middleware/access-policy.ts";
+import { resolvePermissions } from "../../shared/permissions.ts";
+import type {AuthUser} from "../../shared/auth.ts";
+const base:AuthUser={id:"u",nome:"Teste",papel:"visualizador",lojaId:null,lojaCodigo:null,lojaNome:null};
+test("legacy channel matches main, custom channel uses effective permissions",()=>{
+  assert.equal(canUseNotice(base,"avisos.ver"),false);
+  assert.equal(canUseNotice({...base,papel:"admin"},"avisos.leitores"),true);
+  assert.equal(canUseNotice({...base,papel:"conferente"},"avisos.conversar"),true);
+  assert.equal(canUseNotice({...base,papel:"conferente"},"avisos.publicar"),false);
+  const custom={...base,perfil:"digitador" as const,permissoes:[...resolvePermissions("digitador")!]};
+  assert.equal(canUseNotice(custom,"avisos.publicar"),true);
+  assert.equal(canUseNotice({...custom,permissoes:["avisos.publicar"]},"avisos.publicar"),false);
+});
+test("assigned store scope uses authorized stable ids, not physical role or selected store",()=>{
+  const user:AuthUser={...base,papel:"admin",perfil:"conferente",escopo:{mode:"assigned",storeIds:["id1","id2"]},lojasDisponiveis:[{id:"id1",codigo:"F01",nome:"1"},{id:"id3",codigo:"F03",nome:"3"}]};
+  assert.deepEqual(noticeScope(user),["id1"]);
+  assert.deepEqual(noticeScope({...user,lojasDisponiveis:[]}),[]);
+  assert.deepEqual(noticeScope({...user,escopo:undefined}),[]);
+  assert.equal(noticeScope({...user,escopo:{mode:"all"}}),null);
+  assert.equal(noticeVisibilitySql(null),"");
+  assert.match(noticeVisibilitySql([]),/^NOT EXISTS/);
+  assert.doesNotMatch(noticeVisibilitySql([]),/IN \(/);
+  assert.match(noticeVisibilitySql(["id1","id2"]),/loja_id IN \(\?,\?\)/);
+  assert.deepEqual(noticeScopeArgs(["id1","id1"]),["id1"]);
+  assert.throws(()=>noticeScopeArgs(Array.from({length:51},(_,i)=>String(i))));
+});
+test("chat, reactions and reader list are individually authorized",()=>{
+  const conf=resolvePermissions("conferente")!;
+  const digit=resolvePermissions("digitador")!;
+  const view=resolvePermissions("visualizador")!;
+  assert.equal(permitsAction(routePolicy("POST","/api/avisos"),conf),true);
+  assert.equal(permitsAction(routePolicy("PUT","/api/avisos/id/reacao"),conf),true);
+  assert.equal(permitsAction(routePolicy("GET","/api/admin/avisos/id/leitores"),conf),false);
+  assert.equal(routePolicy("GET","/api/admin/avisos/id/leitores")?.scope,"all-stores");
+  assert.equal(permitsAction(routePolicy("GET","/api/admin/avisos/id/leitores"),digit),true);
+  assert.equal(permitsAction(routePolicy("GET","/api/avisos"),view),false);
+});

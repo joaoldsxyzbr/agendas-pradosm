@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "../worker/app.ts";
+/** @typedef {import("../worker/env.ts").Env} Env */
 import { openLocalDatabase } from "./local-sqlite.mjs";
 import { mockStatePath } from "./mock-state.mjs";
 import { buildMockSql, MOCK_ACCOUNTS, mockId, mockImportCsv } from "./mock-data.mjs";
@@ -32,9 +33,11 @@ console.log("Senha inicial comum: "+password);
 if(args.includes("--seed-only")){local.close();}
 else{
   const quickToken=randomBytes(32).toString("hex");
+  /** @type {Map<string,{data:Buffer,type:string}>} */
   const files=new Map();
   const types={html:"text/html; charset=utf-8",js:"text/javascript; charset=utf-8",css:"text/css; charset=utf-8",wasm:"application/wasm",svg:"image/svg+xml",png:"image/png",json:"application/json",ico:"image/x-icon",woff2:"font/woff2",webp:"image/webp"};
   // Arquivos lidos exclusivamente do build, nunca de caminhos vindos da URL.
+  /** @param {string} dir @param {string} [prefix] */
   function load(dir,prefix=""){
     for(const entry of readdirSync(dir,{withFileTypes:true})){
       const name=prefix+"/"+entry.name;
@@ -47,7 +50,9 @@ else{
   }
   load(join(root,"dist"));
   if(!files.has("/index.html"))throw Error("Build local ausente.");
+  /** @type {Map<string,{until:number,count:number}>} */
   const limits=new Map();
+  /** @type {Env} */
   const env={DB:local.DB,SESSION_SECRET:sessionSecret,REALTIME_MODE:"off",ACCESS_MODE:"on",
     LOGIN_RATE_LIMITER:{async limit({key}){
       const now=Date.now();let record=limits.get(key);
@@ -56,20 +61,24 @@ else{
       if(limits.size>1000)for(const [k,v] of limits)if(v.until<=now)limits.delete(k);
       return {success:record.count<=10};
     }},
-    REALTIME_HUB:{idFromName(){return "local";},get(){return {fetch:async()=>new Response("Realtime desativado no modo local",{status:503})};}}
+    REALTIME_HUB:{idFromName(){return "local";},idFromHex(){return "local";},get(){return {fetch:async()=>new Response("Realtime desativado no modo local",{status:503})};}},
+    ASSETS:{async fetch(){throw new Error("Assets não configurados no servidor local Node.");}}
   };
   // Somente este servidor Node (loopback) possui estes endpoints. Não fazem parte do Worker.
   const quickAccounts=MOCK_ACCOUNTS.map(account=>({
     login:account.login,
     label:account.profile==="digitador"?"Digitador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
   }));
+  /** @param {Request} request */
   function validQuickToken(request){
     const token=request.headers.get("x-agenda-local-token")??"";
     return /^[a-f0-9]{64}$/.test(token)&&timingSafeEqual(Buffer.from(token,"hex"),Buffer.from(quickToken,"hex"));
   }
+  /** @param {unknown} value @param {number} [status] */
   function quickJson(value,status=200){
     return Response.json(value,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
   }
+  /** @param {Request} request @returns {Promise<Response>} */
   async function quickLogin(request){
     if(!validQuickToken(request) || request.headers.get("origin")!==base || request.headers.get("sec-fetch-site")==="cross-site")
       return quickJson({error:"ORIGEM_INVALIDA",message:"Acesso rápido permitido apenas no ambiente local."},403);
@@ -88,6 +97,7 @@ else{
       body:JSON.stringify({login:account.login,senha:password})
     }),env);
   }
+  /** @param {string} path @returns {Response} */
   function staticResponse(path){
     const asset=files.get(path)||(path.startsWith("/assets/")?null:files.get("/index.html"));
     if(!asset)return new Response("Not found",{status:404});
@@ -97,6 +107,7 @@ else{
   }
   // Validação de autoridade HTTP contra o valor fixo do listener: protege contra DNS rebinding.
   const expectedAuthority=createHash("sha256").update(new URL(base).host).digest();
+  /** @param {string|undefined} host */
   function hasLocalAuthority(host){
     return timingSafeEqual(createHash("sha256").update(typeof host==="string"?host:"").digest(),expectedAuthority);
   }
@@ -110,11 +121,12 @@ else{
       const method=req.method??"GET";
       let response;
       if(url.pathname.startsWith("/api/")){
+        /** @type {Buffer[]} */
         const chunks=[];let size=0;
         for await(const chunk of req){
           size+=chunk.length;
           if(size>2*1024*1024){res.writeHead(413).end();return;}
-          chunks.push(chunk);
+          chunks.push(Buffer.from(chunk));
         }
         const body=method==="GET"||method==="HEAD"?undefined:Buffer.concat(chunks);
         const request=new Request(url,{method,headers,body});

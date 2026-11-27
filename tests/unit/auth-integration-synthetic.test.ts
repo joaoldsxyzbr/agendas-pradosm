@@ -1,3 +1,4 @@
+import { sqliteD1, testEnv } from "../helpers/sqlite-d1.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -39,25 +40,7 @@ function syntheticDB() {
       depois TEXT, detalhes TEXT, criado_em TEXT
     );
   `);
-  return {
-    sqlite,
-    d1: {
-      prepare(sql) {
-        const stmt = sqlite.prepare(sql);
-        let args = [];
-        const bound = {
-          bind(...values) { args = values; return bound; },
-          async first() { return stmt.get(...args) ?? null; },
-          async all() { return { results: stmt.all(...args) }; },
-          async run() {
-            const result = stmt.run(...args);
-            return { success: true, meta: { changes: Number(result.changes) } };
-          }
-        };
-        return bound;
-      }
-    }
-  };
+  return { sqlite, d1: sqliteD1(sqlite) };
 }
 
 describe("API real com autenticação e dados sintéticos (sem mocks de rota)", () => {
@@ -72,16 +55,11 @@ describe("API real com autenticação e dados sintéticos (sem mocks de rota)", 
       add.run("admin1", null, "Adm sintético", "adm-sintetico", hash, "admin", 1);
       add.run("viewer1", null, "Viewer sintético", "viewer-sintetico", hash, "visualizador", 1);
       add.run("store1", "loja1", "Conferente sintético", "store-sintetico", hash, "conferente", 1);
-      const env = {
-        DB: d1,
-        SESSION_SECRET: "teste-isolado-nunca-em-producao-0123456789",
-        LOGIN_RATE_LIMITER: { limit: async () => ({ success: true }) },
-        REALTIME_MODE: "off"
-      };
-      const call = (path, options = {}) => app.request(
+      const env = testEnv(d1, "teste-isolado-nunca-em-producao-0123456789", { limit: async () => ({ success: true }) });
+      const call = (path: string, options: RequestInit = {}) => app.request(
         "http://localhost" + path, options, env
       );
-      const login = async (username, password = "SenhaSintetica2026!") => {
+      const login = async (username: string, password = "SenhaSintetica2026!") => {
         const response = await call("/api/auth/login", {
           method: "POST",
           headers: { "content-type": "application/json", origin: "http://localhost" },
@@ -100,8 +78,8 @@ describe("API real com autenticação e dados sintéticos (sem mocks de rota)", 
         assert.equal(response.status, 200, "Login válido: " + role);
         assert.equal((await response.json()).papel, role);
         const cookie = response.headers.get("set-cookie")?.split(";")[0];
-        assert.ok(cookie?.startsWith("agenda_session="));
-        const get = path => call(path, { headers: { cookie } });
+        assert.ok(cookie && cookie.startsWith("agenda_session="));
+        const get = (path: string) => call(path, { headers: { cookie } });
         const me = await get("/api/auth/me");
         assert.equal(me.status, 200);
         assert.equal((await me.json()).papel, role);

@@ -42,7 +42,7 @@ test("0026 é aditiva: preserva dados, papéis, sessões e histórico existentes
     const after = tables.map(table => db.prepare("SELECT * FROM " + table + " ORDER BY rowid").all());
     assert.deepEqual(after, before);
     for (const table of ["usuario_acesso", "usuario_acesso_lojas", "usuario_acesso_excecoes"]) {
-      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM " + table).get().n, 0);
+      assert.equal(Number(db.prepare("SELECT COUNT(*) AS n FROM " + table).get()?.n ?? 0), 0);
     }
     assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
     assert.throws(() => db.exec("UPDATE usuarios SET ativo=0 WHERE id='a'"), /ULTIMO_ADMIN_ATIVO/);
@@ -75,7 +75,7 @@ test("0026 restringe perfil, escopo, vínculos e exceções sem tocar no papel l
     assert.throws(() => exception.run("v","relatorios.ver","invalido"));
     assert.throws(() => exception.run("v"," ","allow"));
     assert.throws(() => exception.run("c","relatorios.ver","allow"));
-    assert.equal(db.prepare("SELECT papel FROM usuarios WHERE id='v'").get().papel, "visualizador");
+    assert.equal(db.prepare("SELECT papel FROM usuarios WHERE id='v'").get()?.papel, "visualizador");
     assert.equal(db.prepare("PRAGMA foreign_key_check").all().length, 0);
   } finally {
     db.close();

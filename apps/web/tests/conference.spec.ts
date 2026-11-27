@@ -1,14 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { z } from "zod";
+import { required, requestBody, type AppointmentFixture } from "./fixtures.ts";
+import { test, expect, type Page, type WebSocketRoute, type Locator } from "@playwright/test";
 
 const conf = { id:"c1",nome:"Conferente Doca",papel:"conferente",lojaId:"s1",lojaCodigo:"F03",lojaNome:"Loja Central" };
 const entry = { id:"a1",supplier:"FORNECEDOR TESTE",protocol:"1234567",type:"Nota fiscal",
   // Contrato real do Worker: itens/volumes/paletes chegam como números (INTEGER no D1).
   items:5,volumes:50,pallets:1,
   startTime:"08:00",endTime:"08:30",status:"aguardando",hasExchanges:false,observation:null,origin:"imported" };
-async function setup(page, { conflict = false, empty = false, completed = false, noShow = false, realtime = false, patchDelay = 0 } = {}) {
-  const requests = [];
+async function setup(page: Page, { conflict = false, empty = false, completed = false, noShow = false, realtime = false, patchDelay = 0 } = {}) {
+  const requests: {path: string; method: string; payload: Record<string, unknown> | null}[] = [];
   let manualSeq = 0;
-  let data = { agenda:empty?null:{ id:"agenda1",date:"2026-10-30",storeCode:"F03",
+  let data: { agenda: {id:string;date:string;storeCode:string;storeName:string;dayStatus:string;completedAt:string|null} | null; appointments: AppointmentFixture[] } = { agenda:empty?null:{ id:"agenda1",date:"2026-10-30",storeCode:"F03",
     storeName:"Loja Central",dayStatus:completed?"concluido":"aberto",completedAt:null },
     appointments:empty?[]:[{...entry,status:noShow?"nao_chegou":"aguardando",observation:noShow?"Não compareceu":null},
       {...entry,id:"a2",supplier:"Outro Fornecedor",protocol:"99988877",startTime:"09:00",
@@ -18,7 +20,7 @@ async function setup(page, { conflict = false, empty = false, completed = false,
   await page.route("**/api/**", async route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
-    requests.push({ path:url.pathname,method,payload:method==="GET"||!route.request().postData()?null:route.request().postDataJSON() });
+    requests.push({ path:url.pathname,method,payload:requestBody(route.request()) });
     if(url.pathname==="/api/auth/me")return route.fulfill({json:conf});
     if(url.pathname==="/api/realtime/config")return route.fulfill({json:{mode:realtime?"on":"off",protocolVersion:1}});
     if(url.pathname.startsWith("/api/store/tags/agenda/"))return route.fulfill({json:{tags:[],assignments:{}}});
@@ -28,16 +30,16 @@ async function setup(page, { conflict = false, empty = false, completed = false,
       if(conflict)return route.fulfill({status:409,json:{error:"CONFLITO_ESTADO",message:"Este registro mudou. Atualize a tela e tente novamente."}});
       if(patchDelay)await new Promise(resolve=>setTimeout(resolve,patchDelay));
       const id=patchMatch[1]!;
-      const body=route.request().postDataJSON();
-      const update=patchMatch[2]==="status"?{status:body.status,observation:body.observation}
-        :patchMatch[2]==="exchanges"?{hasExchanges:body.hasExchanges}
+      const body=z.object({status:z.string().optional(),observation:z.string().nullable().optional(),hasExchanges:z.boolean().optional()}).parse(requestBody(route.request()));
+      const update=patchMatch[2]==="status"?{status:required(body.status),observation:body.observation}
+        :patchMatch[2]==="exchanges"?{hasExchanges:required(body.hasExchanges)}
         :{observation:body.observation};
       data={...data,appointments:data.appointments.map(x=>x.id===id?{...x,...update}:x)};
       return route.fulfill({json:data.appointments.find(x=>x.id===id)});
     }
     if(/^\/api\/store\/agenda\/\d{4}-\d{2}-\d{2}\/manual$/.test(url.pathname) && method==="POST"){
       if(conflict)return route.fulfill({status:409,json:{error:"CONFLITO_ESTADO",message:"Este registro mudou."}});
-      const {supplier}=route.request().postDataJSON();
+      const {supplier}=z.object({supplier:z.string()}).parse(requestBody(route.request()));
       const created={ id:"m"+(++manualSeq),supplier,protocol:"Sem agenda",type:"Sem agenda",
         startTime:"10:00",endTime:"10:00",status:"aguardando",hasExchanges:false,observation:null,
         origin:"manual",nfe:[],orders:[] };
@@ -47,7 +49,7 @@ async function setup(page, { conflict = false, empty = false, completed = false,
     if(/^\/api\/store\/appointments\/m\d+\/manual$/.test(url.pathname)){
       const id=url.pathname.split("/")[4];
       if(method==="PATCH"){
-        const {supplier}=route.request().postDataJSON();
+        const {supplier}=z.object({supplier:z.string()}).parse(requestBody(route.request()));
         data={...data,appointments:data.appointments.map(x=>x.id===id?{...x,supplier}:x)};
         return route.fulfill({json:data.appointments.find(x=>x.id===id)});
       }
@@ -64,7 +66,7 @@ async function setup(page, { conflict = false, empty = false, completed = false,
     }
     if(/^\/api\/store\/agenda\/\d{4}-\d{2}-\d{2}\/complete$/.test(url.pathname)&&method==="POST"){
       if(conflict)return route.fulfill({status:409,json:{error:"CONFLITO_ESTADO",message:"Este registro mudou."}});
-      data={...data,agenda:{...data.agenda,dayStatus:"concluido"}};
+      data={...data,agenda:{...required(data.agenda),dayStatus:"concluido"}};
       return route.fulfill({json:data.agenda});
     }
     if(url.pathname==="/api/store/presence"){
@@ -105,7 +107,7 @@ test("Conferente React reflete a marcação imediatamente e confirma com a API",
   await row.getByRole("button",{name:"Desmarcar recebido"}).click();
   await expect(row.getByRole("button",{name:"Recebido",exact:true})).toBeVisible();
   await expect(row.getByRole("button",{name:"Recebido",exact:true})).toBeEnabled();
-  expect(requests.filter(x=>x.path.endsWith("/a1/status")&&x.method==="PATCH").map(x=>x.payload.status)).toEqual(["recebido","aguardando"]);
+  expect(requests.filter(x=>x.path.endsWith("/a1/status")&&x.method==="PATCH").map(x=>required(x.payload).status)).toEqual(["recebido","aguardando"]);
 });
 
 test("Marcações seguidas na conferência não esperam uma pela outra",async({page})=>{
@@ -137,8 +139,8 @@ test("Conferente React exige motivo para Não recebido e permite Trocas",async({
   await expect(row.getByRole("button",{name:"Desmarcar não recebido"})).toBeVisible();
   await row.getByRole("checkbox",{name:"Trocas de FORNECEDOR TESTE"}).click();
   await expect(row.getByRole("checkbox",{name:"Trocas de FORNECEDOR TESTE"})).toBeChecked();
-  const sent=requests.find(x=>x.path.endsWith("/a1/status"));expect(sent.payload.observation).toBe("Não veio");
-  expect(requests.some(x=>x.path.endsWith("/a1/exchanges")&&x.payload.hasExchanges===true)).toBe(true);
+  const sent=requests.find(x=>x.path.endsWith("/a1/status"));expect(required(required(sent).payload).observation).toBe("Não veio");
+  expect(requests.some(x=>x.path.endsWith("/a1/exchanges")&&required(x.payload).hasExchanges===true)).toBe(true);
 });
 
 test("Conferente React registra fornecedor sem agenda",async({page})=>{
@@ -153,7 +155,7 @@ test("Conferente React registra fornecedor sem agenda",async({page})=>{
   await expect(row).toContainText("Distribuidora Manual");
   await expect(row).toContainText("Fornecedor sem agenda");
   const sent=requests.find(x=>x.method==="POST"&&/\/manual$/.test(x.path));
-  expect(sent.payload).toEqual({supplier:"Distribuidora Manual"});
+  expect(required(sent).payload).toEqual({supplier:"Distribuidora Manual"});
   await expect(page.getByLabel("Resumo da agenda").locator("strong")).toHaveText(["3","3","0","0","0"]);
 });
 
@@ -169,7 +171,7 @@ test("Conferente React edita e remove fornecedor manual",async({page})=>{
   await dialog.getByLabel("Nome do fornecedor").fill("Distribuidora Renomeada");
   await dialog.getByRole("button",{name:"Salvar",exact:true}).click();
   await expect(row).toContainText("Distribuidora Renomeada");
-  expect(requests.find(x=>x.method==="PATCH"&&/\/m1\/manual$/.test(x.path)).payload)
+  expect(required(requests.find(x=>x.method==="PATCH"&&/\/m1\/manual$/.test(x.path))).payload)
     .toEqual({supplier:"Distribuidora Renomeada"});
   await row.getByRole("button",{name:"Editar fornecedor Distribuidora Renomeada"}).click();
   await dialog.getByRole("button",{name:"Remover",exact:true}).click();
@@ -204,13 +206,13 @@ test("Conferente React edita e limpa observação opcional pela célula Obs.",as
   await row.getByRole("button",{name:"Sem pedido",exact:true}).click();
   await row.getByRole("button",{name:"Confirmar",exact:true}).click();
   await expect(row).toContainText("Obs.: Sem pedido");
-  expect(requests.find(x=>x.path.endsWith("/a1/observation")).payload).toEqual({observation:"Sem pedido"});
+  expect(required(requests.find(x=>x.path.endsWith("/a1/observation"))).payload).toEqual({observation:"Sem pedido"});
   await row.getByRole("button",{name:"Observação de FORNECEDOR TESTE"}).click();
   await row.getByRole("button",{name:"Sem observação",exact:true}).click();
   await row.getByRole("button",{name:"Confirmar",exact:true}).click();
   await expect(row.getByText("Obs.: Sem pedido")).toHaveCount(0);
   const cleared=requests.filter(x=>x.path.endsWith("/a1/observation")).at(-1);
-  expect(cleared.payload).toEqual({observation:null});
+  expect(required(cleared).payload).toEqual({observation:null});
 });
 
 test("Conferente React remove observação com botão dedicado",async({page})=>{
@@ -224,7 +226,7 @@ test("Conferente React remove observação com botão dedicado",async({page})=>{
   await row.getByRole("button",{name:"Remover observação"}).click();
   await expect(row.getByText("Obs.: Sem pedido")).toHaveCount(0);
   const removed=requests.filter(x=>x.path.endsWith("/a1/observation")).at(-1);
-  expect(removed.payload).toEqual({observation:null});
+  expect(required(removed).payload).toEqual({observation:null});
 });
 
 test("Conferente React exporta a agenda em PDF",async({page})=>{
@@ -325,10 +327,10 @@ test("Conferente React é responsivo e não cria rolagem horizontal da página",
 
 
 test("Conferente React refaz consulta ao receber agenda.changed e realtime.ready",async({page})=>{
-  let socket = null;
+  const connection: { socket?: WebSocketRoute } = {};
   let presenceSent = false;
   await page.routeWebSocket("**/api/realtime", route=>{
-    socket = route;
+    connection.socket = route;
     route.onMessage(message=>{
       if(typeof message==="string" && message.includes('"presence.set"'))presenceSent=true;
       if(message==="ping")route.send("pong");
@@ -340,10 +342,10 @@ test("Conferente React refaz consulta ao receber agenda.changed e realtime.ready
   const getCount=()=>requests.filter(x=>x.method==="GET" && x.path==="/api/store/today").length;
   const beforeChange=getCount();
   const date=await page.getByLabel("Data da conferência").inputValue();
-  socket.send(JSON.stringify({version:1,type:"agenda.changed",agendaId:"agenda1",storeId:"s1",date,reason:"status"}));
+  required(connection.socket).send(JSON.stringify({version:1,type:"agenda.changed",agendaId:"agenda1",storeId:"s1",date,reason:"status"}));
   await expect.poll(getCount).toBeGreaterThan(beforeChange);
   const beforeReady=getCount();
-  socket.send(JSON.stringify({version:1,type:"realtime.ready"}));
+  required(connection.socket).send(JSON.stringify({version:1,type:"realtime.ready"}));
   await expect.poll(getCount).toBeGreaterThan(beforeReady);
 });
 
@@ -372,7 +374,7 @@ test("Conferência exibe ações em linha única e altura compacta inclusive par
   await page.setViewportSize({width:1200,height:800});
   await setup(page);
   const regular=page.getByTestId("conference-row-a1");
-  const assertCompact=async(row,expected)=>{
+  const assertCompact=async(row: Locator,expected: number)=>{
     await expect(row).toBeVisible();
     const actionCell=row.locator("tr").first().locator("td").nth(3);
     await expect(actionCell.locator("button")).toHaveCount(expected);
