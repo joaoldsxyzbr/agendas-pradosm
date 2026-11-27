@@ -66,6 +66,7 @@
   },
   "vars": {
     "REALTIME_MODE": "off",
+    "ACCESS_MODE": "on",
     "RETENTION_ROW_LIMIT_WARNING": "500000"
   }
 }

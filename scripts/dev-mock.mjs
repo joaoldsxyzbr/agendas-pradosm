@@ -53,7 +53,7 @@ const localFlags=["--local","--config",config,"--persist-to",state];
 console.log("Aplicando migrations no D1 LOCAL...");
 run(["d1","migrations","apply","DB",...localFlags]);
 const sqlFile=join(state,"seed-"+randomBytes(8).toString("hex")+".sql");
-writeFileSync(sqlFile,await buildMockSql(password),{flag:"wx",mode:0o600});
+writeFileSync(sqlFile,await buildMockSql(password,new Date(),{access:true,v2:true}),{flag:"wx",mode:0o600});
 try {
   run(["d1","execute","DB",...localFlags,"--file",sqlFile]);
 } finally {
@@ -62,7 +62,7 @@ try {
 const csv=join(state,"importacao-mock.csv");
 writeFileSync(csv,mockImportCsv(),"utf8");
 console.log("\nAmbiente LOCAL fictício — não use estas contas fora do localhost.");
-for(const user of MOCK_ACCOUNTS.filter(u=>!u.profile)) console.log("  "+user.login+" — "+user.name);
+for(const user of MOCK_ACCOUNTS) console.log("  "+user.login+" — "+user.name);
 console.log("Senha inicial comum: "+password);
 console.log("CSV de importação: "+csv);
 console.log("Dados persistidos em: "+state);

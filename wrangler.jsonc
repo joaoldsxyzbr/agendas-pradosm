@@ -65,6 +65,7 @@
     }
   },
   "vars": {
-    "REALTIME_MODE": "off"
+    "REALTIME_MODE": "off",
+    "ACCESS_MODE": "on"
   }
 }

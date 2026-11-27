@@ -24,7 +24,7 @@ const {password,sessionSecret}=JSON.parse(readFileSync(credentials,"utf8"));
 if(typeof password!=="string"||!/^[A-Za-z0-9_-]{24}$/.test(password)||typeof sessionSecret!=="string"||!/^[a-f0-9]{96}$/.test(sessionSecret))throw Error("Credenciais locais inválidas.");
 console.log("Modo Node "+process.version+" | SQLite local (sem Wrangler/Workerd)");
 const local=openLocalDatabase(join(state,"mock.sqlite"),join(root,"migrations-v2"));
-local.seed(await buildMockSql(password,new Date(),{access:true}));
+local.seed(await buildMockSql(password,new Date(),{access:true,v2:true}));
 writeFileSync(join(state,"importacao-mock.csv"),mockImportCsv(),"utf8");
 console.log("Estado local: "+state);
 for(const user of MOCK_ACCOUNTS)console.log(user.login+" - "+user.name);
@@ -61,7 +61,7 @@ else{
   // Somente este servidor Node (loopback) possui estes endpoints. Não fazem parte do Worker.
   const quickAccounts=MOCK_ACCOUNTS.map(account=>({
     login:account.login,
-    label:account.profile==="agendador"?"Agendador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
+    label:account.profile==="digitador"?"Digitador":account.profile==="agendador"?"Agendador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
   }));
   function validQuickToken(request){
     const token=request.headers.get("x-agenda-local-token")??"";
