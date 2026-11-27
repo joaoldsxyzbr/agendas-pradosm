@@ -75,8 +75,8 @@ jobs:
           print("IDs candidatos a agendamentos:", sorted(candidates))
           if not candidates:
               sys.exit("Nenhum relatorio de agendamento identificado pelo nome.")
-          if len(candidates) > 3:
-              sys.exit("Mais de tres candidatos; selecionar relatorio antes da consulta.")
+          if len(candidates) > 8:
+              sys.exit("Mais de oito candidatos; selecionar relatorio antes da consulta.")
           for ident in sorted(candidates):
               result = get(str(ident) + "?limit=2&page=1")
               if not isinstance(result, dict) or not isinstance(result.get("data"), list):
