@@ -73,3 +73,6 @@ Migration 0006 e repositório: preparar revisão com ID aleatório, hash do cont
 
 ## Cadastro de destinos operacionais
 Admin integral pode listar e criar vínculo explícito de filial F ativa com código idêntico no Prado, pelo cadastro de lojas. Confirmação e auditoria transacionais; duplicação idempotente, sem remapeamento silencioso. Digitador não pode gerir destinos. Não habilita conexão nem grava agenda. CD sem doca continua bloqueado. Testes de autorização e idempotência adicionados, execução pendente.
+
+## Limites e verificação da revisão
+Pré-verificação de protocolos locais antes de criar rascunho; a transação continua verificando a existência para evitar corridas. Limite de 10 revisões simultâneas por usuário, payload normalizado de até 256 KiB, limpeza de expirados na preparação e no handler scheduled (cron continua desativado). Adicionado gate não destrutivo para todas as migrations V2, e configuração TypeScript estrita específica dos módulos Nexello e dependências imediatas; auditoria e listagem de acesso tipadas. O gate geral legado segue ativo no check-worker, mas ainda não está em strict global. Não foi possível obter checkout local neste ambiente (DNS GitHub indisponível); nenhum CI foi disparado e nenhuma execução de testes foi comprovada. A integração continua sem produtor confiável de evidência externa e sem rota de confirmação.

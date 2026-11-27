@@ -97,6 +97,12 @@ if (isMainModule()) {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const migrationsDir = join(root, "migrations");
   const unsafe = findUnapprovedUnsafeMigrations(migrationsDir);
+  const v2Dir=join(root,"migrations-v2");
+  if(existsSync(v2Dir))for(const fileName of readdirSync(v2Dir).filter(name=>/^\d{4}_.*\.sql$/.test(name))){
+    const sql=readFileSync(join(v2Dir,fileName),"utf8");
+    const operation=destructiveOperation(sql);
+    if(operation)unsafe.push({fileName:"migrations-v2/"+fileName,number:migrationNumber(fileName),sql,operation});
+  }
 
   if (unsafe.length > 0) {
     console.error(

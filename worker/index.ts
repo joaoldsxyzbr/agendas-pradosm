@@ -3,6 +3,7 @@ import type { Env } from "./env.ts";
 import { app } from "./app.ts";
 import { closePastOpenAgendas } from "./services/agenda-maintenance.ts";
 import { pruneDiagnostics } from "./repositories/diagnostics.ts";
+import { pruneExpiredNexelloReviews } from "./repositories/nexello-persistence.ts";
 import { runRetention } from "./services/retention.ts";
 import { pruneRevokedSessions } from "./repositories/users.ts";
 
@@ -16,6 +17,8 @@ export default {
     await closePastOpenAgendas(env.DB, new Date(controller.scheduledTime));
     try { await pruneDiagnostics(env.DB, new Date(controller.scheduledTime)); }
     catch { console.warn("Scheduled diagnostics retention unavailable"); }
+    try { await pruneExpiredNexelloReviews(env.DB, new Date(controller.scheduledTime)); }
+    catch { console.warn("Scheduled Nexello review cleanup unavailable"); }
     try { await pruneRevokedSessions(env.DB, Math.floor(controller.scheduledTime / 1000)); }
     catch { console.warn("Scheduled session cleanup unavailable"); }
     try {

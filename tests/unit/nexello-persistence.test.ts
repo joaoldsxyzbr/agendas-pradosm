@@ -72,11 +72,28 @@ test("stale versions, duplicates and unsupported states cannot partially write",
     const stale=await prepareVerifiedReview(f.DB,actor,{...base,entries:[{...entry,protocol:"123457"}]},now);
     await confirmPreparedReview(f.DB,actor,first.reviewId,first.hash,now);
     await assert.rejects(confirmPreparedReview(f.DB,actor,stale.reviewId,stale.hash,now));
-    const conflict=await prepareVerifiedReview(f.DB,actor,{...base,entries:[{...entry,protocol:"999999"},entry]},now);
+    await assert.rejects(prepareVerifiedReview(f.DB,actor,{...base,entries:[{...entry,protocol:"999999"},entry]},now),/NEXELLO_PROTOCOLO_EXISTENTE/);
+    const conflict=await prepareVerifiedReview(f.DB,actor,{...base,entries:[{...entry,protocol:"999998"},{...entry,protocol:"999999"}]},now);
+    await f.DB.prepare("INSERT INTO agendamentos(id,agenda_id,protocolo,horario_inicio,horario_fim,fornecedor,criado_em,atualizado_em) SELECT 'manual-race',id,'999999','08:00','09:00','Fictício','t','t' FROM agendas LIMIT 1").run();
     await assert.rejects(confirmPreparedReview(f.DB,actor,conflict.reviewId,conflict.hash,now));
-    assert.equal(await total(f.DB,"agendamentos"),1);
+    assert.equal(await total(f.DB,"agendamentos"),2);
     assert.equal(await total(f.DB,"sincronizacoes_nexello"),1);
     assert.equal(await total(f.DB,"auditoria"),1);
     assert.equal(await total(f.DB,"nexello_evidencias"),1);
+  }finally{f.close();}
+});
+
+test("bounded drafts, expiration and session revocation",async()=>{
+  const f=fixture();
+  try{
+    for(let i=0;i<10;i++)await prepareVerifiedReview(f.DB,actor,base,now);
+    await assert.rejects(prepareVerifiedReview(f.DB,actor,base,now),/NEXELLO_REVISAO_LIMITE/);
+    const later=new Date(now.getTime()+600001);
+    const draft=await prepareVerifiedReview(f.DB,actor,base,later);
+    assert.equal(await total(f.DB,"nexello_revisoes_pendentes"),1);
+    await f.DB.prepare("UPDATE usuarios SET session_version=2 WHERE id='u'").run();
+    await assert.rejects(confirmPreparedReview(f.DB,actor,draft.reviewId,draft.hash,later));
+    await assert.rejects(confirmPreparedReview(f.DB,{...actor,sessionVersion:2},draft.reviewId,draft.hash,later));
+    assert.equal(await total(f.DB,"agendamentos"),0);
   }finally{f.close();}
 });

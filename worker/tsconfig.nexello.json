@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "types.d.ts",
+    "repositories/nexello-*.ts",
+    "services/nexello-*.ts",
+    "routes/admin-nexello.ts",
+    "repositories/access.ts",
+    "repositories/audit.ts",
+    "../shared/nexello-*.ts"
+  ]
+}

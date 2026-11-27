@@ -35,6 +35,8 @@ function canonicalDocs(values:string[]):string[]{return [...new Set(values)].sor
 function denied():never{throw new Error("NEXELLO_AUTORIDADE_INVALIDA");}
 
 const REVIEW_TTL_MS=10*60*1000;
+const MAX_PENDING_PER_ACTOR=10;
+const MAX_REVIEW_BYTES=262144;
 async function requireActor(db:D1Database,actor:NexelloActor):Promise<void>{
   if(!Number.isSafeInteger(actor.sessionVersion)||actor.sessionVersion<1)denied();
   const access=await findEffectiveAccess(db,actor.id);
@@ -70,11 +72,17 @@ export async function prepareVerifiedReview(db:D1Database,actor:NexelloActor,
     .bind(batch.externalCode,batch.storeId).first();
   if(!mapping)throw new Error("NEXELLO_DESTINO_INVALIDO");
   const {entries,hash}=await canonicalBatch(batch);
+  const protocols=entries.map(row=>row.protocol);
+  const conflict=await db.prepare("SELECT 1 FROM agendamentos WHERE protocolo IN ("+protocols.map(()=>"?").join(",")+") LIMIT 1").bind(...protocols).first();
+  if(conflict)throw new Error("NEXELLO_PROTOCOLO_EXISTENTE");
   const payload=JSON.stringify({...batch,entries});
+  if(new TextEncoder().encode(payload).byteLength>MAX_REVIEW_BYTES)throw new Error("NEXELLO_REVISAO_GRANDE");
+  await pruneExpiredNexelloReviews(db,now);
   const expiresAt=new Date(now.getTime()+REVIEW_TTL_MS).toISOString();
-  const result=await db.prepare("INSERT INTO nexello_revisoes_pendentes(id,usuario_id,versao_sessao,hash_conteudo,conteudo,criado_em,expira_em) VALUES(?,?,?,?,?,?,?)")
-    .bind(batch.reviewId,actor.id,actor.sessionVersion,hash,payload,now.toISOString(),expiresAt).run();
-  if(!result.success||result.meta?.changes!==1)throw new Error("NEXELLO_REVISAO_FALHOU");
+  const result=await db.prepare("INSERT INTO nexello_revisoes_pendentes(id,usuario_id,versao_sessao,hash_conteudo,conteudo,criado_em,expira_em) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM nexello_revisoes_pendentes WHERE usuario_id=? AND expira_em>?) < ?")
+    .bind(batch.reviewId,actor.id,actor.sessionVersion,hash,payload,now.toISOString(),expiresAt,actor.id,now.toISOString(),MAX_PENDING_PER_ACTOR).run();
+  if(!result.success)throw new Error("NEXELLO_REVISAO_FALHOU");
+  if(result.meta?.changes!==1)throw new Error("NEXELLO_REVISAO_LIMITE");
   return {reviewId:batch.reviewId,expiresAt,hash,entryCount:entries.length,storeId:batch.storeId,date:batch.date,entries};
 }
 

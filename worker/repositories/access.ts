@@ -64,6 +64,7 @@ export async function findEffectiveAccess(db: D1Database,userId:string,includeIn
 // Evita uma consulta D1 adicional por usuário e mantém a listagem sem hashes de senha.
 export async function listUsersWithAccess(db:D1Database){
   const rows=await db.prepare(ACCESS_SELECT+" WHERE u.excluido_em IS NULL ORDER BY u.nome COLLATE NOCASE,u.id").all<Parameters<typeof decodeAccess>[0]&{id:string;nome:string;login:string;ativo:number}>();
+  if(!rows.success||!rows.results)throw new Error("ACESSO_LISTAGEM_FALHOU");
   return rows.results.map(row=>({user:row,access:decodeAccess(row)}));
 }
 
