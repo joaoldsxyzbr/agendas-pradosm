@@ -6,6 +6,7 @@ import { LinkNexelloDestinationSchema } from "../../shared/nexello-destinations.
 import { listNexelloDestinations, linkSameCodeDestination } from "../repositories/nexello-destinations.ts";
 import { CreateStoreInput, UpdateStoreInput } from "../../shared/api.ts";
 import {
+  type StoreRow,
   createStore,
   findStoreById,
   hasStoreUsers,
@@ -14,7 +15,7 @@ import {
   updateStore
 } from "../repositories/stores.ts";
 const adminStoreRoutes = new Hono<AppEnv>();
-function storeJson(store) {
+function storeJson(store:StoreRow) {
   return {
     id: store.id,
     codigo: store.codigo,
@@ -25,7 +26,7 @@ function storeJson(store) {
     atualizadoEm: store.atualizado_em
   };
 }
-function isDuplicateCode(error) {
+function isDuplicateCode(error:unknown) {
   return error instanceof Error && (error.message.includes("UNIQUE constraint failed: lojas.codigo") || error.message.includes("idx_lojas_codigo_nocase"));
 }
 adminStoreRoutes.get("/nexello-destinos", async c=>{
@@ -66,9 +67,11 @@ adminStoreRoutes.post("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
     const store = await createStore(c.env.DB, parsed.data, actor.id);
     return c.json(storeJson(store), 201);
   } catch (error) {
+    if(error instanceof Error&&error.message.includes("NEXELLO_LOJA_CODIGO_PROTEGIDO"))return c.json({error:"NEXELLO_LOJA_CODIGO_PROTEGIDO",message:"O código desta loja possui vínculo Nexello. A troca foi bloqueada para preservar a identidade da unidade."},409);
     if (isDuplicateCode(error)) {
       return c.json(
         { error: "CODIGO_LOJA_EM_USO", message: "C\xF3digo de loja j\xE1 est\xE1 em uso." },
@@ -89,9 +92,11 @@ adminStoreRoutes.patch("/", async (c) => {
   }
   try {
     const actor = c.get("authUser");
+    if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
     const store = await updateStore(c.env.DB, current, parsed.data, actor.id);
     return c.json(storeJson(store));
   } catch (error) {
+    if(error instanceof Error&&error.message.includes("NEXELLO_LOJA_CODIGO_PROTEGIDO"))return c.json({error:"NEXELLO_LOJA_CODIGO_PROTEGIDO",message:"O código desta loja possui vínculo Nexello. A troca foi bloqueada para preservar a identidade da unidade."},409);
     if (isDuplicateCode(error)) {
       return c.json(
         { error: "CODIGO_LOJA_EM_USO", message: "C\xF3digo de loja j\xE1 est\xE1 em uso." },
@@ -126,6 +131,7 @@ adminStoreRoutes.delete("/:id", async (c) => {
     );
   }
   const actor = c.get("authUser");
+  if(!actor)return c.json({error:"ACESSO_NEGADO"},403);
   const deleted = await softDeleteStore(c.env.DB, current, actor.id);
   if (!deleted) {
     return c.json(

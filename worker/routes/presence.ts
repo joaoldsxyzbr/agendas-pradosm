@@ -3,7 +3,7 @@ import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
-  conferentePresenceStatus
+  type PresenceStatus, conferentePresenceStatus
 } from "../lib/presence.ts";
 import {
   clearConferentePresence,
@@ -15,7 +15,7 @@ const adminPresenceRoutes = new Hono<AppEnv>();
 const StorePresenceInput = z.object({
   interacted: z.boolean()
 });
-function presenceRank(status) {
+function presenceRank(status:PresenceStatus):number {
   switch (status) {
     case "online":
       return 2;
@@ -27,7 +27,7 @@ function presenceRank(status) {
 }
 storePresenceRoutes.post("/", async (c) => {
   const user = c.get("authUser");
-  if (user.papel !== "conferente" || !user.lojaId) {
+  if (!user || user.papel !== "conferente" || !user.lojaId) {
     return c.json(
       { error: "ACESSO_NEGADO", message: "Acesso n\xE3o permitido." },
       403
@@ -53,7 +53,7 @@ storePresenceRoutes.post("/", async (c) => {
 });
 storePresenceRoutes.delete("/", async (c) => {
   const user = c.get("authUser");
-  if (user.papel !== "conferente" || !user.lojaId) {
+  if (!user || user.papel !== "conferente" || !user.lojaId) {
     return c.json(
       { error: "ACESSO_NEGADO", message: "Acesso n\xE3o permitido." },
       403
@@ -65,7 +65,7 @@ storePresenceRoutes.delete("/", async (c) => {
 adminPresenceRoutes.get("/", async (c) => {
   const rows = await listActiveConferentePresence(c.env.DB,c.env.ACCESS_MODE==="on");
   const nowMs = Date.now();
-  const byStore = /* @__PURE__ */ new Map();
+  const byStore = /* @__PURE__ */ new Map<string,{storeId:string;status:PresenceStatus;lastInteractionAt:string|null;lastSeenAt:string}>();
   const ids=scopedStoreIds(c);
   for (const row of rows) {
     if(ids!==undefined&&!ids.includes(row.loja_id))continue;

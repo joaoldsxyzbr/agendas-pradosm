@@ -72,7 +72,7 @@ export function annotateDestinations(rows:readonly NexelloPreviewRow[],mappings:
     if(!row.storeCode)return {...row,destination:"unresolved"};
     const mapping=byCode.get(row.storeCode);
     if(!mapping)return {...row,destination:"unlinked"};
-    return {...row,destination:mapping.ativo===1&&mapping.excluido_em===null?"linked":"inactive",destinationCode:mapping.codigo};
+    return {...row,destination:mapping.ativo===1&&mapping.excluido_em===null&&mapping.codigo===row.storeCode?"linked":"inactive",destinationCode:mapping.codigo};
   });
 }
 /** Two bounded read queries, at most 100 bind parameters each; no partial results. */

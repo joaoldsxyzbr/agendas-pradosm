@@ -11,6 +11,10 @@
     "routes/admin-nexello.ts",
     "repositories/access.ts",
     "repositories/audit.ts",
-    "../shared/nexello-*.ts"
+    "../shared/nexello-*.ts",
+    "repositories/stores.ts",
+    "repositories/presence.ts",
+    "lib/presence.ts",
+    "services/retention.ts"
   ]
 }

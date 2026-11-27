@@ -68,7 +68,7 @@ export async function prepareVerifiedReview(db:D1Database,actor:NexelloActor,
   if(agenda&&agenda.status_dia!=="aberto")throw new Error("NEXELLO_DATA_ENCERRADA");
   const batch=Batch.parse({...input,reviewId:crypto.randomUUID(),expectedAgenda:agenda?{id:agenda.id,version:agenda.versao_importacao}:null});
   if(batch.date<businessDate(now))throw new Error("NEXELLO_DATA_ENCERRADA");
-  const mapping=await db.prepare("SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.ativo=1 AND l.excluido_em IS NULL")
+  const mapping=await db.prepare("SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.codigo=d.filial_externa AND l.ativo=1 AND l.excluido_em IS NULL")
     .bind(batch.externalCode,batch.storeId).first();
   if(!mapping)throw new Error("NEXELLO_DESTINO_INVALIDO");
   const {entries,hash}=await canonicalBatch(batch);
@@ -157,7 +157,7 @@ async function persistVerifiedNewAppointments(
             AND e.efeito='deny' AND e.permissao IN ('importacao.ver','importacao.executar'))))
       ) AND EXISTS(
         SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id
-        WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.ativo=1 AND l.excluido_em IS NULL
+        WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.codigo=d.filial_externa AND l.ativo=1 AND l.excluido_em IS NULL
       ) AND EXISTS(SELECT 1 FROM nexello_revisoes_pendentes r WHERE r.id=? AND r.usuario_id=? AND r.versao_sessao=? AND r.hash_conteudo=? AND r.expira_em>?)
       THEN ? ELSE NULL END,?,?,?,?,'confirmada',?,?,0,?,?)
     `).bind(actor.id,actor.sessionVersion,batch.externalCode,batch.storeId,batch.reviewId,actor.id,actor.sessionVersion,hash,at,batch.reviewId,
