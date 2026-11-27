@@ -1,12 +1,13 @@
+// V2: somente dry-run/local até provisionamento e autorização explícita.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "agendas-pradosm-preview-agendas-migrations",
+  "name": "agendas-pradosm-v2-agendas-migrations",
   "compatibility_date": "2026-09-24",
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "agendas-pradosm-preview",
-      "database_id": "716cc88e-7da8-400e-b4be-edc4be0c9c03",
+      "database_name": "agendas-pradosm-v2-unconfigured",
+      "database_id": "00000000-0000-4000-8000-000000000002",
       "migrations_dir": "migrations",
       "migrations_pattern": "migrations/002[01]_*.sql"
     }
