@@ -54,45 +54,61 @@ jobs:
               except Exception:
                   sys.exit("Falha de transporte ou resposta JSON invalida.")
 
-          def normalized(value):
-              return "".join(c for c in unicodedata.normalize("NFKD", value.casefold())
-                             if not unicodedata.combining(c))
+          from collections import Counter
+          from urllib.parse import urlencode
+          from datetime import datetime
 
-          reports = get("consultas")
-          if not isinstance(reports, list):
-              sys.exit("Catalogo em formato diferente do documentado.")
-          candidates = set()
-          for report in reports:
-              if not isinstance(report, dict):
-                  continue
-              name, ident = report.get("relatorio"), report.get("id_consulta")
-              if isinstance(name, str) and "agend" in normalized(name):
-                  if type(ident) is int and 0 < ident <= 2147483647:
-                      candidates.add(ident)
-                  elif isinstance(ident, str) and re.fullmatch(r"[0-9]{1,9}", ident) and int(ident) > 0:
-                      candidates.add(int(ident))
-          print("Catalogo acessivel; total de relatorios:", len(reports))
-          print("IDs candidatos a agendamentos:", sorted(candidates))
-          if not candidates:
-              sys.exit("Nenhum relatorio de agendamento identificado pelo nome.")
-          if len(candidates) > 8:
-              sys.exit("Mais de oito candidatos; selecionar relatorio antes da consulta.")
-          for ident in sorted(candidates):
-              result = get(str(ident) + "?limit=2&page=1")
+          def page(params):
+              result = get("60?" + urlencode(params))
               if not isinstance(result, dict) or not isinstance(result.get("data"), list):
-                  sys.exit("Formato inesperado no relatorio " + str(ident))
-              rows = result["data"]
-              fields = {}
-              for row in rows[:2]:
-                  if not isinstance(row, dict):
-                      sys.exit("Registro nao e objeto.")
-                  for key, val in row.items():
-                      if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", key):
-                          fields.setdefault(key, set()).add(type(val).__name__)
-              print("Relatorio", ident, "- quantidade da pagina:", len(rows))
-              print("Campos e tipos observados:", json.dumps({k: sorted(v) for k, v in sorted(fields.items())}, ensure_ascii=True))
-              print("Metadados de paginacao:", json.dumps({
-                  k: result[k] for k in ("page", "last_page", "per_page", "total")
-                  if type(result.get(k)) is int
+                  sys.exit("Formato inesperado.")
+              if len(result["data"]) > 20:
+                  sys.exit("Limite de amostra nao respeitado.")
+              if not all(isinstance(row, dict) for row in result["data"]):
+                  sys.exit("Registro invalido.")
+              return result
+
+          def shape(value):
+              if not isinstance(value, str):
+                  return type(value).__name__
+              if not value.strip():
+                  return "vazio"
+              return re.sub(r"[A-Za-zÀ-ÿ]+", "L", re.sub(r"\d", "9", value))[:80]
+
+          def date_of(value):
+              if not isinstance(value, str):
+                  return None
+              for fmt, length in (("%Y-%m-%d", 10), ("%d/%m/%Y", 10), ("%d-%m-%Y", 10)):
+                  try:
+                      return datetime.strptime(value[:length], fmt).date().isoformat()
+                  except ValueError:
+                      pass
+              return None
+
+          result = page({"limit": 20, "page": 1})
+          rows = result["data"]
+          print("Amostra:", len(rows))
+          fields = sorted({key for row in rows for key in row
+                           if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", key)})
+          print("Campos:", json.dumps(fields))
+          for key in ("data_agenda_inicio", "hora_agendada", "filial_entrega", "tipo", "nfe_numeros", "numero_pedido"):
+              print("Formatos", key, json.dumps(dict(Counter(shape(row.get(key)) for row in rows)), ensure_ascii=True))
+          types = {"nota fiscal", "pedido", "cnpj", "agenda fixa"}
+          print("Tipos reconhecidos:", sum(isinstance(row.get("tipo"), str) and row["tipo"].strip().casefold() in types for row in rows))
+          print("Protocolos unicos na amostra:", len({str(row.get("protocolo")) for row in rows}))
+          print("Campos ausentes da importacao:", json.dumps([k for k in ("data_agenda_fim", "doca", "qtd_itens", "qtd_volumes", "paletes", "carga_batida") if k not in fields]))
+          known = next((d for row in rows if (d := date_of(row.get("data_agenda_inicio")))), None)
+          if not known:
+              sys.exit("Formato de data nao reconhecido para sondagem.")
+          # Hipoteses de filtro, nao documentadas. A data conhecida nao e registrada.
+          for name in ("data", "data_agendada", "data_agenda_inicio"):
+              empty = page({"limit": 2, "page": 1, name: "1900-01-01"})
+              matched = page({"limit": 2, "page": 1, name: known})
+              print("Sondagem", name, json.dumps({
+                  "total_data_inexistente": empty.get("total") if type(empty.get("total")) is int else None,
+                  "linhas_data_inexistente": len(empty["data"]),
+                  "total_data_conhecida": matched.get("total") if type(matched.get("total")) is int else None,
+                  "linhas_data_conhecida": len(matched["data"]),
+                  "linhas_coincidentes": sum(date_of(row.get("data_agenda_inicio")) == known for row in matched["data"])
               }))
           PY
