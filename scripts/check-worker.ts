@@ -11,7 +11,7 @@ const listed = [
   "worker/lib/presence.ts", "worker/lib/session.ts", "worker/lib/time.ts",
   "worker/middleware/auth.ts", "worker/middleware/access-policy.ts", "worker/repositories/access.ts", "worker/realtime/RealtimeHub.ts",
   "worker/repositories/agendas.ts", "worker/repositories/audit.ts",
-  "worker/repositories/nexello-rate.ts", "worker/repositories/nexello-persistence.ts",
+  "worker/repositories/nexello-destinations.ts", "worker/repositories/nexello-rate.ts", "worker/repositories/nexello-persistence.ts",
   "worker/repositories/avisos.ts",
   "worker/repositories/diagnostics.ts", "worker/repositories/presence.ts",
   "worker/repositories/stores.ts", "worker/repositories/users.ts",
@@ -26,7 +26,7 @@ const listed = [
   "worker/routes/diagnostics.ts", "worker/routes/presence.ts",
   "worker/routes/realtime.ts", "worker/routes/store-agendas.ts",
   "shared/agenda.ts", "shared/api.ts", "shared/auth.ts", "shared/avisos.ts", "shared/observations.ts", "shared/realtime.ts",
-  "shared/store.ts", "shared/time.ts", "shared/permissions.ts", "shared/nexello-preview.ts", "shared/nexello-review.ts",
+  "shared/store.ts", "shared/time.ts", "shared/permissions.ts", "shared/nexello-destinations.ts", "shared/nexello-preview.ts", "shared/nexello-review.ts",
   "shared/import/extractPdfText.ts", "shared/import/pdf-engine-liteparse.ts",
   "shared/import/parseAgendaBatch.ts", "shared/import/parseAgendaText.ts",
   "shared/import/readCsvText.ts"

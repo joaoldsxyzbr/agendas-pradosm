@@ -70,3 +70,6 @@ A confirmação exige evidência externa ou revisão humana já verificada pelo 
 
 ## Revisão temporária no servidor
 Migration 0006 e repositório: preparar revisão com ID aleatório, hash do conteúdo canônico, autor, versão de sessão, versão da agenda e validade de dez minutos. Armazena apenas campos normalizados necessários à inclusão, não resposta bruta ou segredo. Confirmação interna recebe somente ID e hash; recupera o lote no D1, verifica autoria, autorização, validade e integridade; a transação confirma e remove a revisão pendente. Cancelamento remove apenas rascunho próprio; limpeza limitada de expirados disponível, ainda sem agendamento automático. A trilha definitiva continua separada. Não há rota de gravação nem produtor real de evidência, portanto nenhuma operação está habilitada. Testes de autoria, validade, rollback e repetição adicionados e não executados.
+
+## Cadastro de destinos operacionais
+Admin integral pode listar e criar vínculo explícito de filial F ativa com código idêntico no Prado, pelo cadastro de lojas. Confirmação e auditoria transacionais; duplicação idempotente, sem remapeamento silencioso. Digitador não pode gerir destinos. Não habilita conexão nem grava agenda. CD sem doca continua bloqueado. Testes de autorização e idempotência adicionados, execução pendente.

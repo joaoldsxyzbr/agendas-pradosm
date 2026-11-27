@@ -11,6 +11,8 @@ const route=(method:string,path:string,policy:RoutePolicy):Rule=>[method,new Reg
 const A="/api/admin",S="/api/store";
 const RULES:Rule[]=[
   route("GET",A+"/stores",rule(["lojas.ver","recebimento.ver","agendas.ver","importacao.ver","relatorios.ver"],"filtered-list")),
+  route("GET",A+"/stores/nexello-destinos",rule("lojas.ver","all-stores")),
+  route("POST",A+"/stores/nexello-destinos",rule("lojas.editar","all-stores")),
   route("POST",A+"/stores",rule("lojas.criar","all-stores")),
   route("PATCH",A+"/stores",rule("lojas.editar","store-id")),
   route("DELETE",A+"/stores/"+id,rule("lojas.excluir","store-id")),

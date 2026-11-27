@@ -1,3 +1,4 @@
+import { NexelloDestinations } from "./nexello-destinations";
 import { useSession } from "@/app/session-query";
 import { canUse } from "@/features/auth/session";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -198,6 +199,7 @@ export function StoresPage() {
         </div>
       </>}
     </div>
+    {user?.papel==="admin"&&!user.perfil&&<NexelloDestinations stores={stores} />}
     {editing !== null && <StoreDialog key={editing === "new" ? "new" : editing.id} store={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
   </section>;
 }

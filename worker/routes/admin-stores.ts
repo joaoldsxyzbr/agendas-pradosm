@@ -2,6 +2,8 @@ import type { AppEnv } from "../env.ts";
 import { scopedStoreIds } from "../middleware/enforce-access.ts";
 import { Hono } from "hono";
 import { z } from "zod";
+import { LinkNexelloDestinationSchema } from "../../shared/nexello-destinations.ts";
+import { listNexelloDestinations, linkSameCodeDestination } from "../repositories/nexello-destinations.ts";
 import { CreateStoreInput, UpdateStoreInput } from "../../shared/api.ts";
 import {
   createStore,
@@ -26,6 +28,32 @@ function storeJson(store) {
 function isDuplicateCode(error) {
   return error instanceof Error && (error.message.includes("UNIQUE constraint failed: lojas.codigo") || error.message.includes("idx_lojas_codigo_nocase"));
 }
+adminStoreRoutes.get("/nexello-destinos", async c=>{
+  const user=c.get("authUser"),version=c.get("sessionVersion");
+  if(!user||user.papel!=="admin"||c.get("effectiveAccess")?.customized||version===undefined)
+    return c.json({error:"ACESSO_NEGADO",message:"Configuração exclusiva do administrador integral."},403);
+  c.header("Cache-Control","no-store");
+  return c.json(await listNexelloDestinations(c.env.DB,{id:user.id,sessionVersion:version}));
+});
+adminStoreRoutes.post("/nexello-destinos",async c=>{
+  const user=c.get("authUser"),version=c.get("sessionVersion");
+  if(!user||user.papel!=="admin"||c.get("effectiveAccess")?.customized||version===undefined)
+    return c.json({error:"ACESSO_NEGADO",message:"Configuração exclusiva do administrador integral."},403);
+  const input=LinkNexelloDestinationSchema.safeParse(await c.req.json().catch(()=>null));
+  if(!input.success)return c.json({error:"REQUISICAO_INVALIDA",message:"Loja inválida."},400);
+  try{
+    const result=await linkSameCodeDestination(c.env.DB,{id:user.id,sessionVersion:version},input.data.storeId);
+    return c.json(result,result.created?201:200);
+  }catch(error:unknown){
+    if(error instanceof Error&&error.message==="NEXELLO_DESTINO_INVALIDO")
+      return c.json({error:"NEXELLO_DESTINO_INVALIDO",message:"Apenas filiais ativas com código F podem ser vinculadas. O CD exige doca comprovada."},422);
+    if(error instanceof Error&&(error.message==="NEXELLO_DESTINO_CONFLITO"||error.message.includes("UNIQUE constraint failed: nexello_destinos")))
+      return c.json({error:"NEXELLO_DESTINO_CONFLITO",message:"Vínculo já existente ou alterado. Atualize a tela."},409);
+    if(error instanceof Error&&error.message==="NEXELLO_AUTORIDADE_INVALIDA")
+      return c.json({error:"ACESSO_NEGADO",message:"Autorização alterada."},403);
+    throw error;
+  }
+});
 adminStoreRoutes.get("/", async (c) => {
   const stores = await listStores(c.env.DB);
   const ids=scopedStoreIds(c);
