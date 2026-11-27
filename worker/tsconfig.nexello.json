@@ -10,6 +10,7 @@
     "services/nexello-*.ts",
     "routes/admin-nexello.ts",
     "repositories/access.ts",
+    "repositories/report-filters.ts",
     "repositories/audit.ts",
     "../shared/nexello-*.ts",
     "repositories/stores.ts",

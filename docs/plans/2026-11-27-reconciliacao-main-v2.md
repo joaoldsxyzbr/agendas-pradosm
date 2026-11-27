@@ -36,3 +36,9 @@ Canal da main incorporado à navegação V2, mantendo menu reordenável, identid
 
 - `node --experimental-strip-types --test tests/unit/v2-avisos-sqlite.test.ts`: 2/2 aprovados em Node 22.16, com SQLite real, migrations 0001–0010 e proposta 0011; verificados os blobs exatos de notice-scope, proposta SQL e adaptador local. Isolamento global, vazio, uma/múltiplas lojas, destino legado não resolvido, alteração/reutilização de código de loja, preservação de leitura e integridade referencial; conta personalizada não herda privilégios do papel físico.
 - Validação específica de filtros e permissões, não valida o backend HTTP completo nem a interface. Sem CI, deploy ou alteração remota.
+
+## Lote de relatórios gerenciais
+
+Mantida a semântica V2 (recusas, ausências e não recebidos no ranking; entregas manuais recebidas, total de fornecedores e filtros por tipo). Incorporada busca literal da main, filtros tipados e predicados SQL compartilhados entre resumo, ranking e ocorrências. Consultas filtram também pelo escopo estável do servidor usando json_each, inclusive escopo vazio. Falhas de leitura não são convertidas em sucesso vazio. UI propaga AbortSignal nas quatro consultas de relatório, sincroniza rascunho/aplicado ao selecionar período rápido e reinicia a paginação ao remover filtros inválidos. Seleção explícita totalmente inválida não é ampliada automaticamente a todas as lojas; exige revisão pelo operador.
+
+Teste local real: Node 22.16 + SQLite, `tests/unit/v2-report-filters.test.ts` 1/1 aprovado, 14 asserções, incluindo escopo vazio/global/múltiplo, interseção com códigos, classes de ocorrência, exclusão de inativos e busca literal por caracteres especiais e texto longo. Helper isolado compilado com TypeScript 5.8.3 strict/noUncheckedIndexedAccess; blobs do helper e do teste conferidos. Não foi validada a rota HTTP inteira, build web, integração D1 remota ou CI.

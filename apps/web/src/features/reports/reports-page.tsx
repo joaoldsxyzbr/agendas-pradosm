@@ -306,16 +306,16 @@ export function ReportsPage() {
   const [dialog, setDialog] = useState<DialogName | null>(null);
   const filterRef = useRef<HTMLDetailsElement>(null);
   const stores = useQuery({ queryKey: ["manager-report", "stores"], queryFn: getStores, staleTime: 60_000 });
-  const report = useQuery({ queryKey: ["manager-report", "rows", applied], queryFn: () => getReport(applied) });
+  const report = useQuery({ queryKey: ["manager-report", "rows", applied], queryFn: ({ signal }) => getReport(applied, signal) });
   const previous = previousRange(applied);
   const previousReport = useQuery({
-    queryKey: ["manager-report", "previous", applied], queryFn: () => getReport({ ...previous, stores: applied.stores }),
+    queryKey: ["manager-report", "previous", applied], queryFn: ({ signal }) => getReport({ ...previous, stores: applied.stores }, signal),
     enabled: applied.compare,
   });
-  const recent = useQuery({ queryKey: ["manager-report", "recent", applied], queryFn: () => getOccurrences(applied, 0, "") });
+  const recent = useQuery({ queryKey: ["manager-report", "recent", applied], queryFn: ({ signal }) => getOccurrences(applied, 0, "", "todos", signal) });
   const occurrences = useQuery({
     queryKey: ["manager-report", "occurrences", applied, occurrenceOffset, occurrenceQuery, occurrenceType],
-    queryFn: () => getOccurrences(applied, occurrenceOffset, occurrenceQuery, occurrenceType),
+    queryFn: ({ signal }) => getOccurrences(applied, occurrenceOffset, occurrenceQuery, occurrenceType, signal),
     enabled: dialog === "occurrences",
   });
   const summary = useMemo(() => totals(report.data?.rows ?? []), [report.data]);
@@ -353,9 +353,10 @@ export function ReportsPage() {
     const range = presetRange(key);
     if (!validRange(range.start, range.end)) return;
     setFilterError("");
-    setDraft(value => ({ ...value, ...range }));
-    setApplied(value => ({ ...value, ...range }));
-    persistFilters({ ...applied, ...range });
+    const next: ReportFilters = { ...applied, ...range };
+    setDraft(next);
+    setApplied(next);
+    persistFilters(next);
     setOccurrenceOffset(0);
     if (filterRef.current) filterRef.current.open = false;
   };
@@ -365,9 +366,16 @@ export function ReportsPage() {
     if (!known) return;
     const valid = new Set(known);
     if (applied.stores.every(code => valid.has(code))) return;
-    const next: ReportFilters = { ...applied, stores: applied.stores.filter(code => valid.has(code)) };
+    const remaining = applied.stores.filter(code => valid.has(code));
+    // Uma seleção explícita totalmente inválida não deve virar consulta global.
+    if (!remaining.length) {
+      setFilterError("As lojas selecionadas não estão mais disponíveis. Revise o filtro.");
+      return;
+    }
+    const next: ReportFilters = { ...applied, stores: remaining };
     setApplied(next);
     setDraft(next);
+    setOccurrenceOffset(0);
     persistFilters(next);
   }, [stores.data, applied]);
   useEffect(() => {
