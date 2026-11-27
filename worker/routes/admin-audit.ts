@@ -4,7 +4,7 @@ import { z } from "zod";
 import { listAudit, parseAuditJson } from "../repositories/audit.ts";
 const adminAuditRoutes = new Hono<AppEnv>();
 const AuditFilters = z.object({
-  entity: z.enum(["agenda", "agendamento", "loja", "usuario"]).optional(),
+  entity: z.enum(["agenda", "agendamento", "loja", "usuario", "sincronizacao", "sistema"]).optional(),
   entityId: z.string().trim().min(1).optional(),
   agendaId: z.string().trim().min(1).optional(),
   userId: z.string().trim().min(1).max(80).optional(),

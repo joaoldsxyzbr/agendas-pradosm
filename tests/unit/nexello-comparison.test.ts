@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareObservedRows, type ComparisonLocalRow } from "../../worker/services/nexello-comparison.ts";
+import { annotateDestinations, compareObservedRows, type ComparisonLocalRow } from "../../worker/services/nexello-comparison.ts";
 import type { NexelloPreviewRow } from "../../shared/nexello-preview.ts";
 const row = { index:1,kind:"observed",protocol:"123456",date:"2026-11-27",storeCode:"F01",
   startTime:"08:00",endTime:"09:00",supplier:"Fictício",type:"Pedido",nfe:[],orders:["001","002"],externalState:"unknown" } as const;
@@ -24,4 +24,11 @@ test("conflicts and protected rows are not treated as matching records",()=>{
   assert.deepEqual(result([{...observed,storeCode:null}],[]),["unresolved_store"]);
   for (const protectedRow of [{...local,origem:"manual"},{...local,ativo:0},{...local,status:"recebido"},{...local,status_dia:"concluido"}])
     assert.deepEqual(result([observed],[protectedRow]),["protected_local"]);
+});
+
+test("destination configuration is distinct from comparison and never changes external state",()=>{
+  const result=annotateDestinations([observed,{...observed,index:2,storeCode:"F02"},{...observed,index:3,storeCode:"F03"},{...observed,index:4,storeCode:null}],
+    [{filial_externa:"F01",codigo:"F01",ativo:1,excluido_em:null},{filial_externa:"F02",codigo:"F02",ativo:0,excluido_em:null}]);
+  assert.deepEqual(result.map(r=>r.kind==="observed"?r.destination:null),["linked","inactive","unlinked","unresolved"]);
+  assert.ok(result.every(r=>r.kind==="observed"&&r.externalState==="unknown"));
 });

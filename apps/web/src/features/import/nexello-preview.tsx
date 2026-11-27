@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
 import { NexelloPreviewConfigSchema, NexelloPreviewPageSchema, type NexelloPreviewPage, type NexelloComparison } from "../../../../../shared/nexello-preview.ts";
-import { assembleNexelloReview, filterNexelloReview, type NexelloReview } from "../../../../../shared/nexello-review.ts";
+import { assembleNexelloReview, filterNexelloReview, type NexelloReview, type ReviewFilter } from "../../../../../shared/nexello-review.ts";
 
 const labels: Record<NexelloComparison,string> = {
   unresolved_store:"Filial não identificada",duplicate_conflict:"Protocolo divergente",
@@ -12,6 +12,7 @@ const labels: Record<NexelloComparison,string> = {
   protected_local:"Registro local protegido",same_fields:"Campos coincidentes",different_fields:"Campos divergentes",
   local_changed:"Comparação variou durante a leitura",
 };
+const destinationLabels={linked:"Vinculada",unlinked:"Sem vínculo",inactive:"Unidade inativa",unresolved:"Destino não identificado"} as const;
 const field="min-h-10 rounded border border-[#526777] bg-[#131c25] px-3 py-2 text-sm text-white";
 const PAGE_SIZE=50;
 function wait(signal: AbortSignal): Promise<void> {
@@ -30,12 +31,14 @@ export function NexelloPreview() {
   const [end,setEnd]=useState("");
   const [store,setStore]=useState("");
   const [tablePage,setTablePage]=useState(1);
+  const [mode,setMode]=useState<ReviewFilter>("all");
+  const [search,setSearch]=useState("");
   const running=useRef<AbortController|null>(null);
   useEffect(()=>()=>{running.current?.abort();},[]);
   const config=useQuery({queryKey:["nexello-preview-config"],queryFn:async()=>
     NexelloPreviewConfigSchema.parse(await apiFetch<unknown>("/api/admin/nexello/config")),retry:false});
   const stores=useMemo(()=>[...new Set((review?.rows??[]).flatMap(row=>row.kind==="observed"&&row.storeCode?[row.storeCode]:[]))].sort(),[review]);
-  const filtered=useMemo(()=>filterNexelloReview(review?.rows??[],start,end,store),[review,start,end,store]);
+  const filtered=useMemo(()=>filterNexelloReview(review?.rows??[],start,end,store,mode,search),[review,start,end,store,mode,search]);
   const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   const currentPage=Math.min(tablePage,totalPages);
   const visible=filtered.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
@@ -44,7 +47,7 @@ export function NexelloPreview() {
     if(running.current||config.data?.available!==true)return;
     const controller=new AbortController();
     running.current=controller;
-    setReview(null);setError(null);setProgress({page:1,total:1});setTablePage(1);setStore("");
+    setReview(null);setError(null);setProgress({page:1,total:1});setTablePage(1);setStore("");setStart("");setEnd("");setMode("all");setSearch("");
     const pages:NexelloPreviewPage[]=[];
     try {
       let expected=1;
@@ -93,7 +96,9 @@ export function NexelloPreview() {
           <label className="grid gap-1 text-xs text-slate-300">Data inicial<input type="date" className={field} value={start} onChange={e=>{setStart(e.target.value);setTablePage(1);}}/></label>
           <label className="grid gap-1 text-xs text-slate-300">Data final<input type="date" className={field} value={end} onChange={e=>{setEnd(e.target.value);setTablePage(1);}}/></label>
           <label className="grid gap-1 text-xs text-slate-300">Filial<select className={field} value={store} onChange={e=>{setStore(e.target.value);setTablePage(1);}}><option value="">Todas</option>{stores.map(code=><option key={code} value={code}>{code}</option>)}<option value="unresolved">Não identificada</option></select></label>
-          <Button variant="secondary" onClick={()=>{setStart("");setEnd("");setStore("");setTablePage(1);}}>Limpar filtros</Button>
+          <label className="grid gap-1 text-xs text-slate-300">Comparação<select className={field} value={mode} onChange={e=>{setMode(e.target.value as ReviewFilter);setTablePage(1);}}><option value="all">Todos</option><option value="attention">Pontos de atenção</option><option value="repeated">Protocolos repetidos</option><option value="new">Não localizados, filial vinculada</option><option value="matching">Campos coincidentes, filial vinculada</option></select></label>
+          <label className="grid min-w-0 gap-1 text-xs text-slate-300">Buscar protocolo ou fornecedor<input type="search" value={search} className={field} onChange={e=>{setSearch(e.target.value);setTablePage(1);}}/></label>
+          <Button variant="secondary" onClick={()=>{setStart("");setEnd("");setStore("");setMode("all");setSearch("");setTablePage(1);}}>Limpar filtros</Button>
         </div>
         {start&&end&&start>end&&<p role="alert" className="text-sm text-rose-300">A data final deve ser igual ou posterior à inicial.</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -105,14 +110,14 @@ export function NexelloPreview() {
             <thead className="bg-[#223443] text-xs text-slate-300"><tr>{["Protocolo","Data e horário","Filial","Fornecedor","Tipo","Situação externa","Comparação local"].map(text=><th key={text} scope="col" className="px-3 py-3 font-medium">{text}</th>)}</tr></thead>
             <tbody className="divide-y divide-[#344956]">{visible.map(row=><tr key={row.index}>
               {row.kind==="invalid"?<td colSpan={7} className="px-3 py-3 text-amber-200">Linha {row.index}: formato não reconhecido ({row.field}).</td>:<>
-                <td className="px-3 py-3 tabular-nums">{row.protocol}</td><td className="px-3 py-3 tabular-nums">{row.date}<span className="block text-xs text-slate-400">{row.startTime}–{row.endTime}</span></td>
-                <td className="px-3 py-3">{row.storeCode??"Não resolvida"}</td><td className="px-3 py-3">{row.supplier}</td><td className="px-3 py-3">{row.type}</td><td className="px-3 py-3 text-slate-300">Não informada</td><td className="px-3 py-3 text-xs">{row.comparison?labels[row.comparison]:"Não comparado"}</td>
+                <td className="px-3 py-3 tabular-nums">{row.protocol}{row.repeated&&<span className="block text-xs text-amber-200">Repetido na consulta</span>}</td><td className="px-3 py-3 tabular-nums">{row.date}<span className="block text-xs text-slate-400">{row.startTime}–{row.endTime}</span></td>
+                <td className="px-3 py-3">{row.storeCode??"Não resolvida"}<span className={"block text-xs "+(row.destination==="linked"?"text-slate-400":"text-amber-200")}>{row.destination?destinationLabels[row.destination]:"Vínculo não verificado"}{row.destinationCode&&" · "+row.destinationCode}</span></td><td className="px-3 py-3">{row.supplier}</td><td className="px-3 py-3">{row.type}</td><td className="px-3 py-3 text-slate-300">Não informada</td><td className="px-3 py-3 text-xs">{row.comparison?labels[row.comparison]:"Não comparado"}</td>
               </>}
             </tr>)}</tbody>
           </table>
           {!visible.length&&<p className="p-4 text-sm text-slate-400">Nenhum registro neste filtro.</p>}
         </div>
-        <p className="text-xs leading-relaxed text-slate-400">A leitura completa das páginas não comprova um retrato estável da Nexello. Registros inválidos permanecem visíveis porque não podem ser filtrados com segurança. Comparações não comprovam identidade, aprovação ou cancelamento. Nenhuma importação automática é permitida.</p>
+        <p className="text-xs leading-relaxed text-slate-400">A leitura completa das páginas não comprova um retrato estável da Nexello. Registros inválidos permanecem visíveis porque não podem ser filtrados com segurança. A indicação de vínculo confirma somente a configuração local do destino. Comparações não comprovam identidade, aprovação ou cancelamento. Nenhuma importação automática é permitida.</p>
       </>}
     </div>
   </section>;

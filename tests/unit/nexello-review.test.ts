@@ -26,3 +26,15 @@ test("identical duplicates and invalid rows remain visible; local drift is expli
   const invalid:NexelloPreviewRow={kind:"invalid",index:2,field:"tipo"};
   assert.deepEqual(filterNexelloReview([observed,invalid],"2026-11-28","","F02"),[invalid]);
 });
+
+test("attention filter preserves repeated rows and unresolved destinations",()=>{
+  const linked={...observed,destination:"linked" as const};
+  const repeated={...linked,index:2,repeated:true};
+  const unlinked={...observed,index:3,destination:"unlinked" as const};
+  const invalid:NexelloPreviewRow={kind:"invalid",index:4,field:"tipo"};
+  const rows=[linked,repeated,unlinked,invalid];
+  assert.deepEqual(filterNexelloReview(rows,"","","","attention"),[repeated,unlinked,invalid]);
+  assert.deepEqual(filterNexelloReview(rows,"","","","new"),[linked]);
+  assert.deepEqual(filterNexelloReview(rows,"","","","repeated"),[repeated]);
+  assert.deepEqual(filterNexelloReview(rows,"","","","all","sem correspondência"),[invalid]);
+});

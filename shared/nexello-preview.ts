@@ -9,6 +9,9 @@ const ObservedRow = z.object({
   supplier: z.string(), type: z.string(), nfe: z.array(z.string()), orders: z.array(z.string()),
   externalState: z.literal("unknown"),
   comparison: NexelloComparisonSchema.optional(),
+  repeated: z.boolean().optional(),
+  destination: z.enum(["linked","unlinked","inactive","unresolved"]).optional(),
+  destinationCode: z.string().optional(),
 });
 export const NexelloPreviewRowSchema = z.discriminatedUnion("kind", [InvalidRow, ObservedRow]);
 export const NexelloPreviewPageSchema = z.object({

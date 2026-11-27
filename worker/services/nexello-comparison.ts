@@ -64,7 +64,18 @@ export function compareObservedRows(rows: readonly NexelloPreviewRow[], local: r
     return { ...row, comparison };
   });
 }
-/** Fixed query, at most 100 bind parameters; no writes, no partial results. */
+interface MappingRow {filial_externa:string;codigo:string;ativo:number;excluido_em:string|null;}
+export function annotateDestinations(rows:readonly NexelloPreviewRow[],mappings:readonly MappingRow[]):NexelloPreviewRow[]{
+  const byCode=new Map(mappings.map(row=>[row.filial_externa,row]));
+  return rows.map(row=>{
+    if(row.kind!=="observed")return row;
+    if(!row.storeCode)return {...row,destination:"unresolved"};
+    const mapping=byCode.get(row.storeCode);
+    if(!mapping)return {...row,destination:"unlinked"};
+    return {...row,destination:mapping.ativo===1&&mapping.excluido_em===null?"linked":"inactive",destinationCode:mapping.codigo};
+  });
+}
+/** Two bounded read queries, at most 100 bind parameters each; no partial results. */
 export async function compareNexelloPage(db: D1Database, page: NexelloPreviewPage): Promise<NexelloPreviewPage> {
   const protocols = [...new Set(page.rows.flatMap(row => row.kind === "observed" ? [row.protocol] : []))];
   if (!protocols.length) return page;
@@ -77,5 +88,12 @@ export async function compareNexelloPage(db: D1Database, page: NexelloPreviewPag
     LIMIT 501
   `).bind(...protocols).all<ComparisonLocalRow>();
   if (!result.success || !Array.isArray(result.results) || result.results.length > 500) throw new Error("NEXELLO_COMPARACAO_LIMITE");
-  return { ...page, rows: compareObservedRows(page.rows,result.results) };
+  const codes=[...new Set(page.rows.flatMap(row=>row.kind==="observed"&&row.storeCode?[row.storeCode]:[]))];
+  let mappings:MappingRow[]=[];
+  if(codes.length){
+    const mapped=await db.prepare("SELECT d.filial_externa,l.codigo,l.ativo,l.excluido_em FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id WHERE d.doca_externa='' AND d.filial_externa IN ("+codes.map(()=>"?").join(",")+")").bind(...codes).all<MappingRow>();
+    if(!mapped.success||!mapped.results)throw new Error("NEXELLO_DESTINOS_FALHOU");
+    mappings=mapped.results;
+  }
+  return { ...page, rows: annotateDestinations(compareObservedRows(page.rows,result.results),mappings) };
 }
