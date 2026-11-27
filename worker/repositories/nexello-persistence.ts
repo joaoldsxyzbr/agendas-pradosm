@@ -112,13 +112,27 @@ export async function persistVerifiedNewAppointments(
       INSERT INTO agendamento_nexello(agendamento_id,sincronizacao_id,estado_externo,evidencia,observado_em,hash_conteudo)
       VALUES(?,?,'confirmado',?,?,?)
     `).bind(id,batch.reviewId,entry.evidence,at,rowHash));
+    statements.push(db.prepare(`
+      INSERT INTO nexello_evidencias(sincronizacao_id,agendamento_id,fonte,estado_externo,hash_evidencia,hash_registro,verificado_em)
+      VALUES(?,?,?,'confirmado',?,?,?)
+    `).bind(batch.reviewId,id,entry.evidence,entry.evidenceHash,rowHash,at));
   }
   statements.push(db.prepare(`
     INSERT INTO auditoria(id,usuario_id,acao,entidade,entidade_id,loja_id,agenda_id,depois,detalhes,criado_em)
     VALUES(?,?,'nexello_novos_confirmados','sincronizacao',?,?,?,?,?,?)
   `).bind(crypto.randomUUID(),actor.id,batch.reviewId,batch.storeId,agendaId,
     JSON.stringify({count:entries.length,hash}),"Inclusão incremental de agendamentos revisados.",at));
-  const results=await db.batch(statements);
-  if(results.length!==statements.length||results.some(result=>!result.success))throw new Error("NEXELLO_RESULTADO_INDETERMINADO");
+  try {
+    const results=await db.batch(statements);
+    if(results.length!==statements.length||results.some(result=>!result.success))throw new Error("NEXELLO_RESULTADO_INDETERMINADO");
+  } catch (error: unknown) {
+    // Network ambiguity or concurrent replay: only the exact committed review
+    // belonging to this actor can be treated as success.
+    const committed=await db.prepare("SELECT usuario_id,hash_conteudo,situacao FROM sincronizacoes_nexello WHERE id=?")
+      .bind(batch.reviewId).first<{usuario_id:string;hash_conteudo:string;situacao:string}>();
+    if(committed?.usuario_id===actor.id&&committed.hash_conteudo===hash&&committed.situacao==="confirmada")
+      return {reviewId:batch.reviewId,replayed:true};
+    throw error;
+  }
   return {reviewId:batch.reviewId,replayed:false};
 }

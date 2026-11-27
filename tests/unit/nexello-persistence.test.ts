@@ -28,6 +28,12 @@ test("new confirmed records, audit and evidence commit together; replay is harml
     const row=await f.DB.prepare("SELECT status,itens,volumes,paletes,carga_batida FROM agendamentos").first();
     assert.deepEqual(row,{status:"aguardando",itens:null,volumes:null,paletes:null,carga_batida:null});
     assert.equal((await f.DB.prepare("SELECT estado_externo FROM agendamento_nexello").first()).estado_externo,"confirmado");
+    const evidence=await f.DB.prepare("SELECT fonte,hash_evidencia,hash_registro FROM nexello_evidencias").first();
+    assert.equal(evidence.fonte,"revisao_admin");
+    assert.equal(evidence.hash_evidencia,"a".repeat(64));
+    assert.match(evidence.hash_registro,/^[0-9a-f]{64}$/);
+    await assert.rejects(f.DB.prepare("UPDATE nexello_evidencias SET hash_evidencia=?").bind("b".repeat(64)).run(),/NEXELLO_EVIDENCIA_IMUTAVEL/);
+    await assert.rejects(f.DB.prepare("DELETE FROM nexello_evidencias").run(),/NEXELLO_EVIDENCIA_IMUTAVEL/);
     const agenda=await f.DB.prepare("SELECT id,versao_importacao FROM agendas").first();
     await f.DB.prepare("UPDATE agendamentos SET status='recebido',observacao='preservar',itens=9").run();
     const next={...base,reviewId:"r2",expectedAgenda:{id:agenda.id,version:agenda.versao_importacao},entries:base.entries.map(r=>({...r,protocol:"123457"}))};
@@ -37,6 +43,7 @@ test("new confirmed records, audit and evidence commit together; replay is harml
     assert.equal(await total(f.DB,"agendamentos"),2);
     await assert.rejects(persistVerifiedNewAppointments(f.DB,actor,{...next,reviewId:"r3"},now));
     assert.equal(await total(f.DB,"sincronizacoes_nexello"),2);
+    assert.equal((await f.DB.prepare("SELECT COUNT(*) AS n FROM nexello_evidencias").first()).n,2);
   }finally{f.close();}
 });
 test("unknown states, missing mapping, stale versions and duplicate protocols do not write",async()=>{
@@ -54,5 +61,15 @@ test("unknown states, missing mapping, stale versions and duplicate protocols do
     await assert.rejects(persistVerifiedNewAppointments(f.DB,actor,{...base,reviewId:"r2",expectedAgenda:{id:agenda.id,version:agenda.versao_importacao},entries:[{...entry,protocol:"999999"},entry]},now));
     assert.equal(await total(f.DB,"agendamentos"),1);assert.equal(await total(f.DB,"sincronizacoes_nexello"),1);
     assert.equal(await total(f.DB,"auditoria"),1);
+  }finally{f.close();}
+});
+
+test("a review ID cannot be reused with different evidence or content",async()=>{
+  const f=fixture();
+  try{
+    await persistVerifiedNewAppointments(f.DB,actor,base,now);
+    await assert.rejects(persistVerifiedNewAppointments(f.DB,actor,{...base,entries:base.entries.map(row=>({...row,evidenceHash:"b".repeat(64)}))},now),/NEXELLO_REVISAO_CONFLITO/);
+    assert.equal(await total(f.DB,"agendamentos"),1);
+    assert.equal((await f.DB.prepare("SELECT COUNT(*) AS n FROM nexello_evidencias").first()).n,1);
   }finally{f.close();}
 });
