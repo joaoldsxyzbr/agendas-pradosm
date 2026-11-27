@@ -1,36 +1,35 @@
-import { test, expect } from "@playwright/test";
+import { z } from "zod";
+import { required, requestBody, type CapturedRequest, type AppointmentFixture } from "./fixtures.ts";
+import { test, expect, type Page } from "@playwright/test";
 
 const admin = { id: "admin-sintetico", nome: "Administrador Teste", papel: "admin" };
 const viewer = { id: "viewer-sintetico", nome: "Visualizador Teste", papel: "visualizador" };
-const uuid = i => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
+const uuid = (i: number) => "00000000-0000-4000-8000-" + String(i).padStart(12, "0");
 
 function buildState() {
+  const appointments: AppointmentFixture[] = [
+      { id: uuid(20), supplier: "Distribuidora Alfa", protocol: "P100", startTime: "08:00", endTime: "10:00", status: "recebido", hasExchanges: false, origin: "imported", observation: null, type: "Nota fiscal", items: 5, volumes: 50, pallets: 1, cargaBatida: "Normal", nfe: ["45427"], orders: ["47121"] },
+      { id: uuid(21), supplier: "Transporte Beta", protocol: "P101", startTime: "10:00", endTime: "12:00", status: "aguardando", hasExchanges: true, origin: "manual", observation: null, type: "Sem agenda", items: null, volumes: null, pallets: null, cargaBatida: null, nfe: [], orders: [] },
+  ];
   return {
     agendas: [
       { id: uuid(10), storeCode: "F01", storeName: "Unidade Central", date: "2026-10-28", dayStatus: "concluido", total: 12, recebido: 10, aguardando: 0, naoChegou: 2, recusado: 0, semAgenda: 0 },
       { id: uuid(11), storeCode: "F02", storeName: "Unidade Sul", date: "2026-10-28", dayStatus: "aberto", total: 5, recebido: 2, aguardando: 3, naoChegou: 0, recusado: 0, semAgenda: 0 },
     ],
-    appointments: [
-      { id: uuid(20), supplier: "Distribuidora Alfa", protocol: "P100", startTime: "08:00", endTime: "10:00", status: "recebido", hasExchanges: false, origin: "imported", observation: null,
-        // Contrato real do Worker: agendamento importado com contadores numéricos.
-        type: "Nota fiscal", items: 5, volumes: 50, pallets: 1, cargaBatida: "Normal", nfe: ["45427"], orders: ["47121"] },
-      { id: uuid(21), supplier: "Transporte Beta", protocol: "P101", startTime: "10:00", endTime: "12:00", status: "aguardando", hasExchanges: true, origin: "manual", observation: null,
-        // Fornecedor manual: contadores e tipo chegam como null — antes quebrava o parse do detalhe.
-        type: "Sem agenda", items: null, volumes: null, pallets: null, cargaBatida: null, nfe: [], orders: [] },
-    ],
+    appointments,
   };
 }
 
-async function setup(page, { role = "admin", conflict = false, listError = false } = {}) {
+async function setup(page: Page, { role = "admin", conflict = false, listError = false } = {}) {
   const current = role === "admin" ? admin : viewer;
   const state = buildState();
-  const requests = [];
+  const requests: CapturedRequest[] = [];
   await page.route("**/api/**", route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     const path = url.pathname;
-    const body = method === "GET" ? null : route.request().postDataJSON();
-    requests.push({ path, method, body, params: url.searchParams });
+    const rawBody = requestBody(route.request());
+    requests.push({ path, method, body: rawBody, params: url.searchParams });
     if (path === "/api/auth/me") return route.fulfill({ json: current });
     if (path === "/api/realtime/config") return route.fulfill({ json: { mode: "off", protocolVersion: 1 } });
     if (path === "/api/admin/presence") return route.fulfill({ json: [] });
@@ -59,11 +58,13 @@ async function setup(page, { role = "admin", conflict = false, listError = false
       return route.fulfill({ json: [{ id: "se-1", appointmentId: uuid(21), statusAnterior: "aguardando", statusNovo: "recebido", observation: null, alteradoEm: "2026-10-28T14:00:00.000Z", usuario: { id: admin.id, nome: admin.nome } }] });
     if (path === `/api/admin/appointments/${uuid(21)}/status` && method === "PATCH") {
       if (conflict) { conflict = false; return route.fulfill({ status: 409, json: { error: "ESTADO_ALTERADO", message: "A agenda mudou desde a consulta. Atualize e tente novamente." } }); }
+      const body = z.object({status:z.string(),observation:z.string().nullable().optional()}).parse(rawBody);
       state.appointments = state.appointments.map(item =>
         item.id === uuid(21) ? { ...item, status: body.status, observation: body.observation ?? null } : item);
       return route.fulfill({ json: state.appointments.find(item => item.id === uuid(21)) });
     }
     if (path === `/api/admin/appointments/${uuid(21)}/exchanges` && method === "PATCH") {
+      const body = z.object({hasExchanges:z.boolean()}).parse(rawBody);
       state.appointments = state.appointments.map(item =>
         item.id === uuid(21) ? { ...item, hasExchanges: Boolean(body.hasExchanges) } : item);
       return route.fulfill({ json: state.appointments.find(item => item.id === uuid(21)) });
@@ -80,7 +81,7 @@ async function setup(page, { role = "admin", conflict = false, listError = false
   return { requests, state };
 }
 
-async function openAgenda(page) {
+async function openAgenda(page: Page) {
   await page.getByRole("combobox", { name: "Loja" }).selectOption("F01");
   await page.getByLabel("Data").fill("2026-10-28");
   await page.getByRole("button", { name: "Filtrar" }).click();
@@ -100,10 +101,10 @@ test("Histórico React consulta somente após filtrar e abre detalhe com eventos
   await expect(detail).toContainText("28/10/2026");
   await expect(detail).toContainText("Dia concluído");
   const query = state.requests.find(r => r.path === "/api/admin/agendas");
-  expect(query.params.get("storeCode")).toBe("F01");
-  expect(query.params.get("date")).toBe("2026-10-28");
-  expect(query.params.get("limit")).toBe("20");
-  expect(query.params.get("offset")).toBe("0");
+  expect(required(query).params.get("storeCode")).toBe("F01");
+  expect(required(query).params.get("date")).toBe("2026-10-28");
+  expect(required(query).params.get("limit")).toBe("20");
+  expect(required(query).params.get("offset")).toBe("0");
 });
 
 test("Histórico React exige motivo para Não recebido antes de gravar", async ({ page }) => {
@@ -121,8 +122,8 @@ test("Histórico React exige motivo para Não recebido antes de gravar", async (
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Status de Transporte Beta" })).toHaveValue("nao_chegou");
   const patch = state.requests.find(r => r.method === "PATCH" && r.path.endsWith("/status"));
-  expect(patch.body.status).toBe("nao_chegou");
-  expect(patch.body.observation).toBe("Não veio");
+  expect(required(required(patch).body).status).toBe("nao_chegou");
+  expect(required(required(patch).body).observation).toBe("Não veio");
 });
 
 test("Histórico React permite cancelar motivo sem gravar e mantém status anterior", async ({ page }) => {
@@ -148,9 +149,9 @@ test("Histórico React altera status direto e marcação de trocas", async ({ pa
   await page.getByRole("checkbox", { name: "Trocas de Transporte Beta" }).click();
   await expect(page.getByRole("checkbox", { name: "Trocas de Transporte Beta" })).not.toBeChecked();
   const statusPatch = state.requests.find(r => r.method === "PATCH" && r.path.endsWith("/status"));
-  expect(statusPatch.body).toEqual({ status: "recebido", observation: null });
+  expect(required(statusPatch).body).toEqual({ status: "recebido", observation: null });
   const exchangesPatch = state.requests.find(r => r.method === "PATCH" && r.path.endsWith("/exchanges"));
-  expect(exchangesPatch.body).toEqual({ hasExchanges: false });
+  expect(required(exchangesPatch).body).toEqual({ hasExchanges: false });
 });
 
 test("Histórico React reabre dia concluído e consulta histórico de status", async ({ page }) => {
@@ -164,11 +165,11 @@ test("Histórico React reabre dia concluído e consulta histórico de status", a
   await expect(detail).toContainText("Em aberto");
   await expect(page.getByRole("button", { name: "Reabrir para conferente" })).toHaveCount(0);
   const reopen = state.requests.find(r => r.method === "PATCH" && r.path === `/api/admin/agendas/${uuid(10)}/status`);
-  expect(reopen.body).toEqual({ status: "aberto" });
+  expect(required(reopen).body).toEqual({ status: "aberto" });
 });
 
 test("Histórico React mostra conflito 409 sem alterar status", async ({ page }) => {
-  const state = await setup(page, { conflict: true });
+  await setup(page, { conflict: true });
   await openAgenda(page);
   await page.getByRole("combobox", { name: "Status de Transporte Beta" }).selectOption("recebido");
   await expect(page.getByRole("alert").filter({ hasText: "A agenda mudou desde a consulta" })).toBeVisible();
@@ -176,7 +177,7 @@ test("Histórico React mostra conflito 409 sem alterar status", async ({ page })
 });
 
 test("Histórico React recupera falha de listagem com tentativa novamente", async ({ page }) => {
-  const state = await setup(page, { listError: true });
+  await setup(page, { listError: true });
   await page.getByRole("button", { name: "Filtrar" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Não foi possível consultar as agendas." })).toBeVisible();
   await page.getByRole("button", { name: "Tentar novamente" }).click();
@@ -191,7 +192,7 @@ test("Histórico React bloqueia visualizador", async ({ page }) => {
 
 test("Histórico React usa cartões no celular sem rolagem horizontal do documento", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const state = await setup(page);
+  await setup(page);
   await expect(page.getByRole("heading", { name: "Histórico", exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Loja" }).selectOption("F01");
   await page.getByLabel("Data").fill("2026-10-28");
@@ -215,7 +216,7 @@ test("Histórico pagina resultados e volta à primeira página após alterar fil
   const state = await setup(page);
   for (let i = 0; i < 43; i++) {
     state.state.agendas.push({
-      ...state.state.agendas[0], id: uuid(100 + i),
+      ...required(state.state.agendas[0]), id: uuid(100 + i),
       date: `2026-09-${String(1 + (i % 28)).padStart(2, "0")}`,
     });
   }
