@@ -1,0 +1,150 @@
+name: Nexello - diagnostico temporario de leitura
+
+on:
+  push:
+    branches: [feat/sincronizacao-manual-agendas-api]
+    paths: ['.github/workflows/nexello-diagnostico.yml']
+
+permissions: {}
+
+jobs:
+  diagnostico:
+    if: github.repository == 'joaoldsxyzbr/agendas-pradosm' && github.ref == 'refs/heads/feat/sincronizacao-manual-agendas-api'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Consultar catalogo e estrutura sem expor dados
+        env:
+          NEXELLO_API_TOKEN: ${{ secrets.NEXELLO_API_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.request
+          import urllib.error
+          import unicodedata
+
+          BASE = "https://integracao-organiza.nexello.com.br/integracao/api/v2/relatorio-personalizado/"
+          token = os.environ.get("NEXELLO_API_TOKEN", "").strip()
+          if not token:
+              sys.exit("Secret NEXELLO_API_TOKEN ausente ou indisponivel.")
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = urllib.request.build_opener(NoRedirect())
+
+          def get(path):
+              req = urllib.request.Request(BASE + path, headers={
+                  "Authorization": "Bearer " + token,
+                  "Accept": "application/json",
+              }, method="GET")
+              try:
+                  with opener.open(req, timeout=20) as response:
+                      raw = response.read(1048577)
+                      if len(raw) > 1048576:
+                          sys.exit("Resposta excedeu o limite de diagnostico.")
+                      return json.loads(raw)
+              except urllib.error.HTTPError as error:
+                  sys.exit("Consulta GET falhou: HTTP " + str(error.code))
+              except Exception:
+                  sys.exit("Falha de transporte ou resposta JSON invalida.")
+
+          from collections import Counter
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          from urllib.parse import urlencode
+          from time import sleep
+
+          # Catalogo completo; somente campos e metadados, nunca valores comerciais.
+          catalog = get("consultas")
+          if not isinstance(catalog, list) or len(catalog) > 12:
+              sys.exit("Catalogo fora do limite previsto.")
+          ids = []
+          for item in catalog:
+              if not isinstance(item, dict):
+                  sys.exit("Catalogo invalido.")
+              ident = str(item.get("id_consulta", ""))
+              if not re.fullmatch(r"[1-9]\d{0,8}", ident):
+                  sys.exit("ID invalido.")
+              ids.append(ident)
+          print("IDs autorizados:", json.dumps(ids))
+          for item in catalog:
+              ident = str(item.get("id_consulta", ""))
+              name = str(item.get("relatorio", "")).casefold()
+              norm = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+              tags = [k for k in ("agend", "situac", "cancel", "pedido", "nota", "receb", "remet", "fornec", "doca", "produto", "diverg", "entidade", "histor") if k in norm]
+              print("Categorias ID", ident, json.dumps(tags))
+          for ident in ids:
+              if ident not in ("40", "46"):
+                  continue
+              sleep(2.1)
+              try:
+                  result = get(ident + "?limit=2&page=1")
+              except SystemExit:
+                  print("Relatorio indisponivel ID", ident)
+                  continue
+              if not isinstance(result, dict) or not isinstance(result.get("data"), list) or len(result["data"]) > 2:
+                  sys.exit("Pagina invalida.")
+              fields = {}
+              for row in result["data"]:
+                  if not isinstance(row, dict):
+                      sys.exit("Linha invalida.")
+                  for k,v in row.items():
+                      if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", k):
+                          fields.setdefault(k, set()).add(type(v).__name__)
+              print("Catalogo ID", ident, json.dumps({
+                  "campos": {k: sorted(v) for k,v in fields.items()},
+                  "total": result.get("total") if type(result.get("total")) is int else None
+              }, ensure_ascii=True))
+
+          # NF-e: somente a rota documentada, dia atual e controle de data distante.
+          # Nenhuma chave, XML, numero, protocolo ou nome e impresso.
+          def get_nfe(day):
+              url = "https://integracao-organiza.nexello.com.br/integracao/api/v2/notas-fiscais/listar?" + urlencode({"data_agendada": day, "page": 1})
+              req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token, "Accept": "application/json"}, method="GET")
+              try:
+                  with opener.open(req, timeout=20) as resp:
+                      raw = resp.read(1048577)
+                      if len(raw) > 1048576:
+                          return {"erro": "limite"}
+                      result = json.loads(raw)
+              except urllib.error.HTTPError as err:
+                  return {"http": err.code}
+              except Exception:
+                  return {"erro": "transporte/json"}
+              if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+                  return {"erro": "formato"}
+              rows = result["data"]
+              if len(rows) > 100 or not all(isinstance(row, dict) for row in rows):
+                  return {"erro": "limite/formato"}
+              def category(v):
+                  if not isinstance(v, str):
+                      return "ausente"
+                  v = "".join(c for c in unicodedata.normalize("NFKD", v.casefold()) if not unicodedata.combining(c))
+                  for label, fragment in (("sem_solicitacao","sem solicita"),("cancelado","cancel"),("reagendado","reagend"),("confirmado","confirm"),("aceito","aceit"),("pendente","penden"),("recusado","recus"),("agendado","agend"),("aguardando","aguard")):
+                      if fragment in v:
+                          return label
+                  return "outro"
+              def matches(v):
+                  if not isinstance(v, str):
+                      return False
+                  return v[:10] == day or v[:10] == datetime.strptime(day,"%Y-%m-%d").strftime("%d/%m/%Y")
+              return {
+                  "total": result.get("total") if type(result.get("total")) is int else None,
+                  "per_page": result.get("per_page") if type(result.get("per_page")) is int else None,
+                  "linhas": len(rows), "datas_coincidentes": sum(matches(r.get("data_agendada")) for r in rows),
+                  "status_nf": dict(Counter(r.get("status") if r.get("status") in ("S","X","C","N") else "outro" for r in rows)),
+                  "situacao_agendamento": dict(Counter(category(r.get("situacao_agendamento")) for r in rows)),
+                  "campo_protocolo": sum("protocolo" in r for r in rows)
+              }
+          today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+          sleep(2.1)
+          print("NFE dia atual:", json.dumps(get_nfe(today.isoformat())))
+          sleep(2.1)
+          print("NFE controle data distante:", json.dumps(get_nfe("1900-01-01")))
+          PY
