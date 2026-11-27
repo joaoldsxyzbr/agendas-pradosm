@@ -7,10 +7,10 @@ import {app} from "../../worker/app.ts";
 import {businessDate} from "../../shared/time.ts";
 
 test("controle de acesso real: criação, escopo, ações, sessão revogada, auditoria",async()=>{
-  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations/",import.meta.url)));
+  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations-v2/",import.meta.url)));
   try{
     const password="teste-local-integracao-123";
-    await local.seed(await buildMockSql(password,new Date(),{access:true}));
+    await local.seed(await buildMockSql(password,new Date(),{access:true,v2:true}));
     const env={DB:local.DB,SESSION_SECRET:"segredo-sintetico-integracao-sem-producao-123456789",REALTIME_MODE:"off",ACCESS_MODE:"on",LOGIN_RATE_LIMITER:{async limit(){return {success:true}}}};
     const origin="http://localhost";
     async function request(path,method="GET",cookie="",body?,storeId?){
@@ -29,25 +29,25 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     }
     const admin=await login("admin.mock");
     assert.equal(admin.user.acessoConfiguravel,true);
-    const old=await login("agendador.mock");
-    assert.equal(old.user.perfil,"agendador");
+    const old=await login("digitador.mock");
+    assert.equal(old.user.perfil,"digitador");
     assert.equal((await request("/api/admin/users","GET",old.cookie)).status,403);
-    const schedulerId=old.user.id;
+    const digitadorId=old.user.id;
     const s1=mockId("store:1"),s2=mockId("store:2"),s3=mockId("store:3");
     const g1=mockId("agenda:"+s1+":"+businessDate()),g3=mockId("agenda:"+s3+":"+businessDate());
     const p1=mockId("appointment:"+g1+":2"),p3=mockId("appointment:"+g3+":2");
-    const access=await request("/api/admin/users/"+schedulerId+"/access","GET",admin.cookie);
+    const access=await request("/api/admin/users/"+digitadorId+"/access","GET",admin.cookie);
     assert.equal(access.status,200);
     const config=await access.json();
-    const edit={profile:"agendador",scope:{mode:"assigned",storeIds:[s1,s2]},overrides:[{permission:"recebimento.editar",effect:"deny"}]};
-    const changed=await request("/api/admin/users/"+schedulerId+"/access","PUT",admin.cookie,{version:config.sessionVersion,access:edit});
+    const edit={profile:"digitador",scope:{mode:"assigned",storeIds:[s1,s2]},overrides:[{permission:"recebimento.editar",effect:"deny"},{permission:"recebimento.concluir",effect:"deny"},{permission:"importacao.substituir",effect:"deny"}]};
+    const changed=await request("/api/admin/users/"+digitadorId+"/access","PUT",admin.cookie,{version:config.sessionVersion,access:edit});
     assert.equal(changed.status,200,await changed.clone().text());
     assert.equal((await request("/api/auth/me","GET",old.cookie)).status,401);
-    const physical=await local.DB.prepare("SELECT ativo FROM usuarios WHERE id=?").bind(schedulerId).first();
+    const physical=await local.DB.prepare("SELECT ativo FROM usuarios WHERE id=?").bind(digitadorId).first();
     assert.equal(physical.ativo,0);
     const legacyEnv={...env,ACCESS_MODE:"off"};
-    assert.equal((await app.request(origin+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login:"agendador.mock",senha:password})},legacyEnv)).status,401);
-    const current=await login("agendador.mock");
+    assert.equal((await app.request(origin+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin},body:JSON.stringify({login:"digitador.mock",senha:password})},legacyEnv)).status,401);
+    const current=await login("digitador.mock");
     assert.deepEqual(current.user.escopo.storeIds,[s1,s2].sort());
     assert.equal(current.user.permissoes.includes("recebimento.editar"),false);
     const list=await request("/api/admin/agendas","GET",current.cookie);
@@ -96,11 +96,11 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
     assert.equal((await request("/api/store/appointments/"+p3,"GET",multi.cookie,undefined,s1)).status,403);
     const manual=mockId("appointment:"+g1+":5");
     assert.equal((await request("/api/store/appointments/"+manual+"/manual","DELETE",multi.cookie,undefined,s1)).status,403);
-    assert.equal((await request("/api/admin/users/"+schedulerId+"/access","PUT",current.cookie,{version:config.sessionVersion+1,access:edit})).status,403);
+    assert.equal((await request("/api/admin/users/"+digitadorId+"/access","PUT",current.cookie,{version:config.sessionVersion+1,access:edit})).status,403);
     assert.equal((await request("/api/admin/users/"+admin.user.id+"/access","PUT",admin.cookie,{version:1,access:edit})).status,409);
-    const audit=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='usuario_acesso_atualizado' AND usuario_id=? AND entidade_id=?").bind(admin.user.id,schedulerId).first();
+    const audit=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='usuario_acesso_atualizado' AND usuario_id=? AND entidade_id=?").bind(admin.user.id,digitadorId).first();
     assert.equal(audit.n,1);
-    const denied=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='acesso_negado' AND usuario_id=?").bind(schedulerId).first();
+    const denied=await local.DB.prepare("SELECT COUNT(*) AS n FROM auditoria WHERE acao='acesso_negado' AND usuario_id=?").bind(digitadorId).first();
     assert.ok(denied.n>0);
     const disabled=await request("/api/admin/users","PATCH",admin.cookie,{id:multi.user.id,ativo:false});
     assert.equal(disabled.status,200,await disabled.clone().text());
@@ -115,13 +115,13 @@ test("controle de acesso real: criação, escopo, ações, sessão revogada, aud
 
 
 test("relatório conta todos os fornecedores sem agenda antes do limite e separa os três tipos de ocorrência",async()=>{
-  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations/",import.meta.url)));
+  const local=openLocalDatabase(":memory:",fileURLToPath(new URL("../../migrations-v2/",import.meta.url)));
   try{
     const now=new Date();
     const day=businessDate(now);
     const start=new Date(Date.parse(day+"T12:00:00Z")-6*86400000).toISOString().slice(0,10);
     const password="teste-local-relatorio-123";
-    local.seed(await buildMockSql(password,now,{access:true}));
+    local.seed(await buildMockSql(password,now,{access:true,v2:true}));
     const env={DB:local.DB,SESSION_SECRET:"segredo-sintetico-relatorio-sem-producao-123456789",REALTIME_MODE:"off",ACCESS_MODE:"on",LOGIN_RATE_LIMITER:{async limit(){return {success:true}}}};
     const origin="http://localhost";
     // 21 registros manuais, cada qual com fornecedor diferente; um foi recusado.

@@ -152,8 +152,8 @@ test("React: sidebar colapsa e persiste o estado entre recarregamentos", async (
 });
 
 
-test("React: agendador personalizado recebe menu autorizado e bloqueio de rota direta", async ({ page }) => {
-  await sessionMocks(page,{...viewer,perfil:"agendador",permissoes:["recebimento.ver","recebimento.editar","agendas.ver","agendas.historico","importacao.ver","relatorios.ver"]});
+test("React: digitador personalizado recebe menu autorizado e bloqueio de rota direta", async ({ page }) => {
+  await sessionMocks(page,{...viewer,perfil:"digitador",permissoes:["recebimento.ver","recebimento.editar","agendas.ver","agendas.historico","importacao.ver","relatorios.ver"]});
   await page.goto("/admin/users");
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("link",{name:"Agendas",exact:true})).toBeVisible();
@@ -169,7 +169,7 @@ test("React: administrador configura perfil, escopo e exceções no cadastro",as
   await page.goto("/admin/users");
   await page.getByRole("button",{name:"Novo usuário"}).click();
   await page.getByLabel("Configurar perfil, lojas e permissões").check();
-  await expect(page.getByLabel("Perfil base")).toHaveValue("agendador");
+  await expect(page.getByLabel("Perfil base")).toHaveValue("digitador");
   await page.getByLabel("Recebimento — Editar",{exact:true}).selectOption("deny");
   await expect(page.getByLabel("Recebimento — Editar",{exact:true})).toHaveValue("deny");
   await page.getByRole("button",{name:"Restaurar permissões do perfil"}).click();

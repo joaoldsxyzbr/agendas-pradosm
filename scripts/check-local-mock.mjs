@@ -73,13 +73,13 @@ try {
     const fast=(login,origin=base)=>fetch(base+"/api/local-mock/login",{method:"POST",headers:{"Content-Type":"application/json",Origin:origin,"X-Agenda-Local-Token":token},body:JSON.stringify({login})});
     assert.equal((await fast("admin.mock","https://example.invalid")).status,403);
     assert.equal((await fast("unknown.mock")).status,400);
-    const scheduler=await fast("agendador.mock");
-    assert.equal(scheduler.status,200);
-    const schedulerUser=await scheduler.json();
-    assert.equal(schedulerUser.perfil,"agendador");
-    const schedulerCookie=scheduler.headers.get("set-cookie")?.split(";")[0];
-    assert.equal((await fetch(base+"/api/admin/agendas",{headers:{Cookie:schedulerCookie}})).status,200);
-    assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:schedulerCookie}})).status,403);
+    const digitador=await fast("digitador.mock");
+    assert.equal(digitador.status,200);
+    const digitadorUser=await digitador.json();
+    assert.equal(digitadorUser.perfil,"digitador");
+    const digitadorCookie=digitador.headers.get("set-cookie")?.split(";")[0];
+    assert.equal((await fetch(base+"/api/admin/agendas",{headers:{Cookie:digitadorCookie}})).status,200);
+    assert.equal((await fetch(base+"/api/admin/users",{headers:{Cookie:digitadorCookie}})).status,403);
     for(const [name,role] of [["admin.mock","admin"],["gerente.mock","visualizador"],["conferente01.mock","conferente"]]){
       const response=await fast(name);
       assert.equal(response.status,200);

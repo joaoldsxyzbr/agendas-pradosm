@@ -1,7 +1,7 @@
 // Catálogo puro de autorização (etapa preparatória da issue #248).
 // Ainda não substitui a autorização vigente; não importar em rotas antes de
 // integrar persistência, escopo por loja e revogação de sessões.
-export const ACCESS_PROFILES = ["admin", "agendador", "digitador", "visualizador", "conferente"] as const;
+export const ACCESS_PROFILES = ["admin", "digitador", "visualizador", "conferente"] as const;
 export type AccessProfile = typeof ACCESS_PROFILES[number];
 
 export const PERMISSIONS = [
@@ -48,12 +48,6 @@ const defaults: Record<AccessProfile, readonly Permission[]> = {
     "agendas.ver", "agendas.editar", "agendas.historico",
     "importacao.ver", "importacao.executar", "importacao.substituir",
     "relatorios.ver", "avisos.ver", "avisos.marcar_lido", "avisos.publicar",
-  ],
-  agendador: [
-    "recebimento.ver", "recebimento.editar", "recebimento.manual.criar",
-    "recebimento.manual.editar", "agendas.ver", "agendas.editar",
-    "agendas.historico", "importacao.ver", "importacao.executar",
-    "relatorios.ver", "avisos.ver", "avisos.marcar_lido",
   ],
   visualizador: ["recebimento.ver", "relatorios.ver", "avisos.ver", "avisos.marcar_lido"],
   conferente: [

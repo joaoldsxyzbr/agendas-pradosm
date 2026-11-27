@@ -19,7 +19,7 @@ export function decodeAccess(row: {
   if(row.ativo_efetivo!==undefined&&row.ativo_efetivo!==0&&row.ativo_efetivo!==1)return null;
   const customized=row.perfil!==null;
   const profile=customized?row.perfil:row.papel;
-  if(!isAccessProfile(profile)||(!customized&&(profile==="agendador"||profile==="digitador")))return null;
+  if(!isAccessProfile(profile)||(!customized&&profile==="digitador"))return null;
   let scope:StoreScope;
   let overrides:PermissionOverride[]=[];
   if(!customized){

@@ -31,14 +31,14 @@ test("Digitador V2: acesso operacional, bloqueio de administração, sessão e N
     }
     const admin = await login("admin.mock");
     const digitador = await login("digitador.mock");
-    const scheduler = await login("agendador.mock");
+    const viewer = await login("gerente.mock");
     assert.equal(digitador.user.perfil, "digitador");
     assert.deepEqual(digitador.user.escopo, { mode: "all" });
     const day = businessDate();
     for (const path of ["/api/admin/agendas", "/api/admin/stores", "/api/admin/reports?start="+day+"&end="+day, "/api/admin/nexello/config"])
       assert.equal((await request(path, "GET", digitador.cookie)).status, 200, path);
     assert.equal((await request("/api/admin/nexello/config", "GET", admin.cookie)).status, 200);
-    assert.equal((await request("/api/admin/nexello/config", "GET", scheduler.cookie)).status, 403);
+    assert.equal((await request("/api/admin/nexello/config", "GET", viewer.cookie)).status, 403);
     assert.equal((await request("/api/admin/nexello/pages/1", "POST", digitador.cookie)).status, 503);
     const store = mockId("store:1");
     for (const [method,path] of [

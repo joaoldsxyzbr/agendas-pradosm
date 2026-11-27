@@ -124,7 +124,7 @@ function UserDialog({ user, stores, onClose }: { user: AdminUser | null; stores:
         {!form.access&&form.papel === "conferente"&&!user?.acessoPersonalizado &&
           <StoreSelect form={form} setForm={setForm} stores={stores} editing={Boolean(user)} />}
       </div>
-      {!user&&configurable&&<label className="flex items-center gap-2 text-xs text-slate-200"><input type="checkbox" checked={!!form.access} onChange={event=>setForm(v=>({...v,access:event.target.checked?{profile:"agendador",scope:{mode:"all"},overrides:[]}:undefined}))}/>Configurar perfil, lojas e permissões</label>}
+      {!user&&configurable&&<label className="flex items-center gap-2 text-xs text-slate-200"><input type="checkbox" checked={!!form.access} onChange={event=>setForm(v=>({...v,access:event.target.checked?{profile:"digitador",scope:{mode:"all"},overrides:[]}:undefined}))}/>Configurar perfil, lojas e permissões</label>}
       {form.access&&<AccessEditor value={form.access} stores={stores} disabled={busy} onChange={access=>setForm(v=>({...v,access}))}/>}
       {save.isError && <p role="alert" className="text-xs text-rose-300">{errorText(save.error)}</p>}
       <div className="flex flex-wrap justify-end gap-2">
@@ -218,7 +218,7 @@ export function UsersPage() {
           <select aria-label="Filtrar por papel" value={role}
             onChange={event => setRole(event.target.value as typeof role)} className={input + " max-w-[170px]"}>
             <option value="todos">Todos os papéis</option>
-            {session?.acessoConfiguravel&&<><option value="agendador">Agendador</option><option value="digitador">Digitador</option></>}
+            {session?.acessoConfiguravel&&<option value="digitador">Digitador</option>}
             <option value="admin">Administrador</option>
             <option value="conferente">Conferente</option>
             <option value="visualizador">Visualizador</option>

@@ -2,20 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ACCESS_PROFILES, PERMISSIONS, resolvePermissions, hasPermission, canAccessStore } from "../../shared/permissions.ts";
 
-test("catálogo único, cinco perfis e administrador completo", () => {
+test("catálogo único, quatro perfis e administrador completo", () => {
   assert.equal(new Set(PERMISSIONS).size, PERMISSIONS.length);
-  assert.equal(ACCESS_PROFILES.length, 5);
+  assert.equal(ACCESS_PROFILES.length, 4);
   assert.deepEqual([...resolvePermissions("admin")], [...PERMISSIONS]);
-});
-
-test("agendador tem operação e importação, sem administração ou ações sensíveis padrão", () => {
-  const access = resolvePermissions("agendador");
-  for (const p of ["recebimento.ver", "recebimento.editar", "agendas.ver", "agendas.editar", "relatorios.ver", "importacao.executar"]) {
-    assert.equal(hasPermission(access, p), true, p);
-  }
-  for (const p of ["lojas.ver", "usuarios.ver", "usuarios.permissoes", "auditoria.ver", "diagnosticos.ver", "recebimento.manual.excluir", "recebimento.reabrir", "importacao.substituir"]) {
-    assert.equal(hasPermission(access, p), false, p);
-  }
 });
 
 test("visualizador não grava negócios; marcar próprios avisos continua permitido", () => {
@@ -38,18 +28,18 @@ test("conferente conserva operações da conferência e não ganha painel global
 });
 
 test("exceções são individuais, reversíveis e negação retira a ação padrão", () => {
-  const access = resolvePermissions("agendador", [
+  const access = resolvePermissions("digitador", [
     { permission: "recebimento.editar", effect: "deny" },
-    { permission: "recebimento.manual.excluir", effect: "allow" },
+    { permission: "recebimento.manual.excluir", effect: "deny" },
   ]);
   assert.equal(hasPermission(access, "recebimento.editar"), false);
-  assert.equal(hasPermission(access, "recebimento.manual.excluir"), true);
-  assert.equal(hasPermission(resolvePermissions("agendador"), "recebimento.editar"), true);
-  assert.equal(hasPermission(resolvePermissions("agendador"), "recebimento.manual.excluir"), false);
+  assert.equal(hasPermission(access, "recebimento.manual.excluir"), false);
+  assert.equal(hasPermission(resolvePermissions("digitador"), "recebimento.editar"), true);
+  assert.equal(hasPermission(resolvePermissions("digitador"), "recebimento.manual.excluir"), true);
 });
 
 test("sem visualização não há ações dependentes", () => {
-  const access = resolvePermissions("agendador", [{ permission: "recebimento.ver", effect: "deny" }]);
+  const access = resolvePermissions("digitador", [{ permission: "recebimento.ver", effect: "deny" }]);
   assert.equal(hasPermission(access, "recebimento.editar"), false);
   assert.equal(hasPermission(access, "recebimento.manual.criar"), false);
   assert.equal(hasPermission(access, "agendas.editar"), true);
@@ -61,6 +51,7 @@ test("sem visualização não há ações dependentes", () => {
 
 test("perfil, permissões ou overrides inválidos falham fechados", () => {
   assert.equal(resolvePermissions("constructor"), null);
+  assert.equal(resolvePermissions("agendador"), null);
   assert.equal(resolvePermissions("admin", null), null);
   assert.equal(resolvePermissions("admin", [{ permission: "inexistente", effect: "allow" }]), null);
   assert.equal(resolvePermissions("admin", [{ permission: "lojas.ver", effect: true }]), null);

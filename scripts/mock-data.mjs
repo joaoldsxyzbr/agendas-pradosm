@@ -6,7 +6,6 @@ import { hashPassword } from "../worker/lib/password.ts";
 export const MOCK_ACCOUNTS = Object.freeze([
   { login: "admin.mock", name: "Administrador de teste", role: "admin", store: null },
   { login: "digitador.mock", name: "Digitador de teste", role: "visualizador", profile: "digitador", store: null },
-  { login: "agendador.mock", name: "Agendador de teste", role: "visualizador", profile: "agendador", store: null },
   { login: "gerente.mock", name: "Gerente de depósito de teste", role: "visualizador", store: null },
   { login: "conferente01.mock", name: "Conferente 01 de teste", role: "conferente", store: 1 },
   { login: "conferente02.mock", name: "Conferente 02 de teste", role: "conferente", store: 2 },

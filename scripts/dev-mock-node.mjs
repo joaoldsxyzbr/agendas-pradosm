@@ -61,7 +61,7 @@ else{
   // Somente este servidor Node (loopback) possui estes endpoints. Não fazem parte do Worker.
   const quickAccounts=MOCK_ACCOUNTS.map(account=>({
     login:account.login,
-    label:account.profile==="digitador"?"Digitador":account.profile==="agendador"?"Agendador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
+    label:account.profile==="digitador"?"Digitador":account.role==="admin"?"Administrador":account.role==="visualizador"?"Visualizador — Gerente":"Conferente — F90"+account.store
   }));
   function validQuickToken(request){
     const token=request.headers.get("x-agenda-local-token")??"";
