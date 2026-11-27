@@ -1,11 +1,11 @@
 # Sincronização manual de agendas via API
 
-Status: proposta em desenvolvimento; implementação bloqueada pela leitura do contrato externo.
+Status: descoberta autenticada concluída; contrato funcional do relatório ainda em validação. Implementação de escrita bloqueada até os critérios de entrada da fase 2.
 
 ## Objetivo e escopo
 Permitir ao administrador consultar a plataforma de origem a partir da tela de importação, escolher data/lojas, revisar inclusões, alterações e cancelamentos e confirmar a gravação. Manter CSV/PDF como contingência. Não adicionar cron, R2, dependências ou serviços pagos. TypeScript estrito, validação Zod e infraestrutura existente.
 
-Referência: https://documenter.getpostman.com/view/10499406/2s9YXmZ1E7 (API v2 - Integração de Clientes). Em 2026-11-27, a página retornou título, mas não expôs o conteúdo dos endpoints à ferramenta de leitura. Não há contrato validado nem teste autenticado. Solicitar coleção Postman JSON sanitizada ou documentação equivalente.
+Referência: https://documenter.getpostman.com/view/10499406/2s9YXmZ1E7 (API v2 - Integração de Clientes). Coleção Postman v2.1 recebida e analisada. Diagnóstico autenticado em 2026-11-27: https://github.com/joaoldsxyzbr/agendas-pradosm/actions/runs/45992407786 (sucesso). Nenhuma credencial ou valor comercial foi registrado.
 
 ## 1. Descoberta obrigatória antes de implementar
 - Identificar endpoint(s) de consulta, método HTTP, host oficial, autenticação, expiração/renovação, escopos de leitura, limites e condições comerciais.
@@ -45,4 +45,44 @@ O repositório atual inativa registros importados ausentes em uma substituição
 ## 5. Operação e reversão
 Documentar configuração de Secrets sem valores, erros seguros, forma de desativar a integração e contingência CSV/PDF. Preferir nenhuma migração de banco se o contrato permitir; qualquer migração deve ser justificada, aditiva e revisada. A implantação inicial não deve ativar sincronização automática nem remover a funcionalidade atual.
 
-Esta revisão inicial é documental: nenhum código executável, configuração de produção ou banco foi alterado.
+A branch contém também um workflow temporário de diagnóstico, limitado a GET no host oficial e à própria branch. Removê-lo antes do merge; não é parte da integração de produção. Nenhum código da aplicação, configuração de produção ou banco foi alterado.
+
+
+## 6. Descoberta autenticada e decisão arquitetural (27/11/2026)
+
+Base HTTPS oficial: https://integracao-organiza.nexello.com.br/integracao/api/v2/relatorio-personalizado/
+GET consultas lista os relatórios autorizados; GET {id}?limit=2&page=1 foi confirmado com o Secret NEXELLO_API_TOKEN do GitHub. Limite documentado 30 requisições/minuto; paginação padrão 100. Catálogo com oito relatórios, cinco candidatos. Totais abaixo são metadados observados nesse instante, não contagens verificadas de todo o histórico.
+
+| ID | Total informado | Campos relevantes observados (amostra de 2) |
+| --- | ---: | --- |
+| 1 | 227990 | data_agenda_inicio, data_agenda_fim, doca, entidade_remetente, filial |
+| 27 | 2311 | data, agendamentos_do_dia, presentes, ausentes, itens, volumes, paletes |
+| 30 | 36935 | agendado_para_inicio, agendado_para_fim, fornecedor, filial, cnpj_cpf_fornecedor, comparecimento, numero_pedidos, qtd_itens, qtd_volumes, paletes |
+| 57 | 1390 | dia, filial, cancelados_cliente, cancelados_fornecedor, total_agendamentos, presentes, ausentes |
+| 60 | 1027 | protocolo, data_agenda_inicio, hora_agendada, filial_entrega, fornecedor, fornecedores, cnpj_fornecedores, codigo_fornecedor, nfe_numeros, numero_pedido, tipo, transportadora |
+
+**Candidato principal: relatório 60**, por oferecer protocolo e documentos. Não assumir unicidade global, granularidade por protocolo, cobertura de todas as lojas, período ou status. Os relatórios 1 e 30 não demonstraram protocolo na amostra: não fazer junção aproximada por fornecedor/horário. Se necessário, solicitar à Nexello um único relatório completo com protocolo e os campos que faltam. ID configurável no Worker, validado por catálogo/contrato na implantação.
+
+### Mapeamento preliminar (não é contrato final)
+- protocolo -> protocol: converter inteiro seguro para string, verificar correspondência exata com CSV e regra atual de 6–20 dígitos; preservar zeros se fornecidos em texto.
+- filial_entrega -> storeCode: testar formatos e correspondência exata, incluindo CD DOCA; não adivinhar filial nem criar lojas automaticamente.
+- data_agenda_inicio e hora_agendada -> date/startTime: verificar formatos e fuso de negócio, sem inferir horário final.
+- fornecedor/fornecedores -> supplier: confirmar granularidade e seleção correta (inclusive múltiplos fornecedores).
+- nfe_numeros, numero_pedido -> nfe/orders: confirmar separadores, nulidade e preservação de zeros.
+- tipo -> type: mapear somente valores comprovados para os quatro tipos aceitos pelo schema.
+- Lacunas: endTime é obrigatório e deve ser posterior a startTime; relatório 60 não mostrou fim explícito. Itens, volumes, paletes e carga batida são nullable mas não podem ser preenchidos com zero fictício nem sobrescrever dados conhecidos por ausência de campo. Doca e situação/cancelamento não demonstrados. Confirmar formato de hora_agendada (pode conter intervalo, mas não foi inspecionado). Buscar paridade com CSV antes de ativar importação.
+- Se o relatório não oferecer campos suficientes, pedir ajuste ao fornecedor; não alterar schema de produção para mascarar incompatibilidade.
+
+### Fases e critérios de entrada/saída
+1. **Contrato (próximo lote)** — diagnóstico somente leitura, limitado e sanitizado: verificar formatos sem imprimir valores reais, cardinalidade de protocolos e documentos, cobertura por filial/data, horário final, docas, quantidades, tipo, estado/cancelamentos/remarcações. Confirmar com Nexello nomes exatos dos filtros server-side, ordenação estável/paginação, semântica de ausência, escopo do token, homologação e custo. Não supor que parâmetros desconhecidos são aplicados: filtro ignorado deve ser detectável. Comparar com fixture CSV sanitizada ou comparação local autorizada de um mesmo dia. Sem filtro confirmado, não varrer histórico; eventual snapshot pequeno e limitado exige decisão explícita e prova de completude. Não usar os totais atuais como limite contratual.
+2. **Cliente e normalização (sem escrita)** — implementação TS estrita no Worker; host fixo HTTPS, sem redirecionamentos, timeout, tamanho máximo, paginação limitada e validação de consistência. Não registrar payload/token. Respeitar 30/min e limites Cloudflare; erro explícito para 429/401/403/5xx, sem repetição ilimitada. Testes com fixtures fictícias. Saída compatível com ImportAgendaBatchInput. Não duplicar parser de CSV.
+3. **Prévia e confirmação** — na tela Importação, data e loja/todas, botão Sincronizar agendas, resumo de novos, alterações, iguais, conflitos e avisos. Proposta: confirmação curta vinculada à sessão, ao conteúdo validado e às versões locais; se necessário reconsultar a fonte e comparar o conteúdo. Verificar concorrência na própria operação atômica, inclusive criação simultânea. Não aceitar alteração de payload pelo cliente. Na primeira versão, não inativar automaticamente registros ausentes; cancelamento/remarcação ficam bloqueados para revisão enquanto contrato não demonstrar semântica. Sem gravação parcial silenciosa.
+4. **Persistência e regressão** — serviço compartilhado com importação atual onde apropriado; atualização por identidade estável dentro de loja/data, preservar IDs, status/observações/trocas/conferência, registros manuais e campos locais; atualizar somente campos autoritativos da fonte. No-op real se não mudou. Validar limites atuais de 50 agendas/lote, 500 agendamentos/agenda, 700/lote e orçamento de 800 statements, além dos limites reais do plano. Se não couber, rejeitar operação e orientar seleção menor; não adicionar serviços pagos. Testes concorrentes, falhas de página e transação, remarcação, campos ausentes, duplicidade, atualização realtime pós-commit, CSV/PDF inalterados.
+5. **Entrega** — ativação opcional por configuração de servidor; Secret do GitHub serve exclusivamente ao diagnóstico, configurar Secret separado no Worker para produção pelo responsável. Não exigir segredo novo dos ambientes sem integração. Remover workflow de diagnóstico antes do merge. Reconciliar com hardening #257; CI completo, revisão do diff e autorização explícita para merge. Documentar rollback por desativação da função e manutenção dos arquivos manuais.
+
+### Status dos marcos
+- [x] Coleção Postman analisada.
+- [x] Autenticação e leitura reais confirmadas.
+- [x] Relatórios candidatos identificados; ID 60 priorizado.
+- [ ] Contrato efetivo, paridade e filtro de data/filial confirmados.
+- [ ] Implementação, testes, CI da entrega, revisão e autorização de merge.
