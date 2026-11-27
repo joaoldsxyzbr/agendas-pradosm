@@ -1,0 +1,81 @@
+import type { NexelloPreviewPage, NexelloPreviewRow, NexelloComparison } from "../../shared/nexello-preview.ts";
+import { normalizeStoreCode } from "../../shared/store.ts";
+
+type Observed = Extract<NexelloPreviewRow, { kind: "observed" }>;
+export interface ComparisonLocalRow {
+  protocolo: string;
+  data_agenda: string;
+  codigo: string;
+  horario_inicio: string;
+  horario_fim: string;
+  fornecedor: string;
+  tipo: string | null;
+  nfe: string;
+  pedidos: string;
+  origem: string;
+  ativo: number;
+  status: string;
+  status_dia: string;
+}
+function documentKey(values: readonly string[]): string {
+  return JSON.stringify([...new Set(values)].sort());
+}
+function localDocumentKey(value: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((v: unknown) => typeof v === "string") ? documentKey(parsed) : null;
+  } catch { return null; }
+}
+function sourceKey(row: Observed): string {
+  return JSON.stringify([row.date,row.storeCode,row.startTime,row.endTime,row.supplier,row.type,documentKey(row.nfe),documentKey(row.orders)]);
+}
+function matches(row: Observed, local: ComparisonLocalRow): boolean {
+  return row.date === local.data_agenda && row.storeCode === normalizeStoreCode(local.codigo) &&
+    row.startTime === local.horario_inicio && row.endTime === local.horario_fim &&
+    row.supplier === local.fornecedor.replace(/\s+/g," ").trim() && row.type === local.tipo &&
+    documentKey(row.nfe) === localDocumentKey(local.nfe) && documentKey(row.orders) === localDocumentKey(local.pedidos);
+}
+/** Comparison of a single page, not a lifecycle decision or proof of identity. */
+export function compareObservedRows(rows: readonly NexelloPreviewRow[], local: readonly ComparisonLocalRow[]): NexelloPreviewRow[] {
+  const fingerprints = new Map<string, Set<string>>();
+  const byProtocol = new Map<string, ComparisonLocalRow[]>();
+  for (const row of rows) if (row.kind === "observed") {
+    const set = fingerprints.get(row.protocol) ?? new Set<string>();
+    set.add(sourceKey(row));
+    fingerprints.set(row.protocol,set);
+  }
+  for (const row of local) {
+    const list = byProtocol.get(row.protocolo) ?? [];
+    list.push(row);
+    byProtocol.set(row.protocolo,list);
+  }
+  return rows.map(row => {
+    if (row.kind !== "observed") return row;
+    const candidates = byProtocol.get(row.protocol) ?? [];
+    const candidate = candidates[0];
+    let comparison: NexelloComparison;
+    if ((fingerprints.get(row.protocol)?.size ?? 0) > 1) comparison = "duplicate_conflict";
+    else if (row.storeCode === null) comparison = "unresolved_store";
+    else if (candidates.length > 1) comparison = "multiple_local";
+    else if (!candidate) comparison = "not_found";
+    else if (candidate.origem !== "importado" || candidate.ativo !== 1 ||
+      candidate.status !== "aguardando" || candidate.status_dia !== "aberto") comparison = "protected_local";
+    else comparison = matches(row,candidate) ? "same_fields" : "different_fields";
+    return { ...row, comparison };
+  });
+}
+/** Fixed query, at most 100 bind parameters; no writes, no partial results. */
+export async function compareNexelloPage(db: D1Database, page: NexelloPreviewPage): Promise<NexelloPreviewPage> {
+  const protocols = [...new Set(page.rows.flatMap(row => row.kind === "observed" ? [row.protocol] : []))];
+  if (!protocols.length) return page;
+  if (protocols.length > 100) throw new Error("NEXELLO_COMPARACAO_LIMITE");
+  const result = await db.prepare(`
+    SELECT p.protocolo,a.data_agenda,l.codigo,p.horario_inicio,p.horario_fim,
+      p.fornecedor,p.tipo,p.nfe,p.pedidos,p.origem,p.ativo,p.status,a.status_dia
+    FROM agendamentos p JOIN agendas a ON a.id=p.agenda_id JOIN lojas l ON l.id=a.loja_id
+    WHERE p.protocolo IN (${protocols.map(() => "?").join(",")})
+    LIMIT 501
+  `).bind(...protocols).all<ComparisonLocalRow>();
+  if (!result.success || result.results.length > 500) throw new Error("NEXELLO_COMPARACAO_LIMITE");
+  return { ...page, rows: compareObservedRows(page.rows,result.results) };
+}

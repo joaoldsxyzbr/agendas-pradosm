@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { compareNexelloPage } from "../services/nexello-comparison.ts";
 import type { AppEnv, Env } from "../env.ts";
 import { readNexelloReportPage, NexelloReportError } from "../services/nexello-report.ts";
 import { normalizeNexelloAppointment, NexelloNormalizationError } from "../services/nexello-agenda.ts";
@@ -57,7 +58,8 @@ adminNexelloRoutes.post("/pages/:page", async c => {
   try {
     const limit = await limiter.limit({ key: "nexello-report-60" });
     if (!limit.success) return c.json({ error: "NEXELLO_LIMITE", message: "Limite de consultas atingido. Tente novamente mais tarde." }, 429);
-    return c.json(await getNexelloPreviewPage(token, Number(raw)));
+    const page = await getNexelloPreviewPage(token, Number(raw));
+    return c.json(await compareNexelloPage(c.env.DB, page));
   } catch (error: unknown) {
     if (error instanceof NexelloReportError && error.status === 429) {
       return c.json({ error: "NEXELLO_LIMITE", message: "A Nexello limitou as consultas. Tente novamente mais tarde." }, 429);

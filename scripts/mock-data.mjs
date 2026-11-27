@@ -52,7 +52,7 @@ export async function buildMockSql(password, now = new Date(), options = {}) {
   const stores = [1, 2, 3].map(i => ({ id: mockId("store:"+i), codigo: "F90"+i,
     nome: "Loja fictícia 0"+i, ativo: 1, criado_em: stamp, atualizado_em: stamp }));
   for (const store of stores) rows.push(insert("lojas",store));
-  for (const user of MOCK_ACCOUNTS.filter(u=>!u.profile||(options.access&&(u.profile!=="digitador"||options.v2)))) {
+  for (const user of MOCK_ACCOUNTS.filter(u=>!u.profile||(options.access&&options.v2))) {
     const id = mockId("user:"+user.login);
     const lojaId = user.store ? stores[user.store-1].id : null;
     rows.push(insert("usuarios",{id,loja_id:lojaId,nome:user.name,login:user.login,

@@ -28,8 +28,10 @@ test("V2 starts empty, preserves V1 tables/columns/constraints and supports the 
       }
     }
     assert.equal(v2.prepare("SELECT COUNT(*) AS n FROM usuarios").get()?.n, 0);
-    v2.exec(await buildMockSql("senha-ficticia-longa-e-exclusiva", new Date("2026-11-27T15:00:00Z"), {access:true}));
+    v2.exec(await buildMockSql("senha-ficticia-longa-e-exclusiva", new Date("2026-11-27T15:00:00Z"), {access:true,v2:true}));
     assert.equal(v2.prepare("SELECT COUNT(*) AS n FROM agendamentos").get()?.n, 126);
+    assert.equal(v2.prepare("SELECT COUNT(*) AS n FROM usuario_acesso WHERE perfil='digitador'").get()?.n, 1);
+    assert.throws(() => v2.exec("UPDATE usuario_acesso SET perfil='agendador' WHERE perfil='digitador'"), /CHECK constraint/);
     assert.equal(v2.prepare("PRAGMA integrity_check").get()?.integrity_check, "ok");
     assert.deepEqual(v2.prepare("PRAGMA foreign_key_check").all(), []);
   } finally { legacy.close(); v2.close(); }
