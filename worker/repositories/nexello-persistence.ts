@@ -34,6 +34,83 @@ async function sha256(value:unknown):Promise<string>{
 function canonicalDocs(values:string[]):string[]{return [...new Set(values)].sort();}
 function denied():never{throw new Error("NEXELLO_AUTORIDADE_INVALIDA");}
 
+const REVIEW_TTL_MS=10*60*1000;
+async function requireActor(db:D1Database,actor:NexelloActor):Promise<void>{
+  if(!Number.isSafeInteger(actor.sessionVersion)||actor.sessionVersion<1)denied();
+  const access=await findEffectiveAccess(db,actor.id);
+  if(!access||!access.active||access.sessionVersion!==actor.sessionVersion||access.scope.mode!=="all"||
+     !access.permissions.has("importacao.ver")||!access.permissions.has("importacao.executar")||
+     !((access.profile==="admin"&&!access.customized)||(access.profile==="digitador"&&access.customized)))denied();
+}
+async function canonicalBatch(batch:z.output<typeof Batch>){
+  const entries=batch.entries.map(row=>({...row,nfe:canonicalDocs(row.nfe),orders:canonicalDocs(row.orders)}))
+    .sort((a,b)=>a.protocol.localeCompare(b.protocol));
+  const hash=await sha256([batch.storeId,batch.externalCode,batch.date,batch.expectedAgenda,entries]);
+  return {entries,hash};
+}
+
+type PendingReview={usuario_id:string;versao_sessao:number;hash_conteudo:string;conteudo:string;expira_em:string};
+async function readPending(db:D1Database,id:string):Promise<PendingReview|null>{
+  return db.prepare("SELECT usuario_id,versao_sessao,hash_conteudo,conteudo,expira_em FROM nexello_revisoes_pendentes WHERE id=?")
+    .bind(id).first<PendingReview>();
+}
+
+/** Internal only. Caller must obtain and verify evidence on the server.
+ * Generate a fresh identifier, capture the current agenda version, and
+ * persist normalized fields, not raw files or tokens. */
+export async function prepareVerifiedReview(db:D1Database,actor:NexelloActor,
+  input:Omit<VerifiedNewBatch,"reviewId"|"expectedAgenda">,now=new Date()){
+  await requireActor(db,actor);
+  const agenda=await db.prepare("SELECT id,versao_importacao,status_dia FROM agendas WHERE loja_id=? AND data_agenda=?")
+    .bind(input.storeId,input.date).first<{id:string;versao_importacao:number;status_dia:string}>();
+  if(agenda&&agenda.status_dia!=="aberto")throw new Error("NEXELLO_DATA_ENCERRADA");
+  const batch=Batch.parse({...input,reviewId:crypto.randomUUID(),expectedAgenda:agenda?{id:agenda.id,version:agenda.versao_importacao}:null});
+  if(batch.date<businessDate(now))throw new Error("NEXELLO_DATA_ENCERRADA");
+  const mapping=await db.prepare("SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.ativo=1 AND l.excluido_em IS NULL")
+    .bind(batch.externalCode,batch.storeId).first();
+  if(!mapping)throw new Error("NEXELLO_DESTINO_INVALIDO");
+  const {entries,hash}=await canonicalBatch(batch);
+  const payload=JSON.stringify({...batch,entries});
+  const expiresAt=new Date(now.getTime()+REVIEW_TTL_MS).toISOString();
+  const result=await db.prepare("INSERT INTO nexello_revisoes_pendentes(id,usuario_id,versao_sessao,hash_conteudo,conteudo,criado_em,expira_em) VALUES(?,?,?,?,?,?,?)")
+    .bind(batch.reviewId,actor.id,actor.sessionVersion,hash,payload,now.toISOString(),expiresAt).run();
+  if(!result.success||result.meta?.changes!==1)throw new Error("NEXELLO_REVISAO_FALHOU");
+  return {reviewId:batch.reviewId,expiresAt,hash,entryCount:entries.length,storeId:batch.storeId,date:batch.date,entries};
+}
+
+/** The browser must never supply the batch or assert its own evidence. */
+export async function confirmPreparedReview(db:D1Database,actor:NexelloActor,reviewId:string,expectedHash:string,now=new Date()){
+  Id.parse(reviewId);Hash.parse(expectedHash);
+  await requireActor(db,actor);
+  const draft=await readPending(db,reviewId);
+  if(!draft){
+    const done=await db.prepare("SELECT usuario_id,hash_conteudo,situacao FROM sincronizacoes_nexello WHERE id=?")
+      .bind(reviewId).first<{usuario_id:string;hash_conteudo:string;situacao:string}>();
+    if(done?.usuario_id===actor.id&&done.hash_conteudo===expectedHash&&done.situacao==="confirmada")
+      return {reviewId,replayed:true};
+    throw new Error("NEXELLO_REVISAO_INDISPONIVEL");
+  }
+  if(draft.usuario_id!==actor.id||draft.versao_sessao!==actor.sessionVersion||
+    draft.expira_em<=now.toISOString()||draft.hash_conteudo!==expectedHash)
+    throw new Error("NEXELLO_REVISAO_INDISPONIVEL");
+  const batch=Batch.parse(JSON.parse(draft.conteudo) as unknown);
+  if(batch.reviewId!==reviewId||(await canonicalBatch(batch)).hash!==expectedHash)
+    throw new Error("NEXELLO_REVISAO_CONFLITO");
+  return persistVerifiedNewAppointments(db,actor,batch,now);
+}
+export async function cancelPreparedReview(db:D1Database,actor:NexelloActor,reviewId:string):Promise<boolean>{
+  Id.parse(reviewId);await requireActor(db,actor);
+  const result=await db.prepare("DELETE FROM nexello_revisoes_pendentes WHERE id=? AND usuario_id=? AND versao_sessao=?")
+    .bind(reviewId,actor.id,actor.sessionVersion).run();
+  if(!result.success)throw new Error("NEXELLO_REVISAO_FALHOU");
+  return result.meta?.changes===1;
+}
+export async function pruneExpiredNexelloReviews(db:D1Database,now=new Date()):Promise<void>{
+  const result=await db.prepare("DELETE FROM nexello_revisoes_pendentes WHERE id IN (SELECT id FROM nexello_revisoes_pendentes WHERE expira_em<=? ORDER BY expira_em LIMIT 100)")
+    .bind(now.toISOString()).run();
+  if(!result.success)throw new Error("NEXELLO_REVISAO_FALHOU");
+}
+
 /**
  * Internal persistence primitive, intentionally NOT connected to HTTP.
  * Only call after the server has verified the state evidence and review
@@ -41,18 +118,12 @@ function denied():never{throw new Error("NEXELLO_AUTORIDADE_INVALIDA");}
  * One store/day, new occurrences only. No inferred approval or CD routing.
  * No replacement, reactivation, move, cancellation or update of existing rows.
  */
-export async function persistVerifiedNewAppointments(
+async function persistVerifiedNewAppointments(
   db:D1Database,actor:NexelloActor,input:VerifiedNewBatch,now=new Date(),
 ):Promise<{reviewId:string;replayed:boolean}>{
   const batch=Batch.parse(input);
-  if(!Number.isSafeInteger(actor.sessionVersion)||actor.sessionVersion<1)denied();
-  const access=await findEffectiveAccess(db,actor.id);
-  if(!access||!access.active||access.sessionVersion!==actor.sessionVersion||access.scope.mode!=="all"||
-     !access.permissions.has("importacao.ver")||!access.permissions.has("importacao.executar")||
-     !((access.profile==="admin"&&!access.customized)||(access.profile==="digitador"&&access.customized)))denied();
-  const entries=batch.entries.map(row=>({...row,nfe:canonicalDocs(row.nfe),orders:canonicalDocs(row.orders)}))
-    .sort((a,b)=>a.protocol.localeCompare(b.protocol));
-  const hash=await sha256([batch.storeId,batch.externalCode,batch.date,batch.expectedAgenda,entries]);
+  await requireActor(db,actor);
+  const {entries,hash}=await canonicalBatch(batch);
   const previous=await db.prepare("SELECT usuario_id,hash_conteudo,situacao FROM sincronizacoes_nexello WHERE id=?")
     .bind(batch.reviewId).first<{usuario_id:string;hash_conteudo:string;situacao:string}>();
   if(previous){
@@ -79,8 +150,9 @@ export async function persistVerifiedNewAppointments(
       ) AND EXISTS(
         SELECT 1 FROM nexello_destinos d JOIN lojas l ON l.id=d.loja_id
         WHERE d.filial_externa=? AND d.doca_externa='' AND l.id=? AND l.ativo=1 AND l.excluido_em IS NULL
-      ) THEN ? ELSE NULL END,?,?,?,?,'confirmada',?,?,0,?,?)
-    `).bind(actor.id,actor.sessionVersion,batch.externalCode,batch.storeId,batch.reviewId,
+      ) AND EXISTS(SELECT 1 FROM nexello_revisoes_pendentes r WHERE r.id=? AND r.usuario_id=? AND r.versao_sessao=? AND r.hash_conteudo=? AND r.expira_em>?)
+      THEN ? ELSE NULL END,?,?,?,?,'confirmada',?,?,0,?,?)
+    `).bind(actor.id,actor.sessionVersion,batch.externalCode,batch.storeId,batch.reviewId,actor.id,actor.sessionVersion,hash,at,batch.reviewId,
       actor.id,batch.date,batch.date,batch.storeId,hash,entries.length,at,at),
   ];
   if(batch.expectedAgenda){
@@ -122,6 +194,7 @@ export async function persistVerifiedNewAppointments(
     VALUES(?,?,'nexello_novos_confirmados','sincronizacao',?,?,?,?,?,?)
   `).bind(crypto.randomUUID(),actor.id,batch.reviewId,batch.storeId,agendaId,
     JSON.stringify({count:entries.length,hash}),"Inclusão incremental de agendamentos revisados.",at));
+  statements.push(db.prepare("DELETE FROM nexello_revisoes_pendentes WHERE id=? AND usuario_id=? AND hash_conteudo=?").bind(batch.reviewId,actor.id,hash));
   try {
     const results=await db.batch(statements);
     if(results.length!==statements.length||results.some(result=>!result.success))throw new Error("NEXELLO_RESULTADO_INDETERMINADO");
